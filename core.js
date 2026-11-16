@@ -294,6 +294,7 @@
     if(!db.courses.some(c=>c.id===courseId))throw Error('Choose an existing course.');
     if(!document||!['txt','md','pdf'].includes(document.format))throw Error('Invalid imported document.');
     if(document.format==='pdf'&&document.reviewed!==true)throw Error('Review extracted PDF text against the original before importing.');
+    if(document.format==='pdf'&&document.extractionAudit?.missingPages?.length&&document.missingPagesAcknowledged!==true)throw Error('Acknowledge pages with missing text before importing.');
     const content=D.validateText(document.content),parts=D.chunkText(content),outline=D.buildOutline(content,document.format);
     const documentGroupId=id('document'),startedAt=new Date().toISOString();
     const candidate=JSON.parse(JSON.stringify(db));
@@ -303,7 +304,7 @@
     for(let i=0;i<parts.length;i++){
       const part=parts[i],displayTitle=parts.length===1?baseTitle:`${baseTitle} — part ${i+1}/${parts.length}`;
       const result=addSource(candidate,{courseId,title:displayTitle,content:part.text,preserveRaw:true});
-      Object.assign(result.source,{documentGroupId,importName:filename,importFormat:document.format,importPart:i+1,importPartCount:parts.length,importOffsetStart:part.start,importOffsetEnd:part.end,importPageCount:document.pageCount||null,importAudit:document.format==='pdf'?{mode:document.extractionAudit?.mode||'unknown',pages:document.extractionAudit?.pages||[],reviewedAt:startedAt,textCorrected:content!==D.validateText(document.originalExtractedText||document.content),extractionWarning:document.warning||''}:null,documentOutline:outline.filter(h=>h.start>=part.start&&h.start<part.end).map(h=>({...h,start:h.start-part.start,end:Math.min(h.end,part.end)-part.start}))});
+      Object.assign(result.source,{documentGroupId,importName:filename,importFormat:document.format,importPart:i+1,importPartCount:parts.length,importOffsetStart:part.start,importOffsetEnd:part.end,importPageCount:document.pageCount||null,importAudit:document.format==='pdf'?{mode:document.extractionAudit?.mode||'unknown',pages:document.extractionAudit?.pages||[],missingPages:document.extractionAudit?.missingPages||[],missingPagesAcknowledged:document.missingPagesAcknowledged===true,reviewedAt:startedAt,textCorrected:content!==D.validateText(document.originalExtractedText||document.content),extractionWarning:document.warning||''}:null,documentOutline:outline.filter(h=>h.start>=part.start&&h.start<part.end).map(h=>({...h,start:h.start-part.start,end:Math.min(h.end,part.end)-part.start}))});
       results.push(result);
     }
     candidate.events.push({type:'document.imported',entityId:documentGroupId,fileName:filename,format:document.format,parts:parts.length,characters:content.length,at:startedAt});

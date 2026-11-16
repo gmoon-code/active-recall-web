@@ -72,7 +72,7 @@
       task=pdfjs.getDocument({data:bytes,useSystemFonts:true,isEvalSupported:false,enableScripting:false});
       doc=await task.promise;
       if(doc.numPages>MAX_PAGES)throw Error(`This PDF contains ${doc.numPages} pages. The current limit is ${MAX_PAGES}; please split the document.`);
-      const pages=[],auditPages=[];let extractedCharacters=0;
+      const pages=[],auditPages=[],missingPages=[];let extractedCharacters=0;
       for(let i=1;i<=doc.numPages;i++){
         const page=await doc.getPage(i);
         const content=await page.getTextContent();
@@ -82,14 +82,26 @@
           text+=item.str+(item.hasEOL?'\n':' ');
         }
         const cleaned=text.trim();
-        if(!cleaned)throw Error(`No extractable text layer found on page ${i}. This PDF may have scanned, blank or unsupported pages; import cancelled.`);
-        const flags=[];if(cleaned.length<25)flags.push('Very little text detected; compare with the original.');
-        if(content.items.some(item=>item.str&&/[\uFFFD\u0000-\u0008]/.test(item.str)))flags.push('Unusual characters found; compare symbols with the original.');
-        auditPages.push({page:i,characters:cleaned.length,flags});
-        extractedCharacters+=cleaned.length;pages.push(`[Page ${i}]\n${cleaned}`);
+        const flags=[];
+        if(!cleaned){
+          // A blank slide, a scanned figure and an unsupported font can all have
+          // an empty text layer. Never pretend to know which case applies.
+          missingPages.push(i);
+          flags.push('No extractable text: this page was NOT converted into study material. Inspect and transcribe it if needed.');
+          pages.push(`[Page ${i}]`); // Keep its position and outline entry, but no fabricated learning content.
+        }else{
+          if(cleaned.length<25)flags.push('Very little text detected; compare with the original.');
+          if(content.items.some(item=>item.str&&/[\uFFFD\u0000-\u0008]/.test(item.str)))flags.push('Unusual characters found; compare symbols with the original.');
+          pages.push(`[Page ${i}]\n${cleaned}`);
+          extractedCharacters+=cleaned.length;
+        }
+        auditPages.push({page:i,characters:cleaned.length,flags,missingText:!cleaned});
       }
-      if(!extractedCharacters)throw Error('No extractable text was found. Scanned PDFs need OCR, which this version does not provide.');
-      return {text:pages.join('\n\n'),pageCount:doc.numPages,extractionAudit:{mode:'pdfjs-online',pages:auditPages,requiresConfirmation:true},warning:'Text was extracted locally from the PDF text layer. Equations, images, tables, columns and reading order may need correction. Check each page against the original.'};
+      if(!extractedCharacters)throw Error('This PDF has no extractable text on any page. Scanned documents need OCR or a text export; nothing was imported.');
+      const warning=missingPages.length
+        ?`PDF.js extracted readable pages, but ${missingPages.length} page(s) had no text layer: ${missingPages.join(', ')}. Those pages contain NO automatically generated study material. Check the original and add essential text manually, or explicitly accept the gaps before importing.`
+        :'Text was extracted locally from the PDF text layer. Equations, images, tables, columns and reading order may need correction. Check each page against the original.';
+      return {text:pages.join('\n\n'),pageCount:doc.numPages,extractionAudit:{mode:'pdfjs-online',pages:auditPages,missingPages,requiresConfirmation:true},warning};
     } catch(err){
       if(err?.name==='PasswordException')throw Error('Password-protected PDFs are not supported. Unlock the PDF locally before importing.');
       throw err;
@@ -122,13 +134,26 @@
     if(!root.ActiveRecallPdfLite||typeof root.ActiveRecallPdfLite.extract!=='function')throw Error('Limited offline PDF reader is unavailable.');
     return root.ActiveRecallPdfLite.extract(await file.arrayBuffer());
   }
-  async function extractFile(file,{pdfMode='offline'}={}){
+  async function extractFile(file,{pdfMode='auto',confirmOnlineFallback=null}={}){
     if(!file||typeof file.name!=='string')throw Error('Choose a TXT, Markdown, or PDF file.');
     const format=formatOf(file.name,file.type);
     if(!format)throw Error('Supported files: .txt, .md, .markdown and text-based .pdf.');
     if(file.size>MAX_FILE_BYTES)throw Error('The file is too large (12 MB maximum). It was not read.');
     if(!file.size)throw Error('The selected file is empty.');
-    const extracted=format==='pdf'?(pdfMode==='full'?await textFromPdf(file):await localPdfText(file)):{text:await file.text(),pageCount:null,warning:null};
+    let extracted;
+    if(format!=='pdf')extracted={text:await file.text(),pageCount:null,warning:null};
+    else if(pdfMode==='full')extracted=await textFromPdf(file);
+    else if(pdfMode==='offline')extracted=await localPdfText(file);
+    else if(pdfMode==='auto'){
+      try{extracted=await localPdfText(file);}
+      catch(offlineError){
+        // No external library download without a direct, informed user action.
+        const consent=typeof confirmOnlineFallback==='function' && await confirmOnlineFallback(offlineError.message);
+        if(!consent)throw Error('The offline PDF reader could not decode this PDF. Nothing was saved. Choose Full PDF.js (free; online) or approve the suggested fallback. '+offlineError.message);
+        extracted=await textFromPdf(file);
+        extracted.warning='The limited offline reader could not decode this PDF; the free full PDF.js reader was used with your permission. '+(extracted.warning||'');
+      }
+    }else throw Error('Choose a supported PDF reading mode.');
     const content=validateText(extracted.text),chunks=chunkText(content);
     return {name:file.name.replace(/[\\/]/g,'').slice(0,180),format,content,chunks,outline:buildOutline(content,format),pageCount:extracted.pageCount,extractionAudit:extracted.extractionAudit||null,warning:extracted.warning||null,characters:content.length};
   }
