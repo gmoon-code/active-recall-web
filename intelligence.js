@@ -9,7 +9,7 @@
   'use strict';
 
   const STOP = new Set(('the a an and or but to for with without of in on at by from as is are was were be been being can could should would may might will that this those these it its their when where which how why what who about into through during using use does do did have has had does than then between across under over including especially during if we they you our your').split(' '));
-  const words = (value) => String(value || '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').split(/\s+/).filter(w => w.length > 2 && !STOP.has(w));
+  const words = (value) => String(value || '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').split(/\s+/).filter(w => !STOP.has(w) && (w.length > 2 || /\d/.test(w) || w === 'ph'));
   const norm = (value) => words(value).join(' ');
   function similarity(a, b) {
     const aa = new Set(words(a)), bb = new Set(words(b));
@@ -151,6 +151,64 @@
     }
     return result;
   }
+  // Read-only coverage and wording inspection. These are structural warnings,
+  // NOT a semantic validator, expert quality score, or syllabus coverage claim.
+  function questionWarnings(requirement, source=null) {
+    if(!requirement || requirement.active===false) return [];
+    const q=String(requirement.question||'').trim(), a=String(requirement.answer||'').trim();
+    const issues=[];
+    if(requirement.origin==='rule_draft' && requirement.verificationStatus!=='verified')
+      issues.push({code:'unverified',label:'Draft requires your verification'});
+    if(/^(?:explain the main idea in this part of your notes|what does the note claim|explain a statement from the notes)/i.test(q)
+       || requirement.format==='general')
+      issues.push({code:'generic',label:'Too generic: specify the idea or relationship to retrieve'});
+    if(/\b(?:this (?:note|passage|sentence)|the above|according to (?:these|the) notes|described in your notes)\b/i.test(q))
+      issues.push({code:'context_dependent',label:'Question may be unclear without seeing the notes'});
+    if(q.length>350)
+      issues.push({code:'overlong',label:'Question may combine too many demands'});
+    if(a.length>=32 && q.toLowerCase().includes(a.toLowerCase()))
+      issues.push({code:'answer_leak',label:'Question appears to reveal the reference answer'});
+    if(requirement.kind==='explain' && a.length<25)
+      issues.push({code:'short_explanation',label:'Check whether the answer explains a relationship rather than names a fact'});
+    if(requirement.possibleDuplicateOf)issues.push({code:'overlap',label:'Possible duplicate of another question'});
+    if(requirement.possibleConflictWith)issues.push({code:'conflict',label:'Possible contradiction; compare both sources'});
+    if(requirement.sourceRevisionPending)issues.push({code:'stale',label:'Source changed; verify the question and answer again'});
+    if(requirement.sourceId && !source)issues.push({code:'missing_source',label:'Original linked source is missing'});
+    else if(source && requirement.sourceQuote && !source.content.includes(requirement.sourceQuote))
+      issues.push({code:'quote_mismatch',label:'Linked excerpt no longer matches the current source'});
+    return issues;
+  }
+  // Count traceable prose statements, never infer concept-level or exam coverage.
+  // A source segment is represented only when a linked active requirement actually
+  // includes its literal excerpt. Duplicates linked from prior sources do not
+  // create fictional coverage for unrelated content.
+  function questionCoverage(db, courseId) {
+    const sources=(db.sources||[]).filter(s=>s.courseId===courseId);
+    const requirements=(db.requirements||[]).filter(r=>r.active!==false && r.courseId===courseId);
+    const flagged=requirements.map(req=>({requirementId:req.id,question:req.question,issues:questionWarnings(req,(db.sources||[]).find(s=>s.id===req.sourceId))})).filter(x=>x.issues.length);
+    let totalSegments=0,represented=0,verified=0;
+    const sourceRows=sources.map(source=>{
+      const parsed=segments(String(source.content||'').slice(0,20000));
+      const linked=requirements.filter(r=>r.sourceId===source.id||(r.additionalSourceIds||[]).includes(source.id));
+      const uncovered=[];let mapped=0,verifiedSegments=0;
+      for(const part of parsed){
+        // Use exact text identity, NOT bag-of-words similarity. Distinct
+        // numerical conditions can normalize to the same token set; treating
+        // them as covered by one vague question would be misleading.
+        const excerpt=part.text.replace(/\s+/g,' ').trim();
+        const matches=linked.filter(r=>{
+          const quote=String(r.sourceQuote||'').replace(/\s+/g,' ').trim();
+          return !!quote && quote===excerpt;
+        });
+        if(matches.length){mapped++;if(matches.some(r=>r.verificationStatus==='verified'&&!r.sourceRevisionPending))verifiedSegments++;}
+        else uncovered.push({text:part.text,start:part.start,end:part.end});
+      }
+      totalSegments+=parsed.length;represented+=mapped;verified+=verifiedSegments;
+      return {sourceId:source.id,title:source.title,segments:parsed.length,represented:mapped,verified:verifiedSegments,unrepresented:parsed.length-mapped,examples:uncovered.slice(0,3),unrepresentedAll:uncovered.length};
+    });
+    return {courseId,totalSegments,represented,verified,unrepresented:totalSegments-represented,sourceRows,flagged,
+      warning:'Coverage is of parseable source statements only. It is not proof of conceptual completeness, question correctness, or exam readiness.'};
+  }
   function integrity(db) {
     const active = (db.requirements || []).filter(x => x.active !== false);
     const drafts = active.filter(r => r.origin === 'rule_draft' && !(r.verifiedAt || r.reviewedAt));
@@ -161,5 +219,5 @@
     const sourceDuplicates=(db.sources || []).reduce((n,s)=>n+(s.duplicateLinks?.length||0),0);
     return {drafts:drafts.length,needsReview:weak.length,possibleDuplicates:similar.length,possibleConflicts:conflicts.length,brokenLinks:missing.length,linkedRepeats:sourceDuplicates};
   }
-  return {words, norm, similarity, segments, parseStatement, analyzeNotes, suggestCriteria, integrity};
+  return {words, norm, similarity, segments, parseStatement, analyzeNotes, suggestCriteria, questionWarnings, questionCoverage, integrity};
 });

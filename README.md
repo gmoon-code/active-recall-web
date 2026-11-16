@@ -1,4 +1,4 @@
-# Active Recall Web — Free Edition v2.7
+# Active Recall Web — Free Edition v2.8
 
 One browser-local learning system spanning courses, source-grounded recall targets, explanation criteria, assessment priorities, and a recurring review calendar.
 
@@ -6,7 +6,7 @@ One browser-local learning system spanning courses, source-grounded recall targe
 
 Visit the existing free GitHub Pages address: https://gmoon-code.github.io/active-recall-web/
 
-The v2.7 code is also included here for independent deployment or backup. To deploy to a public GitHub Pages repository, upload the **site files at the repository root** and enable Pages for the `main` branch and `/(root)` folder. No paid services or build tools are required.
+The v2.8 code is also included here for independent deployment or backup. To deploy to a public GitHub Pages repository, upload the **site files at the repository root** and enable Pages for the `main` branch and `/(root)` folder. No paid services or build tools are required.
 
 ### Most important changes
 
@@ -29,4 +29,12 @@ The app does not grade arbitrary explanations, establish validated mastery, prom
 
 ## Validation and research
 
-149 automated tests passed in the local release, plus simulated Chromium desktop/mobile checks. The calendar's timing heuristics are experimental. For technical discussion, see `BLUEPRINT_2_7_FREE.md` and the repository's research document: `docs/RESEARCH_2026_QUESTION_DESIGN_AND_AUTO_SCHEDULING.md`.
+161 automated tests passed in the local release, plus simulated Chromium desktop/mobile checks. The calendar's timing heuristics are experimental. For technical discussion, see `BLUEPRINT_2_7_FREE.md` and the repository's research document: `docs/RESEARCH_2026_QUESTION_DESIGN_AND_AUTO_SCHEDULING.md`.
+
+## v2.8 — Source coverage and question review
+
+Knowledge now includes a **read-only** review of parseable source statements: mapped, linked to learner-verified questions, or still unmapped. It also flags generic and context-dependent questions, answer leaks, missing or revised source links and possible duplicates. Each warning has an actionable edit control. Numerical distinctions such as pH 6 versus pH 7 are preserved in the draft deduplication rules.
+
+This is a literal source-statement audit, **not** an AI quality score, proof of full conceptual coverage, scientific accuracy, improved learning outcomes or exam readiness. The local schema, saved learning history, and recurring calendar remain compatible. Generated drafts are still not scheduled until learner-reviewed.
+
+Full engineering notes: [Blueprint 2.8](docs/BLUEPRINT_2_8_FREE.md). The zero-payment requirement remains mandatory.

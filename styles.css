@@ -81,3 +81,17 @@
 .outlook-item.conditional-review{border-left:3px solid #8aa8b3;padding-left:11px;background:rgba(232,239,243,.3)}
 .outlook-item.conditional-review small{color:#536b79}
 @media (max-width:640px){.outlook-day summary{flex-wrap:wrap;gap:5px 12px}.outlook-item{overflow-wrap:anywhere}}
+
+/* Blueprint 2.8 — source coverage and question-quality review */
+.quality-panel{margin:15px 0 18px;min-width:0}
+.quality-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:11px 0}
+.quality-stats>div{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:10px;padding:9px;min-width:0;background:var(--surface)}
+.quality-stats strong{font-size:19px;line-height:1.2}
+.quality-stats span{font-size:11px;color:var(--muted);overflow-wrap:anywhere}
+.quality-details{border-top:1px solid var(--line);padding:11px 0}
+.quality-details summary{cursor:pointer;overflow-wrap:anywhere}
+.quality-row{border:1px solid var(--line);border-radius:10px;padding:10px;margin:9px 0;min-width:0}
+.quality-row strong{font-size:13px;overflow-wrap:anywhere}
+.quality-row p{overflow-wrap:anywhere;margin:7px 0}
+.quality-row .btn{margin-top:7px}
+@media(max-width:650px){.quality-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
