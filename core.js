@@ -1,0 +1,610 @@
+(function (root, factory) {
+  const core = factory();
+  if (typeof module !== 'undefined' && module.exports) module.exports = core;
+  root.ActiveRecallCore = core;
+})(typeof globalThis !== 'undefined' ? globalThis : this, function () {
+  'use strict';
+  const I = (typeof module !== 'undefined' && module.exports) ? require('./intelligence.js') : globalThis.ActiveRecallIntelligence;
+  if (!I) throw Error('Missing local learning-intelligence module.');
+  const D=(typeof module !== 'undefined' && module.exports)?require('./document-import.js'):globalThis.ActiveRecallDocumentImport;
+  if(!D)throw Error('Missing local document-import module.');
+  const DAY = 86400000;
+  const id = (prefix) => prefix + '_' + Math.random().toString(36).slice(2, 9) + Date.now().toString(36);
+  const today = (date = new Date()) => `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
+  const addDays = (date, n) => { const d = new Date(date.getTime()); d.setDate(d.getDate() + n); return today(d); };
+  const dateStart = (dateString) => { const [y,m,d] = dateString.split('-').map(Number); return new Date(y,m-1,d); };
+  const daysUntil = (dateString, now = new Date()) => Math.round((dateStart(dateString) - dateStart(today(now))) / DAY);
+  const initialDb = () => ({ schemaVersion: 5, timeModels: {}, rubricCriteria: [], criterionVersions: [], courses: [], sources: [], sourceVersions: [], requirements: [], requirementVersions: [], retrievalTargets: [], activities: [], assessments: [], attempts: [], memory: {}, sessions: [], events: [] });
+  const baseTargetId = rid => 'target_' + rid;
+  const baseActivityId = rid => 'activity_' + rid;
+  // Every learning requirement may contain several distinct retrieval targets.
+  // Variations are prompts for the same target; they never create extra due reviews.
+  function getTargets(db,requirementId,{includePending=false}={}){
+    return (db.retrievalTargets||[]).filter(t=>t.requirementId===requirementId && t.active!==false && (includePending||!t.needsReview));
+  }
+  function getTarget(db,requirementId){return getTargets(db,requirementId,{includePending:true}).find(t=>t.isPrimary)||getTargets(db,requirementId,{includePending:true})[0];}
+  function getMemory(db,requirementId,targetId=null){const t=targetId?(db.retrievalTargets||[]).find(t=>t.id===targetId&&t.requirementId===requirementId):getTarget(db,requirementId);return t?db.memory[t.id]:undefined;}
+  function getActivities(db,requirementId,targetId=null){return (db.activities||[]).filter(a=>a.requirementId===requirementId && (!targetId||a.retrievalTargetId===targetId) && a.active!==false);}
+  function chooseActivity(db,requirementId,targetId=null){
+    const selectedTarget=targetId||getTarget(db,requirementId)?.id;
+    const options=getActivities(db,requirementId,selectedTarget);
+    const usage=options.map(a=>{
+      const attempts=db.attempts.filter(x=>x.activityId===a.id);
+      return {activity:a,count:attempts.length,last:attempts.length?attempts[attempts.length-1].createdAt:''};
+    });
+    usage.sort((a,b)=>a.count-b.count || a.last.localeCompare(b.last) || (a.activity.isPrimary?-1:1));
+    return usage[0]?.activity || null;
+  }
+  function migrateDb(input){
+    if(!input || ![1,2,3,4,5].includes(input.schemaVersion))throw Error('This file is not a supported Active Recall Web export.');
+    for(const k of ['courses','sources','requirements','assessments','attempts','sessions','events'])
+      if(!Array.isArray(input[k]))throw Error('Invalid data structure: '+k);
+    if(!input.memory||typeof input.memory!=='object'||Array.isArray(input.memory))throw Error('Missing memory state.');
+    if(input.courses.length>5000||input.requirements.length>200000||input.attempts.length>1000000)throw Error('Import exceeds prototype capacity.');
+    if(input.schemaVersion>=2){for(const k of ['sourceVersions','requirementVersions','retrievalTargets','activities'])if(!Array.isArray(input[k]))throw Error('Invalid data structure: '+k);}
+    if(input.schemaVersion>=3){
+      if(input.retrievalTargets.some(t=>!t.id||!t.requirementId)||input.activities.some(a=>!a.retrievalTargetId||!a.requirementId))throw Error('Invalid v3 retrieval-target references.');
+      if(input.schemaVersion>=4){
+        if(!input.timeModels||typeof input.timeModels!=='object'||Array.isArray(input.timeModels))throw Error('Invalid duration model.');
+        for(const [kind,model] of Object.entries(input.timeModels)){
+          if(!['recall','explain','apply'].includes(kind)||!model||typeof model!=='object'||
+            !Number.isSafeInteger(model.count)||model.count<0||
+            !Number.isFinite(model.totalSeconds)||model.totalSeconds<0||
+            model.totalSeconds>model.count*1800||model.totalSeconds<model.count*10)
+            throw Error('Invalid duration model values.');
+        }
+      }
+      if(input.schemaVersion===5){
+        if(!Array.isArray(input.rubricCriteria)||!Array.isArray(input.criterionVersions))throw Error('Missing rubric history.');
+        if(input.rubricCriteria.length>500000)throw Error('Too many criteria.');
+        const knownTargets=new Set(input.retrievalTargets.map(t=>t.id)),ids=new Set();
+        for(const c of input.rubricCriteria){
+          if(typeof c.id!=='string'||!c.id||ids.has(c.id)||!knownTargets.has(c.targetId)||typeof c.text!=='string'||!c.text.trim()||!Number.isSafeInteger(c.version)||c.version<1)throw Error('Invalid rubric criterion.');
+          ids.add(c.id);
+        }
+        for(const a of input.attempts){
+          if(a.criterionChecks===undefined)continue;
+          if(!Array.isArray(a.criterionChecks)||a.criterionChecks.some(c=>!c||!ids.has(c.criterionId)||!['met','missed','unsure'].includes(c.status)))throw Error('Invalid criterion attempt history.');
+        }
+        return input;
+      }
+      const upgraded=JSON.parse(JSON.stringify(input));
+      upgraded.schemaVersion=5;
+      if(input.schemaVersion===3)upgraded.timeModels=buildTimeModels(upgraded.attempts);
+      upgraded.rubricCriteria=[];upgraded.criterionVersions=[];
+      upgraded.events.push({type:'database.migrated',from:input.schemaVersion,to:5,at:new Date().toISOString()});
+      return upgraded;
+    }
+    // Do not alter the imported data or previous version stored in a browser.
+    const db=JSON.parse(JSON.stringify(input));
+    if(db.schemaVersion===1){
+      db.sourceVersions=[];db.requirementVersions=[];db.retrievalTargets=[];db.activities=[];
+      for(const source of db.sources)db.sourceVersions.push({sourceId:source.id,version:source.version||1,title:source.title,content:source.content,createdAt:source.createdAt||new Date().toISOString(),migrated:true});
+      for(const req of db.requirements){
+        const targetId=baseTargetId(req.id),activityId=baseActivityId(req.id);
+        db.retrievalTargets.push({id:targetId,requirementId:req.id,createdAt:req.createdAt||new Date().toISOString(),active:req.active!==false,version:1});
+        db.activities.push({id:activityId,requirementId:req.id,question:req.question,answer:req.answer,kind:req.kind||'explain',isPrimary:true,origin:req.origin||'legacy',active:req.active!==false,version:req.version||1,createdAt:req.createdAt||new Date().toISOString()});
+        req.sourceVersion=req.sourceVersion||(db.sources.find(s=>s.id===req.sourceId)?.version||1);
+        db.requirementVersions.push({requirementId:req.id,version:req.version||1,objective:req.objective||req.question,question:req.question,answer:req.answer,kind:req.kind||'explain',createdAt:req.updatedAt||req.createdAt||new Date().toISOString(),migrated:true});
+        if(db.memory[req.id]){db.memory[targetId]=db.memory[req.id];delete db.memory[req.id];}
+        for(const attempt of db.attempts.filter(a=>a.requirementId===req.id)){attempt.retrievalTargetId=targetId;attempt.activityId=activityId;attempt.activityVersion=attempt.requirementVersion||1;}
+      }
+      db.schemaVersion=2;
+    }
+    for(const req of db.requirements){
+      const targets=db.retrievalTargets.filter(t=>t.requirementId===req.id);
+      if(!targets.length)throw Error('Missing retrieval target for requirement '+req.id);
+      targets.forEach((t,i)=>{t.isPrimary=i===0;t.label=t.label||cleanString(req.objective||req.question,160);t.needsReview=!!t.needsReview;});
+      const primary=targets[0];
+      for(const a of db.activities.filter(a=>a.requirementId===req.id))a.retrievalTargetId=a.retrievalTargetId||primary.id;
+      for(const attempt of db.attempts.filter(a=>a.requirementId===req.id)){
+        attempt.retrievalTargetId=attempt.retrievalTargetId||primary.id;
+        if(!attempt.retrievalTargetVersion)attempt.retrievalTargetVersion=primary.version||1;
+      }
+    }
+    for(const se of db.sessions){
+      if(!se.currentTargetId&&se.currentReqId)se.currentTargetId=getTarget(db,se.currentReqId)?.id||null;
+      if(Array.isArray(se.completedIds))se.completedIds=se.completedIds.map(rid=>getTarget(db,rid)?.id||rid);
+    }
+    db.schemaVersion=5;db.timeModels=buildTimeModels(db.attempts);db.rubricCriteria=[];db.criterionVersions=[];db.events.push({type:'database.migrated',from:input.schemaVersion,to:5,at:new Date().toISOString()});
+    return db;
+  }
+  // Rubric criteria are learner-authored checkpoints for one retrieval target.
+  // They are not AI grades, and older attempts never acquire checks retroactively.
+  function getCriteria(db,targetId,{includePending=false,includeArchived=false}={}){
+    return (db.rubricCriteria||[]).filter(c=>c.targetId===targetId && (includeArchived||c.active!==false) && (includePending||!c.needsReview));
+  }
+  function addCriterion(db,{targetId,text}){
+    const target=(db.retrievalTargets||[]).find(t=>t.id===targetId&&t.active!==false);
+    if(!target)throw Error('Recall focus area not found.');
+    text=cleanString(text,240);
+    if(!text)throw Error('Enter a specific piece of evidence to check.');
+    if(getCriteria(db,targetId,{includePending:true}).some(c=>c.text.toLowerCase()===text.toLowerCase()))throw Error('This criterion already exists.');
+    const at=new Date().toISOString();
+    const criterion={id:id('criterion'),targetId,requirementId:target.requirementId,text,version:1,active:true,needsReview:false,createdAt:at};
+    db.rubricCriteria.push(criterion);
+    db.criterionVersions.push({criterionId:criterion.id,version:1,text,createdAt:at});
+    db.events.push({type:'criterion.created',entityId:criterion.id,targetId,at});return criterion;
+  }
+  // Non-destructive, idempotent, inspectable proposals from a source quotation.
+  // Proposed checkpoints are HELD from practice until explicitly verified.
+  function proposeCriteria(db,{targetId,limit=5}={}){
+    const target=(db.retrievalTargets||[]).find(t=>t.id===targetId&&t.active!==false);
+    if(!target)throw Error('Recall focus area not found.');
+    const req=db.requirements.find(r=>r.id===target.requirementId&&r.active!==false);
+    if(!req)throw Error('Requirement not found.');
+    const activity=getActivities(db,req.id,targetId).find(a=>a.isPrimary)||getActivities(db,req.id,targetId)[0];
+    const quote=(target.isPrimary && req.sourceQuote)||activity?.answer||req.answer;
+    const candidates=I.suggestCriteria(quote,limit);
+    const existing=new Set(getCriteria(db,targetId,{includePending:true}).map(c=>I.norm(c.sourceQuote||c.text.replace(/^[^:]{2,32}:\s*/,''))));
+    const created=[],at=new Date().toISOString();
+    for(const suggestion of candidates){
+      const normalized=I.norm(suggestion.sourceQuote);
+      if(existing.has(normalized))continue;
+      const c={id:id('criterion'),targetId,requirementId:req.id,text:suggestion.text,version:1,active:true,needsReview:true,createdAt:at,origin:'offline_criterion_draft',sourceId:target.isPrimary?req.sourceId:null,sourceVersion:target.isPrimary?req.sourceVersion:null,sourceQuote:suggestion.sourceQuote,sourceStart:target.isPrimary&&Number.isInteger(req.sourceStart)?req.sourceStart+suggestion.sourceStart:null,sourceEnd:target.isPrimary&&Number.isInteger(req.sourceStart)?req.sourceStart+suggestion.sourceEnd:null,rule:suggestion.rule};
+      db.rubricCriteria.push(c);db.criterionVersions.push({criterionId:c.id,version:1,text:c.text,createdAt:at,origin:c.origin,sourceQuote:c.sourceQuote});
+      db.events.push({type:'criterion.suggested',entityId:c.id,targetId,sourceId:c.sourceId,at});
+      created.push(c);existing.add(normalized);
+    }
+    return created;
+  }
+  function reviseCriterion(db,criterionId,text){
+    const c=(db.rubricCriteria||[]).find(c=>c.id===criterionId&&c.active!==false);
+    if(!c)throw Error('Criterion not found.');
+    text=cleanString(text,240);
+    if(!text)throw Error('Criterion text cannot be empty.');
+    if(c.text===text)return c;
+    if(getCriteria(db,c.targetId,{includePending:true}).some(x=>x.id!==c.id&&x.text.toLowerCase()===text.toLowerCase()))throw Error('This criterion already exists.');
+    const at=new Date().toISOString();
+    c.version++;c.text=text;c.needsReview=false;c.updatedAt=at;
+    db.criterionVersions.push({criterionId:c.id,version:c.version,text,createdAt:at});
+    db.events.push({type:'criterion.revised',entityId:c.id,version:c.version,at});return c;
+  }
+  function verifyCriterion(db,criterionId){
+    const c=(db.rubricCriteria||[]).find(c=>c.id===criterionId&&c.active!==false);
+    if(!c)throw Error('Criterion not found.');
+    c.needsReview=false;c.reviewedAt=new Date().toISOString();
+    db.events.push({type:'criterion.verified',entityId:c.id,at:c.reviewedAt});return c;
+  }
+  function archiveCriterion(db,criterionId){
+    const c=(db.rubricCriteria||[]).find(c=>c.id===criterionId&&c.active!==false);
+    if(!c)throw Error('Criterion not found.');
+    c.active=false;c.archivedAt=new Date().toISOString();
+    db.events.push({type:'criterion.archived',entityId:c.id,at:c.archivedAt});return c;
+  }
+  function criterionStatus(db,targetId,requirementVersion=null){
+    const criteria=getCriteria(db,targetId),result={total:criteria.length,met:0,missed:0,unsure:0,unassessed:0,checked:0,allMet:false,attemptId:null};
+    const target=(db.retrievalTargets||[]).find(t=>t.id===targetId);
+    const attempts=db.attempts.filter(a=>a.retrievalTargetId===targetId && (!target||a.retrievalTargetVersion===target.version) && (requirementVersion===null||a.requirementVersion===requirementVersion));
+    // Only the latest applicable attempt describes the current evidence snapshot.
+    // Do not quietly carry older 'included' checks over a later attempt that omitted them.
+    // An unassessed criterion is unknown, not failed.
+    const last=attempts[attempts.length-1];
+    for(const c of criteria){
+      const check=(last?.criterionChecks||[]).find(x=>x.criterionId===c.id&&x.version===c.version);
+      if(!check){result.unassessed++;continue;}
+      result[check.status]++;result.checked++;
+    }
+    result.allMet=result.total>0&&result.met===result.total;
+    return result;
+  }
+  function rubricProgress(db){
+    const all={total:0,met:0,missed:0,unsure:0,unassessed:0,pendingReview:0,targetsWithRubric:0,attemptsWithChecks:db.attempts.filter(a=>Array.isArray(a.criterionChecks)&&a.criterionChecks.length).length};
+    for(const target of db.retrievalTargets||[]){
+      if(target.active===false)continue;
+      const req=db.requirements.find(r=>r.id===target.requirementId&&r.active);if(!req)continue;
+      const p=criterionStatus(db,target.id,req.version);
+      if(p.total)all.targetsWithRubric++;
+      for(const k of ['total','met','missed','unsure','unassessed'])all[k]+=p[k];
+      all.pendingReview+=getCriteria(db,target.id,{includePending:true}).filter(c=>c.needsReview).length;
+    }
+    return all;
+  }
+  function addRetrievalTarget(db,{requirementId,label,question,answer,kind='explain'}){
+    const req=db.requirements.find(r=>r.id===requirementId&&r.active);
+    if(!req)throw Error('Choose an active learning requirement.');
+    label=cleanString(label,160);question=cleanString(question,500);answer=cleanString(answer,4000);
+    if(!label||!question||!answer)throw Error('Enter a focus area, question, and reference answer.');
+    if(getTargets(db,requirementId,{includePending:true}).some(t=>t.label.toLowerCase()===label.toLowerCase()))throw Error('A focus area with this name already exists.');
+    if(getActivities(db,requirementId).some(a=>a.question.trim().toLowerCase()===question.toLowerCase()))throw Error('This question already exists.');
+    const at=new Date().toISOString(),target={id:id('target'),requirementId,label,isPrimary:false,active:true,needsReview:false,version:1,createdAt:at};
+    const activity={id:id('activity'),requirementId,retrievalTargetId:target.id,question,answer,kind:['recall','explain','apply'].includes(kind)?kind:'explain',isPrimary:true,origin:'user_focus_area',active:true,version:1,createdAt:at};
+    db.retrievalTargets.push(target);db.activities.push(activity);
+    db.events.push({type:'retrieval_target.created',entityId:target.id,requirementId,at});
+    return {target,activity};
+  }
+  function verifyRetrievalTarget(db,targetId){
+    const target=db.retrievalTargets.find(t=>t.id===targetId&&t.active);
+    if(!target)throw Error('Focus area not found.');
+    target.needsReview=false;target.reviewedAt=new Date().toISOString();
+    db.events.push({type:'retrieval_target.verified',entityId:target.id,at:target.reviewedAt});return target;
+  }
+  function addActivityVariant(db,{requirementId,targetId=null,question,answer,kind}){
+    const req=db.requirements.find(r=>r.id===requirementId&&r.active);
+    if(!req)throw Error('Choose an active learning requirement.');
+    const target=targetId?getTargets(db,requirementId,{includePending:true}).find(t=>t.id===targetId):getTarget(db,requirementId);
+    if(!target)throw Error('Choose a valid focus area.');
+    question=cleanString(question,500);answer=cleanString(answer,4000);
+    if(!question||!answer)throw Error('Enter a question and reference answer.');
+    if(getActivities(db,requirementId).some(a=>a.question.trim().toLowerCase()===question.toLowerCase()))throw Error('This question variation already exists.');
+    const at=new Date().toISOString();
+    const activity={id:id('activity'),requirementId,retrievalTargetId:target.id,question,answer,kind:['recall','explain','apply'].includes(kind)?kind:req.kind,isPrimary:false,origin:'user_variant',active:true,version:1,createdAt:at};
+    db.activities.push(activity);db.events.push({type:'activity.created',entityId:activity.id,requirementId,targetId:target.id,at});return activity;
+  }
+  function deactivateActivity(db,activityId){
+    const a=(db.activities||[]).find(x=>x.id===activityId&&x.active);
+    if(!a||a.isPrimary)throw Error('Only additional question variations can be archived.');
+    a.active=false;a.archivedAt=new Date().toISOString();
+    db.events.push({type:'activity.archived',entityId:a.id,requirementId:a.requirementId,at:a.archivedAt});return a;
+  }
+  function reviseSource(db,sourceId,{title,content}){
+    const source=db.sources.find(s=>s.id===sourceId);if(!source)throw Error('Source not found.');
+    title=cleanString(title,120)||'Untitled learning';content=cleanString(content,20000);
+    if(!content)throw Error('Source content cannot be empty.');
+    if(title===source.title&&content===source.content)return source;
+    const at=new Date().toISOString();
+    source.version=(source.version||1)+1;source.title=title;source.content=content;source.updatedAt=at;if(source.importAudit)source.importAudit={...source.importAudit,reviewedAt:null,needsRecheck:true};if(source.documentGroupId)source.documentOutline=D.buildOutline(content,source.importFormat||'txt');
+    db.sourceVersions.push({sourceId:source.id,version:source.version,title,content,createdAt:at});
+    const affected=db.requirements.filter(r=>r.active&&(r.sourceId===sourceId||(r.additionalSourceIds||[]).includes(sourceId)));
+    for(const req of affected){req.sourceRevisionPending=true;req.sourceCurrentVersion=source.version;for(const t of getTargets(db,req.id,{includePending:true}))for(const c of getCriteria(db,t.id,{includePending:true}))c.needsReview=true;}
+    db.events.push({type:'source.revised',entityId:source.id,version:source.version,affectedRequirements:affected.map(r=>r.id),at});
+    return source;
+  }
+  function cleanString(x, max = 4000) { return String(x ?? '').trim().slice(0, max); }
+  function addCourse(db, name) {
+    name=cleanString(name,80);
+    if(!name) throw Error('Enter a course name.');
+    if(db.courses.some(c=>c.name.toLowerCase()===name.toLowerCase())) throw Error('This course already exists.');
+    const course={id:id('course'),name,createdAt:new Date().toISOString()};
+    db.courses.push(course); db.events.push({type:'course.created',entityId:course.id,at:course.createdAt});
+    return course;
+  }
+  function draftRequirements(text, limit=12){
+    return I.analyzeNotes(text, [], null, limit).drafts;
+  }
+  function addSource(db, {courseId,title,content,preserveRaw=false}) {
+    if(!db.courses.some(c=>c.id===courseId))throw Error('Choose an existing course.');
+    title=cleanString(title,120)||'Untitled learning'; content=preserveRaw?String(content??''):cleanString(content,20000);
+    if(content.length>20000)throw Error('Source part exceeds the 20,000 character limit.');
+    if(!content)throw Error('Enter your learning notes.');
+    const createdAt=new Date().toISOString();
+    const source={id:id('source'),courseId,title,content,version:1,createdAt,analysisEngine:'offline-rules-v1',duplicateLinks:[],conflictLinks:[]};
+    const analysis=I.analyzeNotes(content,db.requirements,courseId,12);
+    // Preserve source even when all content was already captured.
+    db.sources.push(source);db.sourceVersions.push({sourceId:source.id,version:1,title,content,createdAt}); db.events.push({type:'source.created',entityId:source.id,at:createdAt});
+    for(const conflict of analysis.conflicts) source.conflictLinks.push(conflict.existingRequirementId);
+    for(const duplicate of analysis.duplicates) {
+      source.duplicateLinks.push(duplicate.existingRequirementId);
+      const existing=db.requirements.find(r=>r.id===duplicate.existingRequirementId);
+      if(existing){
+        existing.additionalSourceIds=Array.from(new Set([...(existing.additionalSourceIds||[]),source.id]));
+        db.events.push({type:'requirement.source_linked',entityId:existing.id,sourceId:source.id,at:createdAt});
+      }
+    }
+    for(const draft of analysis.drafts){
+      const req=addRequirement(db,{courseId,sourceId:source.id,...draft});
+      if(draft.kind==='explain' && draft.confidence==='structured')
+        proposeCriteria(db,{targetId:getTarget(db,req.id).id,limit:4});
+    }
+    return {source,added:analysis.drafts.length,duplicates:analysis.duplicates.length,conflicts:analysis.conflicts.length,needsReview:analysis.drafts.filter(r=>r.confidence==='review').length};
+  }
+  // Import is all-or-nothing. Each part is a complete, exact slice of the
+  // extracted text, with source offsets relative to that slice.
+  function addImportedDocument(db,{courseId,title,document}){
+    if(!db.courses.some(c=>c.id===courseId))throw Error('Choose an existing course.');
+    if(!document||!['txt','md','pdf'].includes(document.format))throw Error('Invalid imported document.');
+    if(document.format==='pdf'&&document.reviewed!==true)throw Error('Review extracted PDF text against the original before importing.');
+    const content=D.validateText(document.content),parts=D.chunkText(content),outline=D.buildOutline(content,document.format);
+    const documentGroupId=id('document'),startedAt=new Date().toISOString();
+    const candidate=JSON.parse(JSON.stringify(db));
+    const results=[];
+    const filename=String(document.name||'Imported document').slice(0,180);
+    const baseTitle=cleanString(title||filename,90)||'Imported document';
+    for(let i=0;i<parts.length;i++){
+      const part=parts[i],displayTitle=parts.length===1?baseTitle:`${baseTitle} — part ${i+1}/${parts.length}`;
+      const result=addSource(candidate,{courseId,title:displayTitle,content:part.text,preserveRaw:true});
+      Object.assign(result.source,{documentGroupId,importName:filename,importFormat:document.format,importPart:i+1,importPartCount:parts.length,importOffsetStart:part.start,importOffsetEnd:part.end,importPageCount:document.pageCount||null,importAudit:document.format==='pdf'?{mode:document.extractionAudit?.mode||'unknown',pages:document.extractionAudit?.pages||[],reviewedAt:startedAt,textCorrected:content!==D.validateText(document.originalExtractedText||document.content),extractionWarning:document.warning||''}:null,documentOutline:outline.filter(h=>h.start>=part.start&&h.start<part.end).map(h=>({...h,start:h.start-part.start,end:Math.min(h.end,part.end)-part.start}))});
+      results.push(result);
+    }
+    candidate.events.push({type:'document.imported',entityId:documentGroupId,fileName:filename,format:document.format,parts:parts.length,characters:content.length,at:startedAt});
+    for(const key of Object.keys(candidate))db[key]=candidate[key];
+    return {documentGroupId,sourceIds:results.map(r=>r.source.id),parts:parts.length,characters:content.length,added:results.reduce((n,r)=>n+r.added,0),duplicates:results.reduce((n,r)=>n+r.duplicates,0),needsReview:results.reduce((n,r)=>n+r.needsReview,0)};
+  }
+  function addRequirement(db,{courseId,sourceId=null,question,answer,kind='explain',sourceQuote='',origin='manual',confidence='manual',objective='',format='',sourceStart=null,sourceEnd=null,possibleDuplicateOf=null,possibleConflictWith=null}){
+    if(!db.courses.some(c=>c.id===courseId))throw Error('Choose an existing course.');
+    question=cleanString(question,500); answer=cleanString(answer,4000);
+    if(!question||!answer)throw Error('Both the question and reference answer are required.');
+    const now=new Date().toISOString();
+    const req={id:id('req'),courseId,sourceId,sourceVersion:sourceId?(db.sources.find(s=>s.id===sourceId)?.version||1):null,question,answer,sourceQuote:cleanString(sourceQuote,1200),kind:['recall','explain','apply'].includes(kind)?kind:'explain',origin,confidence,objective:cleanString(objective,300),format,sourceStart,sourceEnd,possibleDuplicateOf,possibleConflictWith,verificationStatus:origin==='rule_draft'?'draft':'verified',verifiedAt:origin==='rule_draft'?null:now,version:1,active:true,createdAt:now,updatedAt:now};
+    db.requirements.push(req);
+    db.requirementVersions.push({requirementId:req.id,version:1,objective:req.objective||question,question,answer,kind:req.kind,createdAt:now});
+    db.retrievalTargets.push({id:baseTargetId(req.id),requirementId:req.id,label:cleanString(req.objective||question,160),createdAt:now,isPrimary:true,active:true,needsReview:false,version:1});
+    db.activities.push({id:baseActivityId(req.id),requirementId:req.id,retrievalTargetId:baseTargetId(req.id),question,answer,kind:req.kind,isPrimary:true,origin,active:true,version:1,createdAt:now});
+    db.events.push({type:'requirement.created',entityId:req.id,at:now});
+    return req;
+  }
+  function editRequirement(db,reqId,{question,answer,kind,objective,changeType='substantive'}){
+    const r=db.requirements.find(r=>r.id===reqId);if(!r)throw Error('Requirement not found.');
+    question=cleanString(question,500);answer=cleanString(answer,4000);
+    if(!question||!answer)throw Error('Question and reference answer cannot be empty.');
+    db.events.push({type:'requirement.revised',entityId:r.id,at:new Date().toISOString(),priorVersion:r.version,old:{question:r.question,answer:r.answer,kind:r.kind}});
+    const previousObjective=r.objective||r.question;
+    r.question=question;r.answer=answer;r.kind=['recall','explain','apply'].includes(kind)?kind:r.kind;r.objective=cleanString(objective===undefined?previousObjective:objective,300)||question;r.version++;r.reviewedAt=new Date().toISOString();r.updatedAt=new Date().toISOString();r.verifiedAt=r.updatedAt;r.verificationStatus='verified';r.confidence='user_verified';r.possibleDuplicateOf=null;r.possibleConflictWith=null;r.sourceRevisionPending=false;
+    db.requirementVersions.push({requirementId:r.id,version:r.version,objective:r.objective,question,answer,kind:r.kind,createdAt:r.updatedAt});
+    const primary=getActivities(db,r.id).find(a=>a.isPrimary);
+    if(primary){primary.question=question;primary.answer=answer;primary.kind=r.kind;primary.version++;primary.updatedAt=r.updatedAt;}
+    const base=getTarget(db,r.id);if(base)base.label=cleanString(r.objective||question,160);
+    if(changeType!=='wording'){
+      for(const a of getActivities(db,r.id).filter(a=>!a.isPrimary)){a.active=false;a.archivedAt=r.updatedAt;}
+      for(const t of getTargets(db,r.id,{includePending:true})){t.version++;if(!t.isPrimary)t.needsReview=true;for(const c of getCriteria(db,t.id,{includePending:true}))c.needsReview=true;}
+    }
+    // A substantive edit changes the evaluated target, so its old memory interval does not transfer.
+    if(changeType!=='wording'){for(const t of getTargets(db,r.id,{includePending:true}))delete db.memory[t.id];}
+    return r;
+  }
+  function verifyRequirement(db,reqId){
+    const r=db.requirements.find(r=>r.id===reqId && r.active); if(!r)throw Error('Requirement not found.');
+    if(r.verificationStatus==='verified'&&!r.sourceRevisionPending) return r;
+    const now=new Date().toISOString();
+    r.verifiedAt=now;r.reviewedAt=now;r.verificationStatus='verified';r.confidence='user_verified';r.updatedAt=now;r.sourceRevisionPending=false;
+    db.events.push({type:'requirement.verified',entityId:r.id,version:r.version,at:now});
+    return r;
+  }
+  function addAssessment(db,{courseId,title,date,scope='all',requirementIds=[]}){
+    if(!db.courses.some(c=>c.id===courseId))throw Error('Choose an existing course.');
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(date)||Number.isNaN(dateStart(date).getTime()))throw Error('Provide a valid date.');
+    title=cleanString(title,120);if(!title)throw Error('Enter an assessment name.');
+    scope=scope==='selected'?'selected':'all';
+    const ids=scope==='selected'?Array.from(new Set(requirementIds)).filter(x=>db.requirements.some(r=>r.id===x&&r.courseId===courseId)):[];
+    if(scope==='selected'&&!ids.length)throw Error('Choose at least one requirement for this assessment.');
+    const assessment={id:id('exam'),courseId,title,date,scope,requirementIds:ids,createdAt:new Date().toISOString()};
+    db.assessments.push(assessment);db.events.push({type:'assessment.created',entityId:assessment.id,at:assessment.createdAt});
+    return assessment;
+  }
+  function linkedAssessments(db,req,now=new Date()){
+    return db.assessments.filter(a=>a.courseId===req.courseId && (a.scope==='all'||a.requirementIds.includes(req.id)) && daysUntil(a.date,now)>=0);
+  }
+  // Duration models are based only on credible observed active task time, not paused time.
+  // They estimate *task* time, not learning gains or verified mastery.
+  function estimatedSeconds(activity){return activity.kind==='recall'?85:activity.kind==='apply'?300:180;}
+  function validDuration(seconds){return Number.isFinite(seconds)&&seconds>=10&&seconds<=1800;}
+  function buildTimeModels(attempts){
+    const models={};
+    for(const a of attempts){
+      if(!validDuration(a.durationSeconds))continue;
+      const kind=['recall','explain','apply'].includes(a.activityKind)?a.activityKind:'explain';
+      const model=models[kind]||(models[kind]={count:0,totalSeconds:0});
+      model.count++;model.totalSeconds+=a.durationSeconds;
+    }
+    return models;
+  }
+  function observeDuration(db,kind,seconds){
+    if(!validDuration(seconds))return false;
+    const key=['recall','explain','apply'].includes(kind)?kind:'explain';
+    const model=db.timeModels[key]||(db.timeModels[key]={count:0,totalSeconds:0});
+    model.count++;model.totalSeconds+=seconds;return true;
+  }
+  function durationEstimate(db,activity){
+    const baseline=estimatedSeconds(activity),kind=['recall','explain','apply'].includes(activity.kind)?activity.kind:'explain';
+    const global=db.timeModels?.[kind];
+    if(!global||!global.count)return {seconds:baseline,personalized:false,observations:0,baselineSeconds:baseline};
+    // Four prior observations regularise estimates and avoid overreacting to an outlier.
+    const groupMean=(global.totalSeconds+baseline*4)/(global.count+4);
+    const recent=db.attempts.filter(a=>a.activityId===activity.id&&validDuration(a.durationSeconds)).slice(-8);
+    const sameActivityMean=recent.length?recent.reduce((t,a)=>t+a.durationSeconds,0)/recent.length:null;
+    const blended=sameActivityMean===null?groupMean:(groupMean*3+sameActivityMean*recent.length)/(3+recent.length);
+    return {seconds:Math.round(Math.min(1800,Math.max(30,blended))),personalized:true,observations:global.count,activityObservations:recent.length,baselineSeconds:baseline};
+  }
+  function evidenceType(a){
+    if(!a||!['again','hard','good','easy'].includes(a.rating))return 'unknown';
+    if(a.assisted)return 'assisted_self_report';
+    if(['again','hard'].includes(a.scheduleRating||a.rating))return 'needs_practice';
+    return 'independent_self_report';
+  }
+  function inputModeFor(a){return ['written','oral','mental'].includes(a.inputMode)?a.inputMode:(a.response?.trim()?'written':'mental');}
+  function evidenceSummary(db){
+    const result={total:db.attempts.length,written:0,oral:0,mental:0,independentSelfReport:0,assisted:0,needsPractice:0,unverifiedSource:0,withTiming:0,secondsObserved:0};
+    for(const a of db.attempts){result[inputModeFor(a)]++;
+      const type=evidenceType(a);if(type==='independent_self_report')result.independentSelfReport++;
+      if(type==='assisted_self_report')result.assisted++;
+      if(type==='needs_practice')result.needsPractice++;
+      if(a.requirementVerified===false)result.unverifiedSource++;
+      if(validDuration(a.durationSeconds)){result.withTiming++;result.secondsObserved+=a.durationSeconds;}
+    }
+    return result;
+  }
+  function requirementEligible(r){return r.active&&!r.sourceRevisionPending&&!((r.possibleConflictWith||r.possibleDuplicateOf)&&r.origin==='rule_draft'&&!r.verifiedAt);}
+  function schedulingReasons(item){
+    const reasons=[];
+    if(item.isNew)reasons.push('No previous recall attempt');
+    else if(item.due)reasons.push('Review is due');
+    else reasons.push('Maintenance or assessment practice');
+    if(item.daysToExam!==null)reasons.push(item.daysToExam===0?'Relevant assessment is today':`Relevant assessment in ${item.daysToExam} day${item.daysToExam===1?'':'s'}`);
+    if(item.lastRating==='again'||item.lastRating==='hard')reasons.push('Recent self-rating or criterion check indicates difficulty');
+    if(item.rubricStatus?.missed||item.rubricStatus?.unsure)reasons.push('A checked explanation point needs more practice');
+    else if(item.rubricStatus?.total&&item.rubricStatus.unassessed)reasons.push('Some explanation points have not been checked');
+    return reasons;
+  }
+  function eligibleCandidates(db,now=new Date()){
+    return db.requirements.filter(requirementEligible).flatMap(req=>getTargets(db,req.id).map(target=>{
+      const m=db.memory[target.id];const activity=chooseActivity(db,req.id,target.id);
+      if(!activity)return null;
+      const due=m?new Date(m.dueAt).getTime()<=now.getTime():true;
+      const delta=m?Math.max(0,(now.getTime()-new Date(m.dueAt).getTime())/DAY):0;
+      const exams=linkedAssessments(db,req,now);
+      const daysToExam=exams.length?Math.min(...exams.map(a=>daysUntil(a.date,now))):null;
+      const examUrgency=daysToExam===null?0:Math.max(0,40-daysToExam*5);
+      const base=m?(due?40+Math.min(18,delta*4):4):32;
+      const difficultyBonus=m?.lastRating==='again'?18:m?.lastRating==='hard'?9:0;
+      const rubricStatus=criterionStatus(db,target.id,req.version);
+      const timeEstimate=durationEstimate(db,activity);
+      const item={req,target,activity,score:base+examUrgency+difficultyBonus+(rubricStatus.missed||rubricStatus.unsure?8:rubricStatus.unassessed?3:0),rubricStatus,due,isNew:!m,examUrgency,daysToExam,seconds:timeEstimate.seconds,timeEstimate,lastRating:m?.lastRating??null};
+      item.reasons=schedulingReasons(item);item.reasons.push(`Estimated ${Math.max(1,Math.round(item.seconds/60))} min (${timeEstimate.personalized?'your earlier practice':'task-type starting estimate'})`);return item;
+    }).filter(Boolean));
+  }
+  function planActivities(db,minutes,completedIds=[],courseCounts={},now=new Date()){
+    const budgetSeconds=Math.max(0,Math.round(minutes*60));
+    const reserve=budgetSeconds<=300?40:Math.min(180,Math.round(budgetSeconds*0.08));
+    let remaining=Math.max(0,budgetSeconds-reserve);const plan=[];
+    const eligible=eligibleCandidates(db,now).filter(c=>!completedIds.includes(c.target.id)&&!completedIds.includes(c.req.id));
+    const counts={...courseCounts};let previousCourse=null;const selectedReqCounts={};
+    while(eligible.length){
+      const fitting=eligible.filter(x=>x.seconds<=remaining);
+      if(!fitting.length)break;
+      fitting.sort((a,b)=>{
+        const score=x=>x.score-(counts[x.req.courseId]||0)*10-(x.req.courseId===previousCourse?5:0)-(selectedReqCounts[x.req.id]||0)*7;
+        return score(b)-score(a)||a.seconds-b.seconds||a.target.id.localeCompare(b.target.id);
+      });
+      const chosen=fitting[0];plan.push(chosen);remaining-=chosen.seconds;
+      previousCourse=chosen.req.courseId;counts[previousCourse]=(counts[previousCourse]||0)+1;
+      selectedReqCounts[chosen.req.id]=(selectedReqCounts[chosen.req.id]||0)+1;
+      eligible.splice(eligible.indexOf(chosen),1);
+    }
+    return {items:plan,budgetSeconds,reserveSeconds:reserve,unusedSeconds:remaining};
+  }
+  // Read-only workload *opportunity* forecast, not simulated learning outcomes.
+  // Future answers, retention changes, and additional repetitions are unknown.
+  function forecastSchedule(db,{start=new Date(),days=21,weekdayMinutes=25,weekendMinutes=60,missedDates=[]}={}){
+    const count=Number(days),week=Number(weekdayMinutes),end=Number(weekendMinutes);
+    if(!Number.isInteger(count)||count<7||count>42)throw Error('Forecast horizon must be 7–42 days.');
+    if(!Number.isInteger(week)||week<0||week>720||!Number.isInteger(end)||end<0||end>720)throw Error('Daily capacity must be 0–720 minutes.');
+    if(!Array.isArray(missedDates)||missedDates.some(d=>typeof d!=='string'||!/^(?:19|20)\d{2}-\d{2}-\d{2}$/.test(d)))throw Error('Invalid skipped-day dates.');
+    const missed=new Set(missedDates),scheduled=new Set(),rows=[];
+    const startDay=dateStart(today(start));
+    for(let i=0;i<count;i++){
+      const when=new Date(startDay);when.setDate(startDay.getDate()+i);when.setHours(23,59,59,999);
+      const date=today(when),weekend=when.getDay()===0||when.getDay()===6;
+      const budgetMinutes=missed.has(date)?0:(weekend?end:week);
+      const budgetSeconds=budgetMinutes*60;
+      const reserve=budgetSeconds<=300?Math.min(budgetSeconds,40):Math.min(180,Math.round(budgetSeconds*0.08));
+      let remaining=Math.max(0,budgetSeconds-reserve);
+      const candidates=eligibleCandidates(db,when).filter(c=>!scheduled.has(c.target.id)
+        && (c.isNew||c.due||c.daysToExam!==null&&c.daysToExam<=7));
+      const todaySelected=[];const courseCounts={};let lastCourse=null;const reqCounts={};
+      // Apply the same scheduling priorities to a sequence of feasible slots.
+      while(remaining>=10){
+        const fitting=candidates.filter(c=>!scheduled.has(c.target.id)&&c.seconds<=remaining);
+        if(!fitting.length)break;
+        fitting.sort((a,b)=>{
+          const score=x=>x.score-(courseCounts[x.req.courseId]||0)*10-(lastCourse===x.req.courseId?5:0)-(reqCounts[x.req.id]||0)*7;
+          return score(b)-score(a)||a.seconds-b.seconds||a.target.id.localeCompare(b.target.id);
+        });
+        const c=fitting[0];scheduled.add(c.target.id);remaining-=c.seconds;
+        courseCounts[c.req.courseId]=(courseCounts[c.req.courseId]||0)+1;
+        reqCounts[c.req.id]=(reqCounts[c.req.id]||0)+1;lastCourse=c.req.courseId;
+        todaySelected.push({targetId:c.target.id,requirementId:c.req.id,courseId:c.req.courseId,seconds:c.seconds,reason:c.reasons[0],examDays:c.daysToExam});
+      }
+      rows.push({date,budgetMinutes,usedSeconds:todaySelected.reduce((n,c)=>n+c.seconds,0),reserveSeconds:reserve,activities:todaySelected,capacityLimited:budgetMinutes===0&&candidates.length>0});
+    }
+    // Per-assessment *opportunity* coverage before the relevant date, NOT pass probability.
+    const coverage=db.assessments.filter(a=>daysUntil(a.date,start)>=0).map(a=>{
+      const included=db.requirements.filter(r=>r.active&&r.courseId===a.courseId&&(a.scope==='all'||a.requirementIds.includes(r.id)));
+      const targets=included.flatMap(r=>getTargets(db,r.id,{includePending:true}).map(t=>({t,r})));
+      const eligible=targets.filter(({t,r})=>!t.needsReview&&requirementEligible(r));
+      const firstPass=eligible.filter(({t})=>rows.some(row=>row.date<=a.date&&row.activities.some(x=>x.targetId===t.id))).length;
+      const alreadyAttempted=eligible.filter(({t})=>db.attempts.some(z=>z.retrievalTargetId===t.id)).length;
+      return {assessmentId:a.id,title:a.title,date:a.date,courseId:a.courseId,totalTargets:targets.length,eligibleTargets:eligible.length,blocked:targets.length-eligible.length,firstPass,alreadyAttempted};
+    });
+    const eligibleNow=eligibleCandidates(db,start);
+    return {days:rows,coverage,plannedTargets:scheduled.size,eligibleAtStart:eligibleNow.length,unplannedAtStart:eligibleNow.filter(c=>!scheduled.has(c.target.id)).length,forecastType:'first_pass_opportunities',warning:'Forecast shows possible first-pass study slots using current evidence. It does not simulate future answers, later spaced repetitions, learning gains, or exam results.'};
+  }
+  function recordAttempt(db,{requirementId,targetId=null,activityId=null,response='',rating,assisted=false,sessionId=null,questionUsed=null,inputMode=null,durationSeconds=null,criterionChecks=[],now=new Date()}){
+    const r=db.requirements.find(x=>x.id===requirementId);if(!r)throw Error('Requirement does not exist.');
+    if(!['again','hard','good','easy'].includes(rating))throw Error('Invalid rating.');
+    const activity=activityId?getActivities(db,r.id).find(a=>a.id===activityId):chooseActivity(db,r.id,targetId);
+    if(!activity)throw Error('No active practice activity is available.');
+    const target=getTargets(db,r.id,{includePending:true}).find(t=>t.id===activity.retrievalTargetId);
+    if(!target||targetId&&target.id!==targetId)throw Error('Activity and focus area do not match.');
+    if(target.needsReview||!requirementEligible(r))throw Error('This focus area must be reviewed before studying.');
+    if(!Array.isArray(criterionChecks))throw Error('Invalid criterion checklist.');
+    const criteria=getCriteria(db,target.id),available=new Map(criteria.map(c=>[c.id,c]));
+    const seen=new Set();
+    const checks=criterionChecks.map(check=>{
+      const criterion=available.get(check?.criterionId);
+      if(!criterion||seen.has(criterion.id)||!['met','missed','unsure'].includes(check.status))throw Error('Invalid criterion checklist selection.');
+      seen.add(criterion.id);
+      return {criterionId:criterion.id,version:criterion.version,textSnapshot:criterion.text,status:check.status};
+    });
+    const counts={met:checks.filter(x=>x.status==='met').length,missed:checks.filter(x=>x.status==='missed').length,unsure:checks.filter(x=>x.status==='unsure').length,unassessed:criteria.length-checks.length};
+    // If the learner explicitly reports a missing/uncertain point, a positive
+    // overall self-rating must not produce a long recall interval.
+    const scheduleRating=(counts.missed||counts.unsure)&&['good','easy'].includes(rating)?'hard':rating;
+    const prev=db.memory[target.id],prevInterval=prev?.intervalDays||0;
+    const intervalDays=scheduleRating==='again'?(1/24):scheduleRating==='hard'?Math.max(0.5,prevInterval*1.25,1):scheduleRating==='good'?Math.max(2,prevInterval*2.15):Math.max(4,prevInterval*3.0);
+    const adjustedInterval=assisted?Math.min(intervalDays,1):intervalDays;
+    const dueAt=new Date(now.getTime()+adjustedInterval*DAY).toISOString();
+    if(inputMode!==null&&!['written','oral','mental'].includes(inputMode))throw Error('Invalid response mode.');
+    if(durationSeconds!==null&&(!Number.isFinite(durationSeconds)||durationSeconds<0))throw Error('Invalid activity duration.');
+    const recordedResponse=cleanString(response,20000);
+    const inferredMode=inputMode||(recordedResponse?'written':'mental');
+    const attempt={id:id('attempt'),inputMode:inferredMode,activityKind:activity.kind,durationSeconds:validDuration(durationSeconds)?Math.round(durationSeconds):null,evidenceVersion:1,requirementId:r.id,requirementVersion:r.version,retrievalTargetId:target.id,retrievalTargetVersion:target.version,activityId:activity.id,activityVersion:activity.version,questionSnapshot:cleanString(questionUsed||activity.question,500),referenceSnapshot:activity.answer,focusLabelSnapshot:target.label,requirementVerified:r.verificationStatus==='verified',courseId:r.courseId,sessionId,response:recordedResponse,rating,scheduleRating,criterionChecks:checks,criterionCounts:counts,assisted:!!assisted,gradedBy:'learner',createdAt:now.toISOString()};
+    db.attempts.push(attempt);observeDuration(db,activity.kind,attempt.durationSeconds);
+    db.memory[target.id]={dueAt,intervalDays:adjustedInterval,lastRating:scheduleRating,lastReviewedAt:now.toISOString(),reviewCount:(prev?.reviewCount||0)+1};
+    db.events.push({type:'attempt.recorded',entityId:attempt.id,requirementId:r.id,targetId:target.id,at:attempt.createdAt});
+    return {attempt,dueAt};
+  }
+  function assessmentCoverage(db,assessment,now=new Date()){
+    const d=daysUntil(assessment.date,now);
+    const requirements=db.requirements.filter(r=>r.active&&r.courseId===assessment.courseId&&(assessment.scope==='all'||assessment.requirementIds.includes(r.id)));
+    const targets=requirements.flatMap(r=>getTargets(db,r.id,{includePending:true}).map(t=>({req:r,target:t})));
+    const counts={unattempted:0,needsPractice:0,selfReported:0,selfReportedWritten:0,selfReportedOral:0,selfReportedMental:0,blocked:0,rubricGaps:0,rubricUnassessed:0,rubricAllMet:0,rubricHeld:0};let estimatedSecondsPending=0;
+    for(const {req,target} of targets){
+      const rub=criterionStatus(db,target.id,req.version);
+      if(rub.missed||rub.unsure)counts.rubricGaps++;
+      else if(rub.total&&rub.unassessed)counts.rubricUnassessed++;
+      else if(rub.allMet)counts.rubricAllMet++;
+      if(getCriteria(db,target.id,{includePending:true}).some(c=>c.needsReview))counts.rubricHeld++;
+      if(!requirementEligible(req)||target.needsReview){counts.blocked++;continue;}
+      const attempts=db.attempts.filter(a=>a.retrievalTargetId===target.id&&a.retrievalTargetVersion===target.version&&a.requirementVersion===req.version);
+      if(!attempts.length)counts.unattempted++;
+      else {
+        const last=attempts[attempts.length-1];
+        if(evidenceType(last)==='independent_self_report'){counts.selfReported++;counts['selfReported'+inputModeFor(last).charAt(0).toUpperCase()+inputModeFor(last).slice(1)]++;}
+        else counts.needsPractice++;
+      }
+      if(!attempts.length||attempts[attempts.length-1].assisted||!['good','easy'].includes(attempts[attempts.length-1].rating))estimatedSecondsPending+=durationEstimate(db,getActivities(db,req.id,target.id)[0]||req).seconds;
+    }
+    return {assessmentId:assessment.id,daysRemaining:d,total:targets.length,requirements:requirements.length,...counts,pending:counts.unattempted+counts.needsPractice,estimatedPracticeMinutes:Math.ceil(estimatedSecondsPending/60)};
+  }
+  function stats(db,now=new Date()){
+    const active=db.requirements.filter(r=>r.active);
+    const targets=active.flatMap(r=>getTargets(db,r.id,{includePending:true}).map(target=>({req:r,target})));
+    const due=targets.filter(({req,target})=>requirementEligible(req)&&!target.needsReview).filter(({target})=>!db.memory[target.id]||new Date(db.memory[target.id].dueAt)<=now).length;
+    const newItems=targets.filter(({target})=>!db.memory[target.id]).length;
+    const upcoming=db.assessments.filter(a=>daysUntil(a.date,now)>=0).sort((a,b)=>a.date.localeCompare(b.date));
+    return {courses:db.courses.length,requirements:active.length,targets:targets.length,due,newItems,practiced:targets.length-newItems,upcoming};
+  }
+  function demoDb(now=new Date()){
+    const db=initialDb();const biology=addCourse(db,'Biology');const chemistry=addCourse(db,'Chemistry');const math=addCourse(db,'Mathematics');const history=addCourse(db,'History');
+    const data=[
+      [biology,'Enzyme catalysis','Enzymes lower activation energy by stabilising the transition state.',[
+        ['How do enzymes increase reaction rates?','By stabilising the transition state and lowering activation energy.','explain'],
+        ['What is activation energy?','The energy barrier a reaction must overcome to proceed.','recall'],
+        ['How might extreme temperature affect an enzyme?','It may alter protein structure and reduce catalytic activity, including through denaturation.','apply']]],
+      [biology,'Photosynthesis','Carbon dioxide supplies carbon in sugars; water is the source of oxygen gas released in oxygenic photosynthesis.',[
+        ['Where does the carbon in sugars come from during photosynthesis?','Carbon dioxide supplies the carbon atoms.','recall'],
+        ['Why is sunlight not the carbon source in photosynthesis?','Sunlight supplies energy, not carbon atoms; carbon comes from CO₂.','explain']]],
+      [chemistry,'Chemical equilibrium','At equilibrium, forward and reverse reaction rates are equal; concentrations need not be equal.',[
+        ['What is dynamic chemical equilibrium?','Forward and reverse reaction rates are equal, while both reactions continue.','recall'],
+        ['Must reactant and product concentrations be equal at equilibrium?','No. Equal reaction rates do not imply equal concentrations.','explain'],
+        ['Predict the qualitative response to a pressure increase in a gaseous equilibrium.','Depending on the system, it can favour the side with fewer moles of gas; if equal, no shift due solely to pressure.','apply']]],
+      [math,'Quadratic functions','The discriminant b² − 4ac indicates the number of distinct real roots of ax² + bx + c = 0.',[
+        ['What is the discriminant of a quadratic?','b² − 4ac.','recall'],
+        ['What does a negative discriminant indicate?','There are no real roots; the solutions are non-real complex numbers.','explain'],
+        ['Solve x² − 5x + 6 = 0.','x = 2 or x = 3.','apply']]],
+      [history,'Historical reasoning','A historical explanation should distinguish a chronology of events from a causal claim supported by evidence.',[
+        ['How is a chronological description different from a causal explanation?','Chronology lists when events occurred; causation explains why one event influenced another using evidence.','explain'],
+        ['Why can two sources disagree about the causes of an event?','They may differ in perspective, access to evidence, interpretation, or purpose.','explain']]]
+    ];
+    for(const [course,title,content,qa] of data){
+      const source={id:id('source'),courseId:course.id,title,content,version:1,createdAt:new Date().toISOString()};db.sources.push(source);db.sourceVersions.push({sourceId:source.id,version:1,title,content,createdAt:source.createdAt});
+      for(const [question,answer,kind] of qa)addRequirement(db,{courseId:course.id,sourceId:source.id,question,answer,kind,sourceQuote:content,origin:'demo'});
+    }
+    addAssessment(db,{courseId:biology.id,title:'Biology unit test',date:addDays(now,3)});
+    addAssessment(db,{courseId:chemistry.id,title:'Chemistry quiz',date:addDays(now,7)});
+    return db;
+  }
+  function validateImport(x){return migrateDb(x);}
+
+  return {DAY,id,today,addDays,daysUntil,initialDb,migrateDb,validateImport,getTarget,getTargets,getMemory,getActivities,getCriteria,addCriterion,proposeCriteria,reviseCriterion,verifyCriterion,archiveCriterion,criterionStatus,rubricProgress,chooseActivity,addRetrievalTarget,verifyRetrievalTarget,addActivityVariant,deactivateActivity,reviseSource,addCourse,draftRequirements,addSource,addImportedDocument,addRequirement,editRequirement,verifyRequirement,integrity:I.integrity,addAssessment,linkedAssessments,estimatedSeconds,durationEstimate,evidenceType,inputModeFor,evidenceSummary,eligibleCandidates,planActivities,forecastSchedule,recordAttempt,assessmentCoverage,stats,demoDb};
+});
