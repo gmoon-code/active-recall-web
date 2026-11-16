@@ -42,4 +42,4 @@ Your notes, study attempts, and review schedule are stored **locally in your bro
 
 ## Status
 
-Code release: **v2.5 Free Edition**. Source files are on `main`. GitHub Pages must be enabled separately in repository Settings before the site has a live public URL.
+Code release: **v2.5 Free Edition**. GitHub Pages is enabled, and its initial build and deployment [completed successfully](https://github.com/gmoon-code/active-recall-web/actions/runs/43787614869) on November 16, 2026. The app is published from `main` at https://gmoon-code.github.io/active-recall-web/. Live-device storage persistence and offline reload have not yet been independently confirmed; use [Site Diagnostics](https://gmoon-code.github.io/active-recall-web/health.html) to check them in your browser.
