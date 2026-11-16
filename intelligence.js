@@ -209,6 +209,35 @@
     }
     return result;
   }
+  // Reword ONE source-grounded question without creating a second skill target.
+  // Only explicitly patterned English sources qualify. This is NOT a transfer
+  // task generator, synonym model, source validator, or student performance model.
+  function alternativeQuestionProposals(text,{limit=4}={}){
+    const cap=Math.max(1,Math.min(8,Number(limit)||4));
+    const proposals=questionProposals(text,{limit:36}),out=[],seen=new Set();
+    for(const p of proposals){
+      if(out.length>=cap)break;
+      let q='';let m;
+      if(p.structure==='term' && (m=p.question.match(/^What does (.+) mean\?$/)))q=`How would you define ${m[1]}?`;
+      if(p.structure==='definition' && (m=p.question.match(/^What is the meaning of (.+), including its distinguishing features\?$/)))q=`How would you define ${m[1]}?`;
+      if(p.structure==='cause' && (m=p.question.match(/^What explains this outcome: (.+)\?$/)))q=`What is the stated cause of ${m[1]}?`;
+      if(p.structure==='mechanism' && (m=p.question.match(/^What mechanism explains the following process or effect: (.+)\?$/)))q=`How is ${m[1]} achieved? Explain the mechanism.`;
+      if(p.structure==='contrast' && (m=p.question.match(/^How do (.+) and (.+) differ\?$/)))q=`What is an important difference between ${m[1]} and ${m[2]}?`;
+      if(p.structure==='condition' && (m=cleanLead(p.sourceQuote).match(/^If\s+(.{6,160}?),\s*(?:then\s+)?(.{10,230})$/i)))q=`What outcome is described if ${stripEnd(m[1])}?`;
+      if(p.structure==='numeric_condition' && (m=p.question.match(/^At what (pH|measured condition) does the following occur: (.+)\?$/)))q=`Which ${m[1]} is associated with ${m[2]}?`;
+      if(p.structure==='effect' && (m=p.question.match(/^What effect does (.+) have on (.+)\?$/)))q=`Describe how ${m[1]} affects ${m[2]}.`;
+      q=q.trim();
+      if(q.length<14||q.length>500||q.toLowerCase()===p.question.toLowerCase())continue;
+      const normalized=q.toLowerCase().replace(/\s+/g,' ');
+      if(seen.has(normalized))continue;
+      seen.add(normalized);
+      let hash=2166136261;
+      for(const char of q){hash^=char.codePointAt(0);hash=Math.imul(hash,16777619)>>>0;}
+      out.push({...p,question:q,kind:p.kind,key:`${p.key}:alt:${hash.toString(16)}`,
+        notice:'Alternative wording of the SAME source-backed recall target; inspect and confirm before saving. No new due date.'});
+    }
+    return out;
+  }
   // Read-only coverage and wording inspection. These are structural warnings,
   // NOT a semantic validator, expert quality score, or syllabus coverage claim.
   function questionWarnings(requirement, source=null) {
@@ -277,5 +306,5 @@
     const sourceDuplicates=(db.sources || []).reduce((n,s)=>n+(s.duplicateLinks?.length||0),0);
     return {drafts:drafts.length,needsReview:weak.length,possibleDuplicates:similar.length,possibleConflicts:conflicts.length,brokenLinks:missing.length,linkedRepeats:sourceDuplicates};
   }
-  return {words, norm, similarity, segments, parseStatement, analyzeNotes, suggestCriteria, questionProposals, questionWarnings, questionCoverage, integrity};
+  return {words, norm, similarity, segments, parseStatement, analyzeNotes, suggestCriteria, questionProposals, alternativeQuestionProposals, questionWarnings, questionCoverage, integrity};
 });

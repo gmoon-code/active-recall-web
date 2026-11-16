@@ -104,3 +104,16 @@
 .studio-proposal p{overflow-wrap:anywhere;white-space:pre-wrap}
 .studio-proposal .reqmeta{margin:0}
 @media(max-width:640px){.question-studio{padding:16px;max-height:92vh}.studio-proposal{padding:11px}}
+
+/* Blueprint 3.0 — readable, explicitly sourced objective map and same-target prompts. */
+.objective-map{margin:16px 0 20px}.objective-map-groups{display:grid;gap:8px;margin-top:14px}
+.objective-group{border:1px solid var(--line);border-radius:12px;padding:11px 12px;background:var(--surface)}
+.objective-group>summary{cursor:pointer;display:flex;flex-wrap:wrap;align-items:baseline;gap:9px}
+.objective-group-content{padding-top:11px;display:grid;gap:8px}
+.objective-entry{border-top:1px solid var(--line);padding:10px 0 2px;display:grid;gap:5px;min-width:0}
+.objective-entry strong{overflow-wrap:anywhere}.objective-head{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.objective-entry .btnrow{display:flex;flex-wrap:wrap;gap:6px;margin-top:3px}
+.variant-suggestions{border:1px solid var(--line);border-radius:14px;padding:14px;margin:13px 0;display:grid;gap:10px}
+.variant-suggestions h3{font-size:14px}.variant-suggestion{border-top:1px solid var(--line);padding-top:9px;display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.variant-suggestion p{overflow-wrap:anywhere;min-width:0;flex:1 1 260px}
+@media(max-width:600px){.objective-map .quality-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.objective-group>summary{display:block}.objective-group>summary span{display:block;margin-top:4px}}

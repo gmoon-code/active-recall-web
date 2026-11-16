@@ -359,6 +359,66 @@
     db.events.push({type:'question_studio.draft_added',entityId:requirement.id,sourceId,key,at:now});
     return {requirement,mode:'created_unverified_draft'};
   }
+  // Map only the learner's explicitly saved requirements. This is a source- and
+  // outline-based organization, NOT automatic semantic curriculum inference.
+  function learningObjectiveMap(db,courseId,now=new Date()){
+    if(!db.courses.some(c=>c.id===courseId))throw Error('Choose an existing course.');
+    const reqs=db.requirements.filter(r=>r.active&&r.courseId===courseId);
+    const coverage=I.questionCoverage(db,courseId);
+    const covered=new Map(coverage.sourceRows.map(row=>[row.sourceId,row]));
+    const sources=db.sources.filter(s=>s.courseId===courseId);
+    const groupFor=(source)=>{
+      const groupReq=reqs.filter(r=>source?r.sourceId===source.id:!r.sourceId);
+      const outline=source?(source.documentOutline?.length?source.documentOutline:D.buildOutline(source.content,source.importFormat||'md')):[];
+      const objectives=groupReq.map(r=>{
+        const targets=getTargets(db,r.id,{includePending:true});
+        const isReady=requirementEligible(r);
+        const preview=source&&Number.isInteger(r.sourceStart)?outline.find(o=>r.sourceStart>=o.start&&r.sourceStart<o.end):null;
+        const focus=targets.map(t=>{
+          const mem=db.memory[t.id];const eligible=isReady&&!t.needsReview;
+          return {id:t.id,label:t.label,questions:getActivities(db,r.id,t.id).length,dueAt:mem?.dueAt||null,
+            due:eligible&&(!mem||new Date(mem.dueAt).getTime()<=now.getTime()),ready:eligible};
+        });
+        return {id:r.id,label:r.objective||r.question,sourceSection:preview?.title||null,
+          status:!isReady?'needs_review':targets.some(t=>t.needsReview)?'partially_ready':'ready',
+          focusCount:focus.length,promptCount:focus.reduce((n,t)=>n+t.questions,0),
+          dueFocuses:focus.filter(t=>t.due).length,focus,possibleOverlap:!!r.possibleDuplicateOf};
+      });
+      return {sourceId:source?.id||null,title:source?.title||'Self-authored objectives',
+        sourceVersion:source?.version||null,unmappedStatements:source?(covered.get(source.id)?.unrepresented||0):null,
+        objectives,needsReview:objectives.filter(o=>o.status!=='ready').length,
+        dueFocuses:objectives.reduce((n,o)=>n+o.dueFocuses,0),
+        distinctFocuses:objectives.reduce((n,o)=>n+o.focusCount,0)};
+    };
+    const groups=sources.map(groupFor);
+    if(reqs.some(r=>!r.sourceId))groups.push(groupFor(null));
+    return {courseId,groups,objectives:reqs.length,
+      distinctFocuses:groups.reduce((n,g)=>n+g.distinctFocuses,0),
+      dueFocuses:groups.reduce((n,g)=>n+g.dueFocuses,0),
+      needsReview:groups.reduce((n,g)=>n+g.needsReview,0),
+      warning:'A map of saved objectives and source sections, not a validated syllabus map. Distinct recall focuses get separate review dates; question variations do not.'};
+  }
+  // Restrict suggested alternate wording to verified primary targets derived
+  // from an unchanged, exact studio proposal; otherwise use manual variations.
+  function variationStudio(db,{requirementId,targetId}={}){
+    const r=db.requirements.find(x=>x.id===requirementId&&x.active);
+    const t=r&&getTargets(db,r.id,{includePending:true}).find(x=>x.id===targetId);
+    if(!r||!t)throw Error('Learning requirement or focus not found.');
+    const empty=(reason)=>({requirementId:r.id,targetId:t.id,reason,candidates:[]});
+    if(!t.isPrimary||t.needsReview)return empty('Automatic rewordings are limited to ready original recall focuses. Add one manually instead.');
+    if(!requirementEligible(r)||r.verificationStatus!=='verified')return empty('Verify the learning requirement before suggesting reusable variations.');
+    const source=db.sources.find(s=>s.id===r.sourceId);
+    if(!source||!r.sourceQuote||!source.content.includes(r.sourceQuote)||r.sourceVersion!==source.version)
+      return empty('An unchanged source excerpt is required before suggesting variations.');
+    const baseline=I.questionProposals(r.sourceQuote,{limit:8}).find(p=>p.sourceQuote===r.sourceQuote&&p.format===r.format);
+    if(!baseline||r.question.trim()!==baseline.question.trim()||r.answer.trim()!==r.sourceQuote.trim())
+      return empty('The original question or answer was customised; manually verify any alternative wording.');
+    const existing=new Set(getActivities(db,r.id).map(a=>a.question.toLowerCase().trim()));
+    const candidates=I.alternativeQuestionProposals(r.sourceQuote,{limit:4})
+      .filter(p=>p.sourceQuote===r.sourceQuote&&p.format===r.format&&!existing.has(p.question.toLowerCase().trim()))
+      .map(p=>({key:p.key,question:p.question,answer:r.answer,kind:r.kind,structure:p.structure,sourceQuote:r.sourceQuote}));
+    return {requirementId:r.id,targetId:t.id,reason:candidates.length?'Review and edit before saving. Variations share the original focus and due date.':'No safe new automatic rewording available. You can write one manually.',candidates};
+  }
   function addRequirement(db,{courseId,sourceId=null,question,answer,kind='explain',sourceQuote='',origin='manual',confidence='manual',objective='',format='',sourceStart=null,sourceEnd=null,possibleDuplicateOf=null,possibleConflictWith=null}){
     if(!db.courses.some(c=>c.id===courseId))throw Error('Choose an existing course.');
     question=cleanString(question,500); answer=cleanString(answer,4000);
@@ -745,5 +805,5 @@
   }
   function validateImport(x){return migrateDb(x);}
 
-  return {DAY,id,today,addDays,daysUntil,initialDb,migrateDb,validateImport,getTarget,getTargets,getMemory,getActivities,getCriteria,addCriterion,proposeCriteria,reviseCriterion,verifyCriterion,archiveCriterion,criterionStatus,rubricProgress,chooseActivity,addRetrievalTarget,verifyRetrievalTarget,addActivityVariant,deactivateActivity,reviseSource,addCourse,draftRequirements,addSource,addImportedDocument,addRequirement,editRequirement,verifyRequirement,integrity:I.integrity,questionCoverage:I.questionCoverage,questionWarnings:I.questionWarnings,questionStudio,adoptQuestionProposal,addAssessment,linkedAssessments,estimatedSeconds,durationEstimate,evidenceType,inputModeFor,evidenceSummary,eligibleCandidates,planActivities,buildReviewAgenda,forecastSchedule,recordAttempt,assessmentCoverage,stats,demoDb};
+  return {DAY,id,today,addDays,daysUntil,initialDb,migrateDb,validateImport,getTarget,getTargets,getMemory,getActivities,getCriteria,addCriterion,proposeCriteria,reviseCriterion,verifyCriterion,archiveCriterion,criterionStatus,rubricProgress,chooseActivity,addRetrievalTarget,verifyRetrievalTarget,addActivityVariant,deactivateActivity,reviseSource,addCourse,draftRequirements,addSource,addImportedDocument,addRequirement,editRequirement,verifyRequirement,integrity:I.integrity,questionCoverage:I.questionCoverage,questionWarnings:I.questionWarnings,learningObjectiveMap,variationStudio,questionStudio,adoptQuestionProposal,addAssessment,linkedAssessments,estimatedSeconds,durationEstimate,evidenceType,inputModeFor,evidenceSummary,eligibleCandidates,planActivities,buildReviewAgenda,forecastSchedule,recordAttempt,assessmentCoverage,stats,demoDb};
 });
