@@ -151,6 +151,64 @@
     }
     return result;
   }
+  // Review-only question proposals for patterns the learner's source explicitly states.
+  // No outside scientific knowledge, unsupported counterfactuals, or invented answers.
+  // Each proposal carries an exact substring and offsets; ambiguous prose is omitted.
+  function questionProposals(text,{limit=36}={}) {
+    const raw=String(text||'').slice(0,20000);
+    const cap=Math.max(1,Math.min(80,Math.floor(Number(limit)||36)));
+    const result=[], seen=new Set();
+    const concise=v=>stripEnd(String(v||'').trim().replace(/\s+/g,' '));
+    function emit(part,type,question,kind,objective){
+      if(result.length>=cap)return;
+      const quote=part.text;
+      if(quote.length>900||part.start===null||part.start<0||raw.slice(part.start,part.end)!==quote)return;
+      question=String(question||'').trim().replace(/\s+/g,' ');objective=concise(objective);
+      if(question.length<14||question.length>450||!objective)return;
+      let fingerprint=2166136261;for(const char of quote){fingerprint^=char.codePointAt(0);fingerprint=Math.imul(fingerprint,16777619)>>>0;}
+      const key=`${part.start}:${part.end}:${type}:${fingerprint.toString(16)}`;
+      if(seen.has(key))return;
+      seen.add(key);
+      result.push({key,sourceStart:part.start,sourceEnd:part.end,sourceQuote:quote,
+        question,answer:quote,kind,objective,format:`studio_${type}`,structure:type,
+        confidence:'review',origin:'rule_draft',
+        notice:'Suggested from exact source wording. Review scientific accuracy, clarity and answer adequacy before approving.'});
+    }
+    const subject=chunk=>{let m=concise(chunk).match(/^(.{3,70}?)\s+(?:is|are|was|were|has|have|uses?|binds?|increases?|decreases?|causes?|inhibits?|contains?|produces?|remains?|can)\b/i);return m?concise(m[1]):null;};
+    for(const part of segments(raw)){
+      if(result.length>=cap)break;
+      const s=cleanLead(part.text);if(s.length>840||s.length<18)continue;
+      let m;
+      if((m=s.match(/^([^:;?]{3,75}):\s*(.{10,})$/))){
+        emit(part,'term',`What does ${concise(m[1])} mean?`,'recall',`Define ${concise(m[1])}`);continue;
+      }
+      if((m=s.match(/^(.{3,75}?)\s+(?:is defined as|refers to|means)\s+(.{10,})$/i))){
+        emit(part,'definition',`What is the meaning of ${concise(m[1])}, including its distinguishing features?`,'recall',`Define ${concise(m[1])}`);continue;
+      }
+      if((m=s.match(/^If\s+(.{6,160}?),\s*(?:then\s+)?(.{10,230})$/i))){
+        emit(part,'condition',`Under what condition does the following outcome occur: ${concise(m[2])}?`,'explain',`Explain the condition associated with ${concise(m[2]).slice(0,80)}`);continue;
+      }
+      if((m=s.match(/^(?:At|Under)\s+(pH\s*\d+(?:\.\d+)?|\d+(?:\.\d+)?\s*(?:°C|°F|K|mM|µM|uM|M|%)),\s*(.{10,230})$/i))){
+        const measure=/^pH/i.test(m[1])?'pH':'measured condition';
+        emit(part,'numeric_condition',`At what ${measure} does the following occur: ${concise(m[2])}?`,'recall',`Identify the ${measure} for ${concise(m[2]).slice(0,75)}`);continue;
+      }
+      if((m=s.match(/^(.{8,185}?)\s+(?:because|due to)\s+(.{12,230})$/i))){
+        emit(part,'cause',`What explains this outcome: ${concise(m[1])}?`,'explain',`Explain the stated cause of ${concise(m[1]).slice(0,85)}`);continue;
+      }
+      if((m=s.match(/^(.{9,185}?)\s+by\s+(.{12,230})$/i))){
+        emit(part,'mechanism',`What mechanism explains the following process or effect: ${concise(m[1])}?`,'explain',`Explain how ${concise(m[1]).slice(0,85)}`);continue;
+      }
+      if((m=s.match(/^(.{9,180}?)\s+(?:whereas|in contrast to)\s+(.{9,180})$/i))){
+        const a=subject(m[1]),b=subject(m[2]);
+        if(a&&b&&norm(a)!==norm(b))emit(part,'contrast',`How do ${embedded(a)} and ${embedded(b)} differ?`,'explain',`Distinguish ${a} from ${b}`);
+        continue;
+      }
+      if((m=s.match(/^(.{3,85}?)\s+(increases?|decreases?|reduces?|lowers?|raises?|inhibits?|promotes?|stabilises?|stabilizes?)\s+(.{5,140})$/i))){
+        emit(part,'effect',`What effect does ${concise(m[1])} have on ${concise(m[3])}?`,'recall',`Describe the effect of ${concise(m[1])}`);
+      }
+    }
+    return result;
+  }
   // Read-only coverage and wording inspection. These are structural warnings,
   // NOT a semantic validator, expert quality score, or syllabus coverage claim.
   function questionWarnings(requirement, source=null) {
@@ -219,5 +277,5 @@
     const sourceDuplicates=(db.sources || []).reduce((n,s)=>n+(s.duplicateLinks?.length||0),0);
     return {drafts:drafts.length,needsReview:weak.length,possibleDuplicates:similar.length,possibleConflicts:conflicts.length,brokenLinks:missing.length,linkedRepeats:sourceDuplicates};
   }
-  return {words, norm, similarity, segments, parseStatement, analyzeNotes, suggestCriteria, questionWarnings, questionCoverage, integrity};
+  return {words, norm, similarity, segments, parseStatement, analyzeNotes, suggestCriteria, questionProposals, questionWarnings, questionCoverage, integrity};
 });

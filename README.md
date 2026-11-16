@@ -1,40 +1,19 @@
-# Active Recall Web — Free Edition v2.8
+# Active Recall Web — Free Edition v2.9
 
-One browser-local learning system spanning courses, source-grounded recall targets, explanation criteria, assessment priorities, and a recurring review calendar.
+A unified browser-local learning system with a rolling, capacity-aware multi-course active recall agenda. Fully free on public GitHub Pages, with no paid hosting, API keys, subscriptions, credit cards or required accounts.
 
-## Start
+## New in v2.9
 
-Visit the existing free GitHub Pages address: https://gmoon-code.github.io/active-recall-web/
+**Question Studio** (Knowledge → Source notes → Question Studio) suggests prompts from explicitly described definitions, mechanisms, causes, contrasts, conditions, numerical relationships and effects. Each candidate has an exact source excerpt and is **held for human verification**. Unverified drafts do not enter the study calendar. The source and its version remain linked. The system does not claim to fact-check scientific content or grade learner answers.
 
-The v2.8 code is also included here for independent deployment or backup. To deploy to a public GitHub Pages repository, upload the **site files at the repository root** and enable Pages for the `main` branch and `/(root)` folder. No paid services or build tools are required.
+The previous v2.8 audit, v2.7 recurrent study calendar, v2.6 PDF missing-page safeguards, independent rubric checks, and JSON backup support remain available. No data-schema migration is required.
 
-### Most important changes
+## Deployment (free)
 
-- **Calendar** (formerly Outlook) now proposes repeated spaced reviews, not just first-pass opportunities.
-- A known due date is a real saved review window. Later conditional reviews are *proposals* requiring actual future learning to become real.
-- Save weekday/weekend availability, blocked days, and 7–42-day planning horizon locally. A missed study day defers the task; it is not evidence of forgetting.
-- **Study Now** prioritises the current day's planned work within the user's chosen 5–720-minute session.
-- Locally generated **draft questions require verification** before entering the active queue.
-- Existing sources, review attempts, assessment records, and schema-v5 backups remain supported.
+GitHub Pages: https://gmoon-code.github.io/active-recall-web/  
+Diagnostics: https://gmoon-code.github.io/active-recall-web/health.html  
+Publish `main` / `(root)` as a public GitHub Pages site. Do not upload personal learning backups or sensitive notes to this public repo. Data stays in the browser and is not automatically synced. Export JSON backups regularly.
 
-### Privacy and reliability
+## Evidence and limitations
 
-Study data are stored locally in browser IndexedDB or localStorage fallback. They do not automatically synchronize between devices. Export JSON backups regularly. **Never commit personal learning records or backups to this public repository.**
-
-A denied persistent-storage request does not necessarily indicate inability to save. See `health.html` on the deployed website for local diagnostics.
-
-The app does not grade arbitrary explanations, establish validated mastery, promise optimal intervals, or predict exam scores. Source-derived questions and criterion suggestions are editable and must be reviewed by a learner. Limited PDF extraction requires careful checking against the original document.
-
-**Permanent zero-payment rule:** no paid services, subscriptions, API credits, credit cards or paid hosting are required.
-
-## Validation and research
-
-161 automated tests passed in the local release, plus simulated Chromium desktop/mobile checks. The calendar's timing heuristics are experimental. For technical discussion, see `BLUEPRINT_2_7_FREE.md` and the repository's research document: `docs/RESEARCH_2026_QUESTION_DESIGN_AND_AUTO_SCHEDULING.md`.
-
-## v2.8 — Source coverage and question review
-
-Knowledge now includes a **read-only** review of parseable source statements: mapped, linked to learner-verified questions, or still unmapped. It also flags generic and context-dependent questions, answer leaks, missing or revised source links and possible duplicates. Each warning has an actionable edit control. Numerical distinctions such as pH 6 versus pH 7 are preserved in the draft deduplication rules.
-
-This is a literal source-statement audit, **not** an AI quality score, proof of full conceptual coverage, scientific accuracy, improved learning outcomes or exam readiness. The local schema, saved learning history, and recurring calendar remain compatible. Generated drafts are still not scheduled until learner-reviewed.
-
-Full engineering notes: [Blueprint 2.8](docs/BLUEPRINT_2_8_FREE.md). The zero-payment requirement remains mandatory.
+See [`docs/RESEARCH_2026_QUESTION_DESIGN_AND_AUTO_SCHEDULING.md`](docs/RESEARCH_2026_QUESTION_DESIGN_AND_AUTO_SCHEDULING.md), `docs/BLUEPRINT_2_9_FREE.md`, and earlier specifications for the cognitive-science rationale. Retrieval and spacing are well-supported general principles, but this prototype's exact review intervals and its rule-based question generation are **not** scientifically validated as optimal.

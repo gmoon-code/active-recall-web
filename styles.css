@@ -95,3 +95,12 @@
 .quality-row p{overflow-wrap:anywhere;margin:7px 0}
 .quality-row .btn{margin-top:7px}
 @media(max-width:650px){.quality-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* v2.9: deliberately reviewable source-backed Question Studio. */
+.question-studio{max-width:820px;width:min(95vw,820px);max-height:88vh;overflow-y:auto}
+.studio-list{display:grid;gap:11px}
+.studio-proposal{padding:15px;border:1px solid var(--line);border-radius:14px;background:var(--surface);display:grid;gap:8px;min-width:0}
+.studio-proposal>strong{line-height:1.45;overflow-wrap:anywhere}
+.studio-proposal p{overflow-wrap:anywhere;white-space:pre-wrap}
+.studio-proposal .reqmeta{margin:0}
+@media(max-width:640px){.question-studio{padding:16px;max-height:92vh}.studio-proposal{padding:11px}}

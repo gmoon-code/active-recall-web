@@ -311,6 +311,54 @@
     for(const key of Object.keys(candidate))db[key]=candidate[key];
     return {documentGroupId,sourceIds:results.map(r=>r.source.id),parts:parts.length,characters:content.length,added:results.reduce((n,r)=>n+r.added,0),duplicates:results.reduce((n,r)=>n+r.duplicates,0),needsReview:results.reduce((n,r)=>n+r.needsReview,0)};
   }
+  // Question Studio is a proposal workflow, not automatic grading or approval.
+  // Re-derive every suggestion from the currently saved source on acceptance;
+  // never trust a client-supplied answer, offset, or scientific statement.
+  function questionStudio(db,sourceId,{limit=36}={}){
+    const source=db.sources.find(s=>s.id===sourceId);
+    if(!source)throw Error('Saved source not found.');
+    const base=I.questionProposals(source.content,{limit});
+    const active=db.requirements.filter(r=>r.active&&r.courseId===source.courseId&&(r.sourceId===sourceId||(r.additionalSourceIds||[]).includes(sourceId)));
+    return {sourceId,sourceVersion:source.version,candidates:base.map(p=>{
+      const matches=active.filter(r=>r.sourceQuote===p.sourceQuote);
+      const saved=matches.some(r=>r.question.trim().toLowerCase()===p.question.trim().toLowerCase());
+      const improvable=matches.find(r=>r.sourceId===sourceId&&r.origin==='rule_draft'&&r.verificationStatus!=='verified'
+        &&(r.format==='general'||r.confidence==='review')&&!db.attempts.some(a=>a.requirementId===r.id));
+      return {...p,alreadySaved:saved,represented:matches.length>0,improvableRequirementId:improvable?.id||null};
+    }).sort((a,b)=>Number(a.represented)-Number(b.represented)||a.sourceStart-b.sourceStart)};
+  }
+  function adoptQuestionProposal(db,{sourceId,key}){
+    const source=db.sources.find(s=>s.id===sourceId);
+    if(!source)throw Error('Saved source not found.');
+    const proposal=questionStudio(db,sourceId,{limit:80}).candidates.find(p=>p.key===key);
+    if(!proposal)throw Error('Question proposal no longer matches this source. Open the studio again.');
+    if(source.content.slice(proposal.sourceStart,proposal.sourceEnd)!==proposal.sourceQuote)
+      throw Error('Source excerpt changed. Recheck the source before saving.');
+    if(proposal.alreadySaved)throw Error('This question is already saved; review it in the course instead.');
+    const now=new Date().toISOString();
+    if(proposal.improvableRequirementId){
+      const req=db.requirements.find(r=>r.id===proposal.improvableRequirementId);
+      if(!req)throw Error('Draft structure is incomplete. Review it manually.');
+      const activity=getActivities(db,req.id).find(a=>a.isPrimary), target=getTarget(db,req.id);
+      if(!activity||!target)throw Error('Draft structure is incomplete. Review it manually.');
+      req.version++;req.question=proposal.question;req.answer=proposal.answer;req.kind=proposal.kind;
+      req.objective=proposal.objective;req.format=proposal.format;req.sourceQuote=proposal.sourceQuote;
+      req.sourceStart=proposal.sourceStart;req.sourceEnd=proposal.sourceEnd;req.updatedAt=now;
+      req.verificationStatus='draft';req.verifiedAt=null;req.reviewedAt=null;req.confidence='review';
+      activity.question=proposal.question;activity.answer=proposal.answer;activity.kind=proposal.kind;activity.version++;
+      target.label=proposal.objective.slice(0,160);
+      for(const criterion of getCriteria(db,target.id,{includePending:true}))criterion.needsReview=true;
+      db.requirementVersions.push({requirementId:req.id,version:req.version,objective:req.objective,question:req.question,answer:req.answer,kind:req.kind,createdAt:now});
+      db.events.push({type:'question_studio.draft_revised',entityId:req.id,sourceId,key,at:now});
+      return {requirement:req,mode:'replaced_unverified_draft'};
+    }
+    const matching=db.requirements.find(r=>r.active&&r.courseId===source.courseId&&r.sourceQuote===proposal.sourceQuote);
+    const requirement=addRequirement(db,{courseId:source.courseId,sourceId,question:proposal.question,answer:proposal.answer,
+      kind:proposal.kind,sourceQuote:proposal.sourceQuote,origin:'rule_draft',confidence:'review',objective:proposal.objective,
+      format:proposal.format,sourceStart:proposal.sourceStart,sourceEnd:proposal.sourceEnd,possibleDuplicateOf:matching?.id||null});
+    db.events.push({type:'question_studio.draft_added',entityId:requirement.id,sourceId,key,at:now});
+    return {requirement,mode:'created_unverified_draft'};
+  }
   function addRequirement(db,{courseId,sourceId=null,question,answer,kind='explain',sourceQuote='',origin='manual',confidence='manual',objective='',format='',sourceStart=null,sourceEnd=null,possibleDuplicateOf=null,possibleConflictWith=null}){
     if(!db.courses.some(c=>c.id===courseId))throw Error('Choose an existing course.');
     question=cleanString(question,500); answer=cleanString(answer,4000);
@@ -697,5 +745,5 @@
   }
   function validateImport(x){return migrateDb(x);}
 
-  return {DAY,id,today,addDays,daysUntil,initialDb,migrateDb,validateImport,getTarget,getTargets,getMemory,getActivities,getCriteria,addCriterion,proposeCriteria,reviseCriterion,verifyCriterion,archiveCriterion,criterionStatus,rubricProgress,chooseActivity,addRetrievalTarget,verifyRetrievalTarget,addActivityVariant,deactivateActivity,reviseSource,addCourse,draftRequirements,addSource,addImportedDocument,addRequirement,editRequirement,verifyRequirement,integrity:I.integrity,questionCoverage:I.questionCoverage,questionWarnings:I.questionWarnings,addAssessment,linkedAssessments,estimatedSeconds,durationEstimate,evidenceType,inputModeFor,evidenceSummary,eligibleCandidates,planActivities,buildReviewAgenda,forecastSchedule,recordAttempt,assessmentCoverage,stats,demoDb};
+  return {DAY,id,today,addDays,daysUntil,initialDb,migrateDb,validateImport,getTarget,getTargets,getMemory,getActivities,getCriteria,addCriterion,proposeCriteria,reviseCriterion,verifyCriterion,archiveCriterion,criterionStatus,rubricProgress,chooseActivity,addRetrievalTarget,verifyRetrievalTarget,addActivityVariant,deactivateActivity,reviseSource,addCourse,draftRequirements,addSource,addImportedDocument,addRequirement,editRequirement,verifyRequirement,integrity:I.integrity,questionCoverage:I.questionCoverage,questionWarnings:I.questionWarnings,questionStudio,adoptQuestionProposal,addAssessment,linkedAssessments,estimatedSeconds,durationEstimate,evidenceType,inputModeFor,evidenceSummary,eligibleCandidates,planActivities,buildReviewAgenda,forecastSchedule,recordAttempt,assessmentCoverage,stats,demoDb};
 });
