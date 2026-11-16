@@ -1,54 +1,32 @@
-# Active Recall Web — Free Edition
+# Active Recall Web — Free Edition v2.7
 
-A free, browser-local active-recall learning system for multiple courses.
+One browser-local learning system spanning courses, source-grounded recall targets, explanation criteria, assessment priorities, and a recurring review calendar.
 
-## What it does
+## Start
 
-- Capture notes and import text, Markdown, and supported text-layer PDF documents.
-- Organize source-linked learning requirements, recall focuses, and question variations.
-- Create unified study sessions across courses, with selectable durations from 5 minutes to 12 hours.
-- Consider assessment deadlines, due reviews, and previous self-reported practice when proposing activities.
-- Review explanations using editable criteria; inspect source excerpts and schedule reasons.
-- Export and import JSON backups.
+Visit the existing free GitHub Pages address: https://gmoon-code.github.io/active-recall-web/
 
-Study responses are **self-rated**, not independently graded by an AI. Scheduling and mastery indicators are provisional, not exam-score predictions.
+The v2.7 code is also included here for independent deployment or backup. To deploy to a public GitHub Pages repository, upload the **site files at the repository root** and enable Pages for the `main` branch and `/(root)` folder. No paid services or build tools are required.
 
-## Publish free with GitHub Pages
+### Most important changes
 
-1. Open **Settings → Pages** in this public repository.
-2. Under **Build and deployment**, select **Deploy from a branch**.
-3. Choose **main** and **/(root)**, then select **Save**.
-4. After GitHub reports the site is deployed, open:  
-   https://gmoon-code.github.io/active-recall-web/
-5. Check on-site diagnostics:  
-   https://gmoon-code.github.io/active-recall-web/health.html
+- **Calendar** (formerly Outlook) now proposes repeated spaced reviews, not just first-pass opportunities.
+- A known due date is a real saved review window. Later conditional reviews are *proposals* requiring actual future learning to become real.
+- Save weekday/weekend availability, blocked days, and 7–42-day planning horizon locally. A missed study day defers the task; it is not evidence of forgetting.
+- **Study Now** prioritises the current day's planned work within the user's chosen 5–720-minute session.
+- Locally generated **draft questions require verification** before entering the active queue.
+- Existing sources, review attempts, assessment records, and schema-v5 backups remain supported.
 
-The website is static. No paid hosting, API key, billing information, subscription, or account is required by the app.
+### Privacy and reliability
 
-## Important data notes
+Study data are stored locally in browser IndexedDB or localStorage fallback. They do not automatically synchronize between devices. Export JSON backups regularly. **Never commit personal learning records or backups to this public repository.**
 
-Your notes, study attempts, and review schedule are stored **locally in your browser**, not in this public GitHub repository. GitHub Pages hosts only the application's code and static files.
+A denied persistent-storage request does not necessarily indicate inability to save. See `health.html` on the deployed website for local diagnostics.
 
-- Do not publish personal notes, exported backups, or private course documents to the repository.
-- Export JSON backups regularly. Browser data can be lost when you clear site data, switch devices or browsers, or use private browsing.
-- Data does not automatically sync between devices. Import a backup on another device to transfer it.
-- Keep using the same GitHub Pages URL for future updates to preserve the browser storage origin.
-- PDF extraction is limited: carefully verify extracted text, especially for equations, diagrams, complex layouts, and scanned documents.
-- For offline usage, visit the deployed site online first to allow the service worker to cache the static files.
+The app does not grade arbitrary explanations, establish validated mastery, promise optimal intervals, or predict exam scores. Source-derived questions and criterion suggestions are editable and must be reviewed by a learner. Limited PDF extraction requires careful checking against the original document.
 
-## Project constraint
+**Permanent zero-payment rule:** no paid services, subscriptions, API credits, credit cards or paid hosting are required.
 
-**Permanent zero-payment rule:** deployment, maintenance, and required functionality must remain possible without paid services, paid AI APIs, subscriptions, or billing details.
+## Validation and research
 
-## Status
-
-Code release: **v2.6 Free Edition** (PDF and storage-diagnostics reliability update). GitHub Pages is enabled, and its initial build and deployment [completed successfully](https://github.com/gmoon-code/active-recall-web/actions/runs/43787614869) on November 16, 2026. The app is published from `main` at https://gmoon-code.github.io/active-recall-web/. Live-device storage persistence and offline reload have not yet been independently confirmed; use [Site Diagnostics](https://gmoon-code.github.io/active-recall-web/health.html) to check them in your browser.
-
-## v2.6: Safer PDF import and storage status
-
-- Recommended PDF mode first tries the limited offline reader; if it cannot decode compressed object streams, the app asks before loading free PDF.js. Your PDF bytes are processed in the browser, not intentionally uploaded.
-- The full PDF.js reader no longer cancels every readable page when one page lacks an extractable text layer. Instead it retains page markers, identifies missing-text pages in the audit, and requires an additional acknowledgement before import.
-- A missing-text page **is not converted into study questions**. If it contains essential diagrams or scans, transcribe or otherwise export that content into text before relying on the generated requirements.
-- Site Diagnostics distinguishes a browser denying persistent-storage status from a failure to save locally. You may request more durable storage, but browsers can decline; keep regular JSON backups.
-- No database-schema change. Prior local data and backups remain compatible.
-- GitHub Pages project URL: https://gmoon-code.github.io/active-recall-web/
+149 automated tests passed in the local release, plus simulated Chromium desktop/mobile checks. The calendar's timing heuristics are experimental. For technical discussion, see `BLUEPRINT_2_7_FREE.md` and the repository's research document: `docs/RESEARCH_2026_QUESTION_DESIGN_AND_AUTO_SCHEDULING.md`.

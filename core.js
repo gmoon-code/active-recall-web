@@ -14,7 +14,7 @@
   const addDays = (date, n) => { const d = new Date(date.getTime()); d.setDate(d.getDate() + n); return today(d); };
   const dateStart = (dateString) => { const [y,m,d] = dateString.split('-').map(Number); return new Date(y,m-1,d); };
   const daysUntil = (dateString, now = new Date()) => Math.round((dateStart(dateString) - dateStart(today(now))) / DAY);
-  const initialDb = () => ({ schemaVersion: 5, timeModels: {}, rubricCriteria: [], criterionVersions: [], courses: [], sources: [], sourceVersions: [], requirements: [], requirementVersions: [], retrievalTargets: [], activities: [], assessments: [], attempts: [], memory: {}, sessions: [], events: [] });
+  const initialDb = () => ({ schemaVersion: 5, agendaPreferences: {days:21,weekdayMinutes:25,weekendMinutes:60,missedDates:[]}, timeModels: {}, rubricCriteria: [], criterionVersions: [], courses: [], sources: [], sourceVersions: [], requirements: [], requirementVersions: [], retrievalTargets: [], activities: [], assessments: [], attempts: [], memory: {}, sessions: [], events: [] });
   const baseTargetId = rid => 'target_' + rid;
   const baseActivityId = rid => 'activity_' + rid;
   // Every learning requirement may contain several distinct retrieval targets.
@@ -414,7 +414,7 @@
     }
     return result;
   }
-  function requirementEligible(r){return r.active&&!r.sourceRevisionPending&&!((r.possibleConflictWith||r.possibleDuplicateOf)&&r.origin==='rule_draft'&&!r.verifiedAt);}
+  function requirementEligible(r){return r.active&&!r.sourceRevisionPending&&(r.origin!=='rule_draft'||r.verificationStatus==='verified')&&!((r.possibleConflictWith||r.possibleDuplicateOf)&&r.origin==='rule_draft'&&!r.verifiedAt);}
   function schedulingReasons(item){
     const reasons=[];
     if(item.isNew)reasons.push('No previous recall attempt');
@@ -462,6 +462,96 @@
       eligible.splice(eligible.indexOf(chosen),1);
     }
     return {items:plan,budgetSeconds,reserveSeconds:reserve,unusedSeconds:remaining};
+  }
+  // A rolling, capacity-aware calendar; future spaced follow-ups are explicitly
+  // CONDITIONAL on actually studying and are NOT simulated successful answers.
+  // Read-only: no attempts, memory intervals or timestamps are modified.
+  function buildReviewAgenda(db,{start=new Date(),days=21,weekdayMinutes=25,weekendMinutes=60,missedDates=[]}={}){
+    const horizon=Number(days),weekday=Number(weekdayMinutes),weekend=Number(weekendMinutes);
+    if(!Number.isInteger(horizon)||horizon<7||horizon>42)throw Error('Calendar horizon must be 7–42 days.');
+    if(![weekday,weekend].every(n=>Number.isInteger(n)&&n>=0&&n<=720))throw Error('Available daily time must be 0–720 minutes.');
+    if(!Array.isArray(missedDates)||missedDates.some(d=>typeof d!=='string'||!/^(?:19|20)\d{2}-\d{2}-\d{2}$/.test(d)||today(dateStart(d))!==d))throw Error('Invalid unavailable-day dates.');
+    const before=Date.parse(start);if(!Number.isFinite(before))throw Error('Invalid calendar start date.');
+    const startDate=today(start),startMs=dateStart(startDate).getTime();
+    const endDate=addDays(dateStart(startDate),horizon-1);
+    const excluded=new Set(missedDates),states=new Map(),rows=[];
+    let deferred=0,firstPassTotal=0,conditionalTotal=0;
+    const pool=eligibleCandidates(db,start).filter(c=>c.req.verificationStatus==='verified'||c.req.origin!=='rule_draft');
+    for(const c of pool){
+      const m=db.memory[c.target.id];
+      let dueDate=startDate;
+      if(m?.dueAt&&Number.isFinite(Date.parse(m.dueAt))) {
+        const future=today(new Date(m.dueAt));if(future>dueDate)dueDate=future;
+      }
+      // A near-term assessment can justify a practice opportunity a little before
+      // a later memory due date; it does not change the underlying memory interval.
+      const exams=linkedAssessments(db,c.req,start).map(a=>a.date).sort();
+      if(exams.length&&dueDate>exams[0]){
+        const advance=addDays(dateStart(exams[0]),-1);
+        if(advance>=startDate)dueDate=advance;
+      }
+      const prior=Math.max(0,Number(m?.intervalDays)||0);
+      states.set(c.target.id,{candidate:c,nextDate:dueDate,initialDate:dueDate,
+        rounds:0,nextIndex:Math.max(0,daysUntil(dueDate,start)),
+        examOffsets:exams.map(d=>daysUntil(d,start)).sort((a,b)=>a-b),
+        priorGap:prior>1?Math.min(21,Math.max(2,Math.round(prior*1.5))):2,
+        lastAssigned:null});
+    }
+    const assigned=new Map();
+    for(let i=0;i<horizon;i++){
+      const when=dateStart(addDays(dateStart(startDate),i));when.setHours(12,0,0,0);
+      const date=today(when),off=excluded.has(date),capacity=off?0:(when.getDay()===0||when.getDay()===6?weekend:weekday);
+      const reserve=capacity<=5?Math.min(capacity*60,40):Math.min(180,Math.round(capacity*60*0.08));
+      let available=Math.max(0,capacity*60-reserve);
+      const activities=[],perCourse={},perReq={};let previousCourse='';
+      // Select from *currently* eligible due windows; a missed day never
+      // implies forgetting and does not create fictitious overdue attempts.
+      while(available>0){
+        const pending=[...states.values()].filter(v=>v.rounds<4&&v.nextDate<=date&&v.candidate.seconds<=available&&v.lastAssigned!==date);
+        if(!pending.length)break;
+        const score=v=>{
+          const c=v.candidate,examIndex=v.examOffsets.find(day=>day>=i);
+          const urgency=examIndex===undefined?0:Math.max(0,38-(examIndex-i)*5);
+          const late=Math.min(25,Math.max(0,i-v.nextIndex)*3);
+          return c.score+urgency+late-(perCourse[c.req.courseId]||0)*9-(perReq[c.req.id]||0)*6-(c.req.courseId===previousCourse?3:0)-(v.rounds?7:0);
+        };
+        pending.sort((a,b)=>score(b)-score(a)||a.nextDate.localeCompare(b.nextDate)||a.candidate.seconds-b.candidate.seconds||a.candidate.target.id.localeCompare(b.candidate.target.id));
+        const v=pending[0],c=v.candidate,conditional=v.rounds>0;
+        const nearestExam=v.examOffsets.find(day=>day>=i),examDays=nearestExam===undefined?null:nearestExam-i;
+        const reason=conditional?'Conditional spaced revisit — depends on future study results':
+          date>v.initialDate?'Deferred review opportunity':c.isNew?'First retrieval opportunity':
+          (examDays!==null&&examDays<=2?'Assessment-relevant review':'Existing memory due window');
+        const slot={targetId:c.target.id,requirementId:c.req.id,courseId:c.req.courseId,activityId:c.activity.id,
+          seconds:c.seconds,round:v.rounds+1,conditional,reason,earliestDate:v.nextDate,examDays};
+        activities.push(slot);available-=c.seconds;
+        if(!assigned.has(c.target.id))assigned.set(c.target.id,[]);
+        assigned.get(c.target.id).push(slot);
+        perCourse[c.req.courseId]=(perCourse[c.req.courseId]||0)+1;
+        perReq[c.req.id]=(perReq[c.req.id]||0)+1;previousCourse=c.req.courseId;
+        v.lastAssigned=date;v.rounds++;
+        const gap=v.priorGap;
+        v.nextDate=addDays(when,gap);v.nextIndex=i+gap;
+        v.priorGap=Math.min(28,Math.max(gap+1,Math.round(gap*1.8)));
+        if(conditional)conditionalTotal++;else firstPassTotal++;
+      }
+      rows.push({date,budgetMinutes:capacity,reserveSeconds:reserve,usedSeconds:activities.reduce((n,a)=>n+a.seconds,0),activities,
+        overdueUnplaced:[...states.values()].filter(v=>v.rounds===0&&v.nextDate<=date).length});
+    }
+    const dueWithin=[...states.values()].filter(v=>v.initialDate<=endDate);
+    deferred=dueWithin.filter(v=>v.rounds===0).length;
+    const coverage=db.assessments.filter(a=>daysUntil(a.date,start)>=0).map(a=>{
+      const related=db.requirements.filter(r=>r.active&&r.courseId===a.courseId&&(a.scope==='all'||a.requirementIds.includes(r.id)));
+      const focus=related.flatMap(r=>getTargets(db,r.id,{includePending:true}).map(t=>({r,t})));
+      const eligible=focus.filter(({r,t})=>requirementEligible(r)&&!t.needsReview&&(r.verificationStatus==='verified'||r.origin!=='rule_draft'));
+      const firstPass=eligible.filter(({t})=>rows.some(row=>row.date<=a.date&&row.activities.some(task=>task.targetId===t.id&&!task.conditional))).length;
+      const conditional=rows.filter(row=>row.date<=a.date).flatMap(row=>row.activities).filter(task=>task.conditional&&eligible.some(({t})=>t.id===task.targetId)).length;
+      return {assessmentId:a.id,title:a.title,date:a.date,courseId:a.courseId,totalTargets:focus.length,
+        eligibleTargets:eligible.length,blocked:focus.length-eligible.length,firstPass,conditionalOpportunities:conditional};
+    });
+    return {days:rows,coverage,plannedTargets:firstPassTotal,conditionalOpportunities:conditionalTotal,
+      unplannedDue:deferred,dueInHorizon:dueWithin.length,eligibleAtStart:pool.length,
+      forecastType:'conditional_review_agenda',
+      warning:'Only each target’s next known review window uses current evidence. Later spaced revisit slots are conditional planning placeholders, not simulated successful retrievals, guaranteed retention, or exam results. Actual study results automatically change the next calculation. Intervals and priorities are provisional heuristics, not validated optimal timing.'};
   }
   // Read-only workload *opportunity* forecast, not simulated learning outcomes.
   // Future answers, retention changes, and additional repetitions are unknown.
@@ -607,5 +697,5 @@
   }
   function validateImport(x){return migrateDb(x);}
 
-  return {DAY,id,today,addDays,daysUntil,initialDb,migrateDb,validateImport,getTarget,getTargets,getMemory,getActivities,getCriteria,addCriterion,proposeCriteria,reviseCriterion,verifyCriterion,archiveCriterion,criterionStatus,rubricProgress,chooseActivity,addRetrievalTarget,verifyRetrievalTarget,addActivityVariant,deactivateActivity,reviseSource,addCourse,draftRequirements,addSource,addImportedDocument,addRequirement,editRequirement,verifyRequirement,integrity:I.integrity,addAssessment,linkedAssessments,estimatedSeconds,durationEstimate,evidenceType,inputModeFor,evidenceSummary,eligibleCandidates,planActivities,forecastSchedule,recordAttempt,assessmentCoverage,stats,demoDb};
+  return {DAY,id,today,addDays,daysUntil,initialDb,migrateDb,validateImport,getTarget,getTargets,getMemory,getActivities,getCriteria,addCriterion,proposeCriteria,reviseCriterion,verifyCriterion,archiveCriterion,criterionStatus,rubricProgress,chooseActivity,addRetrievalTarget,verifyRetrievalTarget,addActivityVariant,deactivateActivity,reviseSource,addCourse,draftRequirements,addSource,addImportedDocument,addRequirement,editRequirement,verifyRequirement,integrity:I.integrity,addAssessment,linkedAssessments,estimatedSeconds,durationEstimate,evidenceType,inputModeFor,evidenceSummary,eligibleCandidates,planActivities,buildReviewAgenda,forecastSchedule,recordAttempt,assessmentCoverage,stats,demoDb};
 });

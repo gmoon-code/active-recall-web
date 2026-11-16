@@ -76,3 +76,8 @@
 .pdf-audit-item strong{min-width:65px}.pdf-audit-item>span{overflow-wrap:anywhere}.pdf-audit-item .warningtext{flex-basis:100%}
 .pdf-confirm{display:flex;align-items:flex-start;gap:10px;border:1px solid #e5d6ad;background:#fff9eb;color:#67502a;border-radius:12px;padding:13px;cursor:pointer;font-size:12px;line-height:1.5}
 .pdf-confirm input{margin-top:3px;accent-color:var(--teal);flex-shrink:0}
+
+/* v2.7: conditional review opportunities in the rolling agenda. */
+.outlook-item.conditional-review{border-left:3px solid #8aa8b3;padding-left:11px;background:rgba(232,239,243,.3)}
+.outlook-item.conditional-review small{color:#536b79}
+@media (max-width:640px){.outlook-day summary{flex-wrap:wrap;gap:5px 12px}.outlook-item{overflow-wrap:anywhere}}
