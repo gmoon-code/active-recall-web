@@ -117,3 +117,11 @@
 .variant-suggestions h3{font-size:14px}.variant-suggestion{border-top:1px solid var(--line);padding-top:9px;display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap}
 .variant-suggestion p{overflow-wrap:anywhere;min-width:0;flex:1 1 260px}
 @media(max-width:600px){.objective-map .quality-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.objective-group>summary{display:block}.objective-group>summary span{display:block;margin-top:4px}}
+
+/* v3.1 source coverage review inbox */
+.coverage-queue-list{display:grid;gap:10px;margin-top:12px}
+.coverage-queue-item{padding:14px;border:1px solid var(--line);border-radius:13px;background:var(--surface);display:grid;gap:8px;min-width:0}
+.coverage-queue-item strong{overflow-wrap:anywhere}
+.coverage-queue-item details summary{cursor:pointer;color:var(--teal)}
+.coverage-excerpt{white-space:pre-wrap;overflow-wrap:anywhere;background:var(--bg);padding:10px;border-radius:8px}
+.coverage-queue-item .btnrow{margin-top:3px}

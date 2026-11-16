@@ -1,8 +1,11 @@
-# Active Recall Web — Free Edition v3.0
+# Active Recall Web — Free Edition v3.1
 
 A unified browser-local learning system with a rolling, capacity-aware multi-course active recall agenda. Fully free on public GitHub Pages, with no paid hosting, API keys, subscriptions, credit cards or required accounts.
 
-## New in v3.0
+## New in v3.1
+
+- **Source coverage review inbox:** A collapsible course-wide review queue highlights explicitly parseable source relationships without adequate source-backed questions. It scans beyond the old first-12-draft and 80-proposal limits, exposes source excerpts and sections, and separates new proposals from improving weak drafts. Selecting a proposal opens an **unverified** draft; the calendar schedules nothing until the learner approves it.
+- Additional conservative offline templates for explicit prerequisites/dependencies and stated consequences. Source correctness, curricular importance and all unextractable PDF content still require human review.
 
 **Question Studio** (Knowledge → Source notes → Question Studio) suggests prompts from explicitly described definitions, mechanisms, causes, contrasts, conditions, numerical relationships and effects. Each candidate has an exact source excerpt and is **held for human verification**. Unverified drafts do not enter the study calendar. The source and its version remain linked. The system does not claim to fact-check scientific content or grade learner answers.
 
@@ -20,4 +23,6 @@ See [`docs/RESEARCH_2026_QUESTION_DESIGN_AND_AUTO_SCHEDULING.md`](docs/RESEARCH_
 
 ## Blueprint 3.0: Objective map and safe question variants
 
-The Knowledge page now contains a **Learning objective map** showing saved objectives by source and section, individually scheduled recall focuses, alternative question wordings, due items, and held drafts. Verified, unchanged Question Studio items may offer conservative source-backed rewordings in **+ Variation**; selecting a suggestion fills a form, never auto-approves a new question or due date. Prior local schema-v5 data and JSON backups remain compatible. [Read the v3.0 specification](docs/BLUEPRINT_3_0_FREE.md).
+The Knowledge page now contains a **Learning objective map** showing saved objectives by source and section, individually scheduled recall focuses, alternative question wordings, due items, and held drafts. Verified, unchanged Question Studio items may offer conservative source-backed rewordings in **+ Variation**; selecting a suggestion fills a form, never auto-approves a new question or due date. Prior local schema-v5 data and JSON backups remain compatible. [Read the v3.1 specification](docs/BLUEPRINT_3_0_FREE.md).
+
+Details: [Blueprint 3.1](docs/BLUEPRINT_3_1_FREE.md). Database schema remains v5; existing backups, review histories, and calendar targets stay compatible.

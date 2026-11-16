@@ -156,7 +156,7 @@
   // Each proposal carries an exact substring and offsets; ambiguous prose is omitted.
   function questionProposals(text,{limit=36}={}) {
     const raw=String(text||'').slice(0,20000);
-    const cap=Math.max(1,Math.min(80,Math.floor(Number(limit)||36)));
+    const cap=Math.max(1,Math.min(240,Math.floor(Number(limit)||36)));
     const result=[], seen=new Set();
     const concise=v=>stripEnd(String(v||'').trim().replace(/\s+/g,' '));
     function emit(part,type,question,kind,objective){
@@ -203,6 +203,13 @@
         if(a&&b&&norm(a)!==norm(b))emit(part,'contrast',`How do ${embedded(a)} and ${embedded(b)} differ?`,'explain',`Distinguish ${a} from ${b}`);
         continue;
       }
+      if((m=s.match(/^(.{3,85}?)\s+(requires?|depends? on)\s+(.{8,180})$/i))){
+        const q=/^depend/i.test(m[2])?`Which factors does ${concise(m[1])} depend on?`:`What does ${concise(m[1])} require?`;
+        emit(part,'dependency',q,'explain',`Explain the stated dependency for ${concise(m[1])}`);continue;
+      }
+      if((m=s.match(/^(.{4,110}?)\s+(?:results? in|leads? to)\s+(.{8,160})$/i))){
+        emit(part,'consequence',`What outcome follows from ${concise(m[1])}?`,'explain',`Describe the stated consequence of ${concise(m[1])}`);continue;
+      }
       if((m=s.match(/^(.{3,85}?)\s+(increases?|decreases?|reduces?|lowers?|raises?|inhibits?|promotes?|stabilises?|stabilizes?)\s+(.{5,140})$/i))){
         emit(part,'effect',`What effect does ${concise(m[1])} have on ${concise(m[3])}?`,'recall',`Describe the effect of ${concise(m[1])}`);
       }
@@ -226,6 +233,9 @@
       if(p.structure==='condition' && (m=cleanLead(p.sourceQuote).match(/^If\s+(.{6,160}?),\s*(?:then\s+)?(.{10,230})$/i)))q=`What outcome is described if ${stripEnd(m[1])}?`;
       if(p.structure==='numeric_condition' && (m=p.question.match(/^At what (pH|measured condition) does the following occur: (.+)\?$/)))q=`Which ${m[1]} is associated with ${m[2]}?`;
       if(p.structure==='effect' && (m=p.question.match(/^What effect does (.+) have on (.+)\?$/)))q=`Describe how ${m[1]} affects ${m[2]}.`;
+      if(p.structure==='dependency' && (m=p.question.match(/^What does (.+) require\?$/)))q=`Identify what ${m[1]} requires.`;
+      if(p.structure==='dependency' && (m=p.question.match(/^Which factors does (.+) depend on\?$/)))q=`Identify the factors affecting ${m[1]} as described in the notes.`;
+      if(p.structure==='consequence' && (m=p.question.match(/^What outcome follows from (.+)\?$/)))q=`Describe the stated consequence of ${m[1]}.`;
       q=q.trim();
       if(q.length<14||q.length>500||q.toLowerCase()===p.question.toLowerCase())continue;
       const normalized=q.toLowerCase().replace(/\s+/g,' ');

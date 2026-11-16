@@ -330,7 +330,7 @@
   function adoptQuestionProposal(db,{sourceId,key}){
     const source=db.sources.find(s=>s.id===sourceId);
     if(!source)throw Error('Saved source not found.');
-    const proposal=questionStudio(db,sourceId,{limit:80}).candidates.find(p=>p.key===key);
+    const proposal=questionStudio(db,sourceId,{limit:240}).candidates.find(p=>p.key===key);
     if(!proposal)throw Error('Question proposal no longer matches this source. Open the studio again.');
     if(source.content.slice(proposal.sourceStart,proposal.sourceEnd)!==proposal.sourceQuote)
       throw Error('Source excerpt changed. Recheck the source before saving.');
@@ -345,6 +345,10 @@
       req.objective=proposal.objective;req.format=proposal.format;req.sourceQuote=proposal.sourceQuote;
       req.sourceStart=proposal.sourceStart;req.sourceEnd=proposal.sourceEnd;req.updatedAt=now;
       req.verificationStatus='draft';req.verifiedAt=null;req.reviewedAt=null;req.confidence='review';
+      // The proposed excerpt was re-derived from the CURRENT saved source. An
+      // outdated generic draft can now be reviewed against that current version.
+      req.sourceVersion=source.version;req.sourceCurrentVersion=source.version;
+      req.sourceRevisionPending=false;
       activity.question=proposal.question;activity.answer=proposal.answer;activity.kind=proposal.kind;activity.version++;
       target.label=proposal.objective.slice(0,160);
       for(const criterion of getCriteria(db,target.id,{includePending:true}))criterion.needsReview=true;
@@ -358,6 +362,51 @@
       format:proposal.format,sourceStart:proposal.sourceStart,sourceEnd:proposal.sourceEnd,possibleDuplicateOf:matching?.id||null});
     db.events.push({type:'question_studio.draft_added',entityId:requirement.id,sourceId,key,at:now});
     return {requirement,mode:'created_unverified_draft'};
+  }
+  // Uncovered *explicit relationships*, not a claim of syllabus completeness.
+  // Read-only; users must choose a proposal and then verify it separately.
+  // Scan all source parts, rather than stopping at the first 12 saved drafts or
+  // first 36 studio suggestions. Exact excerpts and per-source keys are retained.
+  function coverageReviewQueue(db,courseId,{limit=18}={}){
+    if(!db.courses.some(c=>c.id===courseId))throw Error('Choose an existing course.');
+    const cap=Math.max(1,Math.min(80,Number.isInteger(limit)?limit:18));
+    const sources=db.sources.filter(s=>s.courseId===courseId).slice().reverse();
+    const opportunities=[],representedSources=new Set();
+    const scanned=new Set();
+    let newRelationships=0,improvableDrafts=0,missingTextDocuments=0;
+    const checkedGroups=new Set();
+    for(const source of sources){
+      // Every imported document part carries group-wide audit metadata. Only
+      // count it once, never pretend unreadable PDF pages had source statements.
+      if(source.importAudit?.missingPages?.length){
+        const key=source.documentGroupId||source.id;
+        if(!checkedGroups.has(key)){missingTextDocuments++;checkedGroups.add(key);}
+      }
+      const outline=source.documentOutline?.length?source.documentOutline:D.buildOutline(source.content,source.importFormat||'md');
+      const current=questionStudio(db,source.id,{limit:240}).candidates;
+      for(const item of current){
+        if(item.alreadySaved)continue;
+        if(item.represented&&!item.improvableRequirementId)continue;
+        // A single exact statement may match multiple templates in later
+        // releases. Never pretend this yields multiple independently proven goals.
+        const evidenceKey=`${source.id}:${item.sourceStart}:${item.sourceEnd}`;
+        if(scanned.has(evidenceKey))continue;
+        scanned.add(evidenceKey);
+        if(item.improvableRequirementId)improvableDrafts++;
+        else newRelationships++;
+        representedSources.add(source.id);
+        const section=outline.find(x=>item.sourceStart>=x.start&&item.sourceStart<x.end)?.title||null;
+        opportunities.push({sourceId:source.id,sourceVersion:source.version,sourceTitle:source.title,
+          section,sourceStart:item.sourceStart,sourceEnd:item.sourceEnd,sourceQuote:item.sourceQuote,
+          proposalKey:item.key,structure:item.structure,question:item.question,
+          mode:item.improvableRequirementId?'improve_existing_draft':'propose_new_draft',
+          requirementId:item.improvableRequirementId||null});
+      }
+    }
+    return {courseId,items:opportunities.slice(0,cap),total:opportunities.length,
+      newRelationships,improvableDrafts,sourceCount:representedSources.size,
+      omitted:Math.max(0,opportunities.length-cap),missingTextDocuments,
+      warning:'These are explicit, parseable source relationships needing question review—not ranked curriculum priorities or validated learning objectives. Unreadable PDF pages and diagrams remain outside this count.'};
   }
   // Map only the learner's explicitly saved requirements. This is a source- and
   // outline-based organization, NOT automatic semantic curriculum inference.
@@ -805,5 +854,5 @@
   }
   function validateImport(x){return migrateDb(x);}
 
-  return {DAY,id,today,addDays,daysUntil,initialDb,migrateDb,validateImport,getTarget,getTargets,getMemory,getActivities,getCriteria,addCriterion,proposeCriteria,reviseCriterion,verifyCriterion,archiveCriterion,criterionStatus,rubricProgress,chooseActivity,addRetrievalTarget,verifyRetrievalTarget,addActivityVariant,deactivateActivity,reviseSource,addCourse,draftRequirements,addSource,addImportedDocument,addRequirement,editRequirement,verifyRequirement,integrity:I.integrity,questionCoverage:I.questionCoverage,questionWarnings:I.questionWarnings,learningObjectiveMap,variationStudio,questionStudio,adoptQuestionProposal,addAssessment,linkedAssessments,estimatedSeconds,durationEstimate,evidenceType,inputModeFor,evidenceSummary,eligibleCandidates,planActivities,buildReviewAgenda,forecastSchedule,recordAttempt,assessmentCoverage,stats,demoDb};
+  return {DAY,id,today,addDays,daysUntil,initialDb,migrateDb,validateImport,getTarget,getTargets,getMemory,getActivities,getCriteria,addCriterion,proposeCriteria,reviseCriterion,verifyCriterion,archiveCriterion,criterionStatus,rubricProgress,chooseActivity,addRetrievalTarget,verifyRetrievalTarget,addActivityVariant,deactivateActivity,reviseSource,addCourse,draftRequirements,addSource,addImportedDocument,addRequirement,editRequirement,verifyRequirement,integrity:I.integrity,questionCoverage:I.questionCoverage,questionWarnings:I.questionWarnings,learningObjectiveMap,variationStudio,questionStudio,adoptQuestionProposal,coverageReviewQueue,addAssessment,linkedAssessments,estimatedSeconds,durationEstimate,evidenceType,inputModeFor,evidenceSummary,eligibleCandidates,planActivities,buildReviewAgenda,forecastSchedule,recordAttempt,assessmentCoverage,stats,demoDb};
 });
