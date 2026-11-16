@@ -14,7 +14,7 @@
   const addDays = (date, n) => { const d = new Date(date.getTime()); d.setDate(d.getDate() + n); return today(d); };
   const dateStart = (dateString) => { const [y,m,d] = dateString.split('-').map(Number); return new Date(y,m-1,d); };
   const daysUntil = (dateString, now = new Date()) => Math.round((dateStart(dateString) - dateStart(today(now))) / DAY);
-  const initialDb = () => ({ schemaVersion: 5, agendaPreferences: {days:21,weekdayMinutes:25,weekendMinutes:60,missedDates:[]}, timeModels: {}, rubricCriteria: [], criterionVersions: [], courses: [], sources: [], sourceVersions: [], requirements: [], requirementVersions: [], retrievalTargets: [], activities: [], assessments: [], attempts: [], memory: {}, sessions: [], events: [] });
+  const initialDb = () => ({ schemaVersion: 5, agendaPreferences: {days:21,weekdayMinutes:25,weekendMinutes:60,missedDates:[]}, timeModels: {}, rubricCriteria: [], criterionVersions: [], syllabusObjectives: [], courses: [], sources: [], sourceVersions: [], requirements: [], requirementVersions: [], retrievalTargets: [], activities: [], assessments: [], attempts: [], memory: {}, sessions: [], events: [] });
   const baseTargetId = rid => 'target_' + rid;
   const baseActivityId = rid => 'activity_' + rid;
   // Every learning requirement may contain several distinct retrieval targets.
@@ -66,6 +66,9 @@
           if(a.criterionChecks===undefined)continue;
           if(!Array.isArray(a.criterionChecks)||a.criterionChecks.some(c=>!c||!ids.has(c.criterionId)||!['met','missed','unsure'].includes(c.status)))throw Error('Invalid criterion attempt history.');
         }
+        // Syllabus objectives are an OPTIONAL extension of schema v5; older local
+        // histories remain valid and are never rewritten by import validation.
+        if(input.syllabusObjectives!==undefined)validateSyllabusObjectives(input);
         return input;
       }
       const upgraded=JSON.parse(JSON.stringify(input));
@@ -251,6 +254,78 @@
     return source;
   }
   function cleanString(x, max = 4000) { return String(x ?? '').trim().slice(0, max); }
+  // Explicit syllabus requirements: these are goals supplied by the learner,
+  // not extracted claims, graded knowledge, or automatically scheduled tasks.
+  // Optional in schema-v5 backups so historic browser data imports unchanged.
+  function validateSyllabusObjectives(db){
+    const values=db.syllabusObjectives;
+    if(!Array.isArray(values)||values.length>10000)throw Error('Invalid syllabus objective records.');
+    const courses=new Set(db.courses.map(c=>c.id)),ids=new Set(),requirements=new Map(db.requirements.map(r=>[r.id,r.courseId]));
+    for(const g of values){
+      if(!g||typeof g.id!=='string'||!g.id||ids.has(g.id)||!courses.has(g.courseId)||
+        typeof g.text!=='string'||!g.text.trim()||g.text.length>400||
+        !Array.isArray(g.requirementIds)||g.requirementIds.length>100||
+        g.requirementIds.some(rid=>typeof rid!=='string'||requirements.get(rid)!==g.courseId))
+        throw Error('Invalid syllabus objective or cross-course link.');
+      if(new Set(g.requirementIds).size!==g.requirementIds.length)throw Error('Duplicate syllabus objective link.');
+      ids.add(g.id);
+    }
+  }
+  function syllabusGoals(db,courseId){
+    if(!db.courses.some(c=>c.id===courseId))throw Error('Choose an existing course.');
+    return (db.syllabusObjectives||[]).filter(g=>g.courseId===courseId&&g.active!==false);
+  }
+  function addSyllabusObjectives(db,{courseId,text}){
+    if(!db.courses.some(c=>c.id===courseId))throw Error('Choose an existing course.');
+    const raw=String(text??'');if(raw.length>30000)throw Error('Syllabus paste is too long (30,000 characters maximum).');
+    const lines=raw.split(/\r?\n/).map(s=>s.replace(/^\s*(?:[-*•]\s+|\d+[.)]\s+)/u,'').trim()).filter(Boolean);
+    if(!lines.length)throw Error('Paste at least one learning objective, one per line.');
+    if(lines.length>150)throw Error('Add no more than 150 objectives at once.');
+    if(lines.some(x=>x.length>400))throw Error('Keep each objective under 400 characters.');
+    const current=syllabusGoals(db,courseId),seen=new Set(current.map(x=>x.text.toLocaleLowerCase()));
+    const newGoals=[];for(const text of lines){const key=text.toLocaleLowerCase();if(seen.has(key))continue;seen.add(key);newGoals.push(text);}
+    if((db.syllabusObjectives||[]).length+newGoals.length>10000)throw Error('Too many syllabus objectives.');
+    const at=new Date().toISOString();db.syllabusObjectives=db.syllabusObjectives||[];
+    for(const text of newGoals){const g={id:id('goal'),courseId,text,requirementIds:[],active:true,createdAt:at,updatedAt:at};db.syllabusObjectives.push(g);db.events.push({type:'syllabus.objective_added',entityId:g.id,courseId,at});}
+    return {added:newGoals.length,skipped:lines.length-newGoals.length};
+  }
+  function getSyllabusGoal(db,goalId){const g=(db.syllabusObjectives||[]).find(g=>g.id===goalId&&g.active!==false);if(!g)throw Error('Syllabus objective not found.');return g;}
+  function updateSyllabusObjective(db,goalId,text){
+    const g=getSyllabusGoal(db,goalId);text=String(text??'').trim();
+    if(!text||text.length>400)throw Error('Enter an objective under 400 characters.');
+    if(syllabusGoals(db,g.courseId).some(x=>x.id!==g.id&&x.text.toLocaleLowerCase()===text.toLocaleLowerCase()))throw Error('This syllabus objective already exists.');
+    if(g.text!==text){g.text=text;g.updatedAt=new Date().toISOString();db.events.push({type:'syllabus.objective_edited',entityId:g.id,at:g.updatedAt});}return g;
+  }
+  function setSyllabusLink(db,goalId,requirementId,linked=true){
+    const g=getSyllabusGoal(db,goalId),r=db.requirements.find(r=>r.id===requirementId);
+    if(!r||r.courseId!==g.courseId)throw Error('Choose a question from the same course.');
+    const set=new Set(g.requirementIds);
+    if(linked)set.add(requirementId);else set.delete(requirementId);
+    if(set.size>100)throw Error('Too many question links for one syllabus objective.');
+    g.requirementIds=[...set];g.updatedAt=new Date().toISOString();
+    db.events.push({type:linked?'syllabus.question_linked':'syllabus.question_unlinked',entityId:goalId,requirementId,at:g.updatedAt});return g;
+  }
+  function archiveSyllabusObjective(db,goalId){const g=getSyllabusGoal(db,goalId);g.active=false;g.updatedAt=new Date().toISOString();db.events.push({type:'syllabus.objective_archived',entityId:g.id,at:g.updatedAt});return g;}
+  const stopWords=new Set('a an and are as at be can describe do does explain for from how in into is it its of on or our the their this to under what when where which why with without using different between discuss compare identify understand able learning about evidence process concept system model'.split(' '));
+  function goalTerms(s){return new Set(String(s||'').toLocaleLowerCase().match(/[\p{L}\p{N}]{3,}/gu)?.filter(x=>!stopWords.has(x))||[]);}
+  function goalMatch(goalText,candidateText){
+    const goal=goalTerms(goalText),other=goalTerms(candidateText);
+    if(!goal.size||!other.size)return 0;
+    let shared=0;for(const term of goal)if(other.has(term))shared++;
+    return shared>=2?(2*shared)/(goal.size+other.size):0;
+  }
+  function syllabusCoverage(db,courseId){
+    const goals=syllabusGoals(db,courseId),reqs=db.requirements.filter(r=>r.courseId===courseId&&r.active!==false),sources=db.sources.filter(s=>s.courseId===courseId);
+    const rows=goals.map(g=>{
+      const mapped=g.requirementIds.map(rid=>db.requirements.find(r=>r.id===rid)).filter(Boolean);
+      const eligible=mapped.filter(r=>r.active!==false&&r.verificationStatus==='verified'&&!r.sourceRevisionPending&&getTargets(db,r.id).length&&getActivities(db,r.id).length);
+      const status=eligible.length?'linked_verified':mapped.length?'linked_review':'unlinked';
+      const candidates=reqs.filter(r=>!g.requirementIds.includes(r.id)).map(r=>({id:r.id,question:r.question,score:goalMatch(g.text,[r.objective,r.question,r.sourceQuote].join(' ')),verified:r.verificationStatus==='verified'&&!r.sourceRevisionPending})).filter(x=>x.score>=0.55).sort((a,b)=>b.score-a.score).slice(0,3);
+      const relatedSources=sources.map(s=>({id:s.id,title:s.title,score:Math.max(0,...String(s.content).slice(0,16000).split(/[.?!;\n]+/).slice(0,200).map(line=>goalMatch(g.text,line)))})).filter(x=>x.score>=0.55).sort((a,b)=>b.score-a.score).slice(0,3);
+      return {id:g.id,text:g.text,status,links:mapped.map(r=>({id:r.id,question:r.question,verified:eligible.includes(r)})),candidates,relatedSources};
+    });
+    return {courseId,total:rows.length,linkedVerified:rows.filter(r=>r.status==='linked_verified').length,linkedReview:rows.filter(r=>r.status==='linked_review').length,unlinked:rows.filter(r=>r.status==='unlinked').length,rows,warning:'A syllabus objective is linked to a verified question only after you explicitly connect it. Suggestions use simple word overlap, not a proof of curriculum coverage, scientific accuracy or mastery.'};
+  }
   function addCourse(db, name) {
     name=cleanString(name,80);
     if(!name) throw Error('Enter a course name.');
@@ -854,5 +929,5 @@
   }
   function validateImport(x){return migrateDb(x);}
 
-  return {DAY,id,today,addDays,daysUntil,initialDb,migrateDb,validateImport,getTarget,getTargets,getMemory,getActivities,getCriteria,addCriterion,proposeCriteria,reviseCriterion,verifyCriterion,archiveCriterion,criterionStatus,rubricProgress,chooseActivity,addRetrievalTarget,verifyRetrievalTarget,addActivityVariant,deactivateActivity,reviseSource,addCourse,draftRequirements,addSource,addImportedDocument,addRequirement,editRequirement,verifyRequirement,integrity:I.integrity,questionCoverage:I.questionCoverage,questionWarnings:I.questionWarnings,learningObjectiveMap,variationStudio,questionStudio,adoptQuestionProposal,coverageReviewQueue,addAssessment,linkedAssessments,estimatedSeconds,durationEstimate,evidenceType,inputModeFor,evidenceSummary,eligibleCandidates,planActivities,buildReviewAgenda,forecastSchedule,recordAttempt,assessmentCoverage,stats,demoDb};
+  return {DAY,id,today,addDays,daysUntil,initialDb,migrateDb,validateImport,getTarget,getTargets,getMemory,getActivities,getCriteria,addCriterion,proposeCriteria,reviseCriterion,verifyCriterion,archiveCriterion,criterionStatus,rubricProgress,chooseActivity,addRetrievalTarget,verifyRetrievalTarget,addActivityVariant,deactivateActivity,reviseSource,addCourse,addSyllabusObjectives,updateSyllabusObjective,setSyllabusLink,archiveSyllabusObjective,syllabusCoverage,draftRequirements,addSource,addImportedDocument,addRequirement,editRequirement,verifyRequirement,integrity:I.integrity,questionCoverage:I.questionCoverage,questionWarnings:I.questionWarnings,learningObjectiveMap,variationStudio,questionStudio,adoptQuestionProposal,coverageReviewQueue,addAssessment,linkedAssessments,estimatedSeconds,durationEstimate,evidenceType,inputModeFor,evidenceSummary,eligibleCandidates,planActivities,buildReviewAgenda,forecastSchedule,recordAttempt,assessmentCoverage,stats,demoDb};
 });

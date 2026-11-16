@@ -125,3 +125,11 @@
 .coverage-queue-item details summary{cursor:pointer;color:var(--teal)}
 .coverage-excerpt{white-space:pre-wrap;overflow-wrap:anywhere;background:var(--bg);padding:10px;border-radius:8px}
 .coverage-queue-item .btnrow{margin-top:3px}
+
+/* Blueprint 3.2 — syllabus goals without automatic learning claims */
+.syllabus-panel{margin-bottom:16px}.syllabus-entry,.syllabus-row{padding:12px 0;border-bottom:1px solid var(--line)}
+.syllabus-entry summary,.syllabus-row summary{cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.syllabus-row summary strong{min-width:0;flex:1 1 240px;overflow-wrap:anywhere}.syllabus-rows{margin-top:12px}
+.syllabus-candidate{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:8px 0;flex-wrap:wrap}
+.syllabus-candidate>span{flex:1 1 210px;overflow-wrap:anywhere}.syllabus-panel .quality-stats{margin-top:12px}
+@media(max-width:600px){.syllabus-row summary{align-items:flex-start}.syllabus-candidate>button{max-width:100%}}

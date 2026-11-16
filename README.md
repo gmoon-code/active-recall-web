@@ -1,28 +1,41 @@
-# Active Recall Web — Free Edition v3.1
+# Active Recall Web — Free Edition v3.2
 
-A unified browser-local learning system with a rolling, capacity-aware multi-course active recall agenda. Fully free on public GitHub Pages, with no paid hosting, API keys, subscriptions, credit cards or required accounts.
+A local-first active-recall system with a **single multi-course automatic review agenda**, source-linked learning objectives, reviewed question drafts, and sessions that adjust to time budgets and assessments.
+
+**Public website:** https://gmoon-code.github.io/active-recall-web/
 
 ## New in v3.1
 
-- **Source coverage review inbox:** A collapsible course-wide review queue highlights explicitly parseable source relationships without adequate source-backed questions. It scans beyond the old first-12-draft and 80-proposal limits, exposes source excerpts and sections, and separates new proposals from improving weak drafts. Selecting a proposal opens an **unverified** draft; the calendar schedules nothing until the learner approves it.
-- Additional conservative offline templates for explicit prerequisites/dependencies and stated consequences. Source correctness, curricular importance and all unextractable PDF content still require human review.
+- The **Knowledge → Source coverage review inbox** identifies parseable, explicit relationships that still need a question or can improve an unverified generic draft. Review candidates across all saved source parts, not just the first 12 questions.
+- View source title, section, a proposed standalone question and the exact original quote before choosing. Existing drafts are improved in place when safe; new proposals require explicit verification before joining the automatic review queue.
+- New transparent offline templates support stated dependencies and consequences. They are not semantic proof, curriculum validation or an AI tutor.
+- Source-based PDF gaps remain visible, and edited source versions invalidate stale proposals. No schema migration, memory reset, review history rewrite or paid dependency.
 
-**Question Studio** (Knowledge → Source notes → Question Studio) suggests prompts from explicitly described definitions, mechanisms, causes, contrasts, conditions, numerical relationships and effects. Each candidate has an exact source excerpt and is **held for human verification**. Unverified drafts do not enter the study calendar. The source and its version remain linked. The system does not claim to fact-check scientific content or grade learner answers.
+## Recommended workflow
 
-The previous v2.8 audit, v2.7 recurrent study calendar, v2.6 PDF missing-page safeguards, independent rubric checks, and JSON backup support remain available. No data-schema migration is required.
+Capture or import your material → inspect PDF extraction and source gaps → open **Knowledge** → expand **Source coverage review inbox** → inspect a relevant excerpt and click to create or improve a **draft** → edit and verify the question and answer → let the existing **Calendar** and **Study Now** organise future retrieval.
 
-## Deployment (free)
+**Important:** The inbox detects explicit English sentence relationships only. It does **not** guarantee identification of important curriculum concepts, conceptual understanding, mathematical derivations, diagrams, or all learning goals. Drafts may be inaccurate even when copied directly from incorrect notes. Learners must verify science and question quality themselves.
 
-GitHub Pages: https://gmoon-code.github.io/active-recall-web/  
-Diagnostics: https://gmoon-code.github.io/active-recall-web/health.html  
-Publish `main` / `(root)` as a public GitHub Pages site. Do not upload personal learning backups or sensitive notes to this public repo. Data stays in the browser and is not automatically synced. Export JSON backups regularly.
+The rolling agenda proposes future review opportunities within time budgets and assessment constraints. Its precise interval coefficients are not scientifically validated as optimal, and its conditional future sessions are not claimed to be successful future learning.
 
-## Evidence and limitations
+## Privacy and permanent free-only rule
 
-See [`docs/RESEARCH_2026_QUESTION_DESIGN_AND_AUTO_SCHEDULING.md`](docs/RESEARCH_2026_QUESTION_DESIGN_AND_AUTO_SCHEDULING.md), `docs/BLUEPRINT_2_9_FREE.md`, and earlier specifications for the cognitive-science rationale. Retrieval and spacing are well-supported general principles, but this prototype's exact review intervals and its rule-based question generation are **not** scientifically validated as optimal.
+The app uses free GitHub Pages to host **static code only**. Your learning materials, notes, question edits, attempts and review history stay in your browser, not in GitHub. Data are not synced between devices; export JSON backups. Browser data may be evicted even when persistent-storage permission is denied. Never upload private course notes or backup files to this public repository.
 
-## Blueprint 3.0: Objective map and safe question variants
+Everything necessary to build, host, maintain and use this software must remain **100% free**: no paid API, hosting, subscription, credit card, billing details or mandatory remote AI. The optional full PDF.js fallback uses a free third-party library and asks before loading it online.
 
-The Knowledge page now contains a **Learning objective map** showing saved objectives by source and section, individually scheduled recall focuses, alternative question wordings, due items, and held drafts. Verified, unchanged Question Studio items may offer conservative source-backed rewordings in **+ Variation**; selecting a suggestion fills a form, never auto-approves a new question or due date. Prior local schema-v5 data and JSON backups remain compatible. [Read the v3.1 specification](docs/BLUEPRINT_3_0_FREE.md).
+## Tests
 
-Details: [Blueprint 3.1](docs/BLUEPRINT_3_1_FREE.md). Database schema remains v5; existing backups, review histories, and calendar targets stay compatible.
+```bash
+node --test test-*.cjs
+node deploy-preflight.cjs
+```
+
+Documentation: [`docs/BLUEPRINT_3_1_FREE.md`](docs/BLUEPRINT_3_1_FREE.md) · [`docs/RESEARCH_2026_QUESTION_DESIGN_AND_AUTO_SCHEDULING.md`](docs/RESEARCH_2026_QUESTION_DESIGN_AND_AUTO_SCHEDULING.md).
+
+## Blueprint 3.2 — Syllabus objectives
+
+The **Knowledge** page now supports an explicit, learner-authored syllabus objective list per course. Paste one outcome per line, then link existing approved questions or write new ones. Unmatched syllabus outcomes remain visible and are **not** silently omitted from the curricular audit or fabricated as studied material. Links are explicit and cross-course links are rejected. A goal being linked to a question is not a mastery grade or evidence the learner has passed an exam. This feature is local-only and retains the schema-v5 backup format.
+
+Specification: [`docs/BLUEPRINT_3_2_FREE.md`](docs/BLUEPRINT_3_2_FREE.md).
