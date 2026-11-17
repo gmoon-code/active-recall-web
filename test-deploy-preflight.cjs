@@ -6,6 +6,10 @@ test('static GitHub Pages entry has relative scripts and CSS',()=>{
 });
 test('offline worker is versioned and caches review module',()=>{
   const s=read('sw.js');assert.match(s,/active-recall-web-v4-3/);assert.match(s,/'\.\/human-review\.js'/);assert.match(s,/'\.\/paired-review\.js'/);assert.match(s,/'\.\/paired-review-ui\.js'/);assert.match(s,/'\.\/review-packets\.js'/);assert.match(s,/reviewer-offline\.html/);
+  const diagnostics=read('health.html');
+  assert.match(diagnostics,/active-recall-web-v4-3/);
+  assert.match(diagnostics,/reviewer-offline\.html/);
+  assert.doesNotMatch(diagnostics,/active-recall-web-v2-8/);
 });
 test('the JS load order preserves rubric and local storage boot',()=>{
   const s=read('index.html');assert.ok(s.indexOf('human-review.js')<s.indexOf('paired-review.js'));assert.ok(s.indexOf('paired-review.js')<s.indexOf('core.js'));assert.ok(s.indexOf('paired-review-ui.js')<s.indexOf('app.js'));assert.ok(s.indexOf('review-packets.js')<s.indexOf('core.js'));assert.ok(s.indexOf('review-packets-ui.js')<s.indexOf('app.js'));assert.ok(s.indexOf('core.js')<s.indexOf('storage.js'));assert.ok(s.indexOf('storage.js')<s.indexOf('app.js'));
