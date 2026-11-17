@@ -11,7 +11,7 @@ test('the JS load order preserves rubric and local storage boot',()=>{
   const s=read('index.html');assert.ok(s.indexOf('human-review.js')<s.indexOf('core.js'));assert.ok(s.indexOf('core.js')<s.indexOf('storage.js'));assert.ok(s.indexOf('storage.js')<s.indexOf('app.js'));
 });
 test('the site keeps only local storage without remote account sign in',()=>{
-  const s=read('storage.js'),html=read('index.html');assert.match(s,/indexedDB/);assert.doesNotMatch(html,/signin|oauth|payment|stripe|billing/i);
+  const s=read('storage.js'),html=read('index.html');assert.match(s,/indexedDB/);assert.doesNotMatch(html,/(?:src|href)="https?:|\/login|oauth|stripe/i);
 });
 test('study scheduler still has original immutable policy identifiers',()=>{
   const s=read('core.js');assert.match(s,/transparent-interval-v1/);assert.match(s,/conservative-shadow-v1/);assert.match(s,/H\.validate\(input\)/);
