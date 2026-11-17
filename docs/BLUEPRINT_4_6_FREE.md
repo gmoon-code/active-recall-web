@@ -44,8 +44,8 @@ These cases are static public code, not student answers or actual pilot outcomes
 ## Verification
 
 - Existing v4.5 tests: **183 Node tests and five Chromium workflows**.
-- Added v4.6: **43 deterministic tests** for the fixed casebook, original exact excerpts, rubric-ambiguity flags, self-reported independence/non-exposure, mismatched session files, append-only A/B imports, session timing relative to pilot lock, coded exports, corruption rejection, and legacy schema-v5 backups.
-- Full present suite: **226 Node tests and six actual Chromium workflows**, including a new browser flow with two independent fully disconnected training-page contexts, first-pass JSON download before discussion, B then A import, coded summary export, later pilot lock, IndexedDB round-trip and desktop/mobile layout.
+- Added v4.6: **44 deterministic tests** for the fixed casebook, original exact excerpts, rubric-ambiguity flags, self-reported independence/non-exposure, mismatched session files, append-only A/B imports, session timing relative to pilot lock, coded exports, corruption rejection, and legacy schema-v5 backups.
+- Full present suite: **227 Node tests and six actual Chromium workflows**, including a new browser flow with two independent fully disconnected training-page contexts, first-pass JSON download before discussion, B then A import, coded summary export, later pilot lock, IndexedDB round-trip and desktop/mobile layout.
 - The historical 308-test v4.0 collection is unavailable in the published repository and is **not** represented as rerun.
 
 ## Next evidence-oriented step
