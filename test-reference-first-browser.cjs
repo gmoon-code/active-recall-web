@@ -87,12 +87,16 @@ async function main(){
    assert.match(await owner.locator('.toast.error').innerText(),/Import first-pass Reviewer A first/);
    await owner.locator('#reference-first-import').setInputFiles(asFile(A.firstBytes,'A-first.json'));
    await owner.locator('.toast:not(.error)').waitFor();
+   assert.equal(await owner.locator('[data-action=export-reference-reveal]').count(),0,
+     'Reference must remain withheld until both distinct first passes are imported.');
+   await owner.locator('#reference-first-import').setInputFiles(asFile(B.firstBytes,'B-first.json'));
+   await owner.locator('.toast:not(.error)').waitFor();
    const revealPromise=owner.waitForEvent('download');
    await owner.locator('[data-action=export-reference-reveal][data-slot="A"]').click();
    const revealDl=await revealPromise,revealPath=await revealDl.path();
    const revealBytes=fs.readFileSync(revealPath),reveal=JSON.parse(revealBytes.toString('utf8'));
    assert.equal(reveal.reference,original.reference);
-   assert.equal(reveal.firstSubmissionFingerprint,owner?reveal.firstSubmissionFingerprint:'');
+   assert.equal(reveal.firstSubmissionFingerprint,await owner.evaluate(first=>window.ActiveRecallHumanReview.fingerprint(JSON.stringify(first)),A.first));
    await A.page.locator('#reveal-file').setInputFiles(asFile(revealBytes,'A-reveal.json'));
    await A.page.locator('#reference-section').waitFor({state:'visible'});
    assert.match(await A.page.locator('#reference').innerText(),/PRIVATE_REFERENCE:/);
@@ -106,8 +110,6 @@ async function main(){
    const postDl=await postPromise,postBytes=fs.readFileSync(await postDl.path());
    const post=JSON.parse(postBytes.toString('utf8'));
    assert.equal(post.format,'arw-post-reference-review-v1');
-   await owner.locator('#reference-first-import').setInputFiles(asFile(B.firstBytes,'B-first.json'));
-   await owner.locator('.toast:not(.error)').waitFor();
    await owner.locator('#reference-post-import').setInputFiles(asFile(postBytes,'A-post.json'));
    await owner.locator('.toast:not(.error)').waitFor();
    const dbSaved=await owner.evaluate(async()=>{
