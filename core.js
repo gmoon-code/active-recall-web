@@ -64,6 +64,7 @@
         }
         for(const a of input.attempts){
           if(a.practiceStage!==undefined&&!['regular','immediate_post_study'].includes(a.practiceStage))throw Error('Invalid retrieval practice stage in backup.');
+          if(a.correctionNote!==undefined&&(typeof a.correctionNote!=='string'||a.correctionNote.length>2000))throw Error('Invalid learner correction note in backup.');
           if(a.criterionChecks===undefined)continue;
           if(!Array.isArray(a.criterionChecks)||a.criterionChecks.some(c=>!c||!ids.has(c.criterionId)||!['met','missed','unsure'].includes(c.status)))throw Error('Invalid criterion attempt history.');
         }
@@ -906,7 +907,7 @@
     const eligibleNow=eligibleCandidates(db,start);
     return {days:rows,coverage,plannedTargets:scheduled.size,eligibleAtStart:eligibleNow.length,unplannedAtStart:eligibleNow.filter(c=>!scheduled.has(c.target.id)).length,forecastType:'first_pass_opportunities',warning:'Forecast shows possible first-pass study slots using current evidence. It does not simulate future answers, later spaced repetitions, learning gains, or exam results.'};
   }
-  function recordAttempt(db,{requirementId,targetId=null,activityId=null,response='',rating,assisted=false,sessionId=null,questionUsed=null,inputMode=null,durationSeconds=null,criterionChecks=[],practiceStage=null,now=new Date()}){
+  function recordAttempt(db,{requirementId,targetId=null,activityId=null,response='',rating,assisted=false,sessionId=null,questionUsed=null,inputMode=null,durationSeconds=null,criterionChecks=[],correctionNote='',practiceStage=null,now=new Date()}){
     const r=db.requirements.find(x=>x.id===requirementId);if(!r)throw Error('Requirement does not exist.');
     if(!['again','hard','good','easy'].includes(rating))throw Error('Invalid rating.');
     const activity=activityId?getActivities(db,r.id).find(a=>a.id===activityId):chooseActivity(db,r.id,targetId);
@@ -934,15 +935,36 @@
     if(inputMode!==null&&!['written','oral','mental'].includes(inputMode))throw Error('Invalid response mode.');
     if(durationSeconds!==null&&(!Number.isFinite(durationSeconds)||durationSeconds<0))throw Error('Invalid activity duration.');
     if(practiceStage!==null&&practiceStage!=='immediate_post_study')throw Error('Invalid retrieval practice stage.');
+    if(typeof correctionNote!=='string'||correctionNote.length>2000)throw Error('Correction note must be plain text, at most 2,000 characters.');
     const recordedResponse=cleanString(response,20000);
     const inferredMode=inputMode||(recordedResponse?'written':'mental');
-    const attempt={id:id('attempt'),inputMode:inferredMode,activityKind:activity.kind,durationSeconds:validDuration(durationSeconds)?Math.round(durationSeconds):null,evidenceVersion:1,requirementId:r.id,requirementVersion:r.version,retrievalTargetId:target.id,retrievalTargetVersion:target.version,activityId:activity.id,activityVersion:activity.version,questionSnapshot:cleanString(questionUsed||activity.question,500),referenceSnapshot:activity.answer,focusLabelSnapshot:target.label,requirementVerified:r.verificationStatus==='verified',courseId:r.courseId,sessionId,response:recordedResponse,rating,scheduleRating,criterionChecks:checks,criterionCounts:counts,assisted:!!assisted,gradedBy:'learner',practiceStage:practiceStage||'regular',createdAt:now.toISOString()};
+    const attempt={id:id('attempt'),inputMode:inferredMode,activityKind:activity.kind,durationSeconds:validDuration(durationSeconds)?Math.round(durationSeconds):null,evidenceVersion:1,requirementId:r.id,requirementVersion:r.version,retrievalTargetId:target.id,retrievalTargetVersion:target.version,activityId:activity.id,activityVersion:activity.version,questionSnapshot:cleanString(questionUsed||activity.question,500),referenceSnapshot:activity.answer,focusLabelSnapshot:target.label,requirementVerified:r.verificationStatus==='verified',courseId:r.courseId,sessionId,response:recordedResponse,rating,scheduleRating,criterionChecks:checks,criterionCounts:counts,correctionNote:correctionNote.trim(),assisted:!!assisted,gradedBy:'learner',practiceStage:practiceStage||'regular',createdAt:now.toISOString()};
     db.attempts.push(attempt);observeDuration(db,activity.kind,attempt.durationSeconds);
     db.memory[target.id]={dueAt,intervalDays:adjustedInterval,lastRating:scheduleRating,lastReviewedAt:now.toISOString(),reviewCount:(prev?.reviewCount||0)+1};
     db.events.push({type:'attempt.recorded',entityId:attempt.id,requirementId:r.id,targetId:target.id,at:attempt.createdAt});
     return {attempt,dueAt};
   }
-  function assessmentCoverage(db,assessment,now=new Date()){
+  // Historical feedback is never treated as verified grading or automatically
+  // transferred to a newer rubric version. Each point is a learner self-check.
+  // This read-only summary helps the learner revisit a prior gap *after* the
+  // current answer is revealed; it never generates its own spaced review target.
+  function latestCorrectiveFeedback(db,targetId){
+    const target=(db.retrievalTargets||[]).find(t=>t.id===targetId);
+    if(!target)return null;
+    const req=db.requirements.find(r=>r.id===target.requirementId);
+    if(!req)return null;
+    const previous=db.attempts.filter(a=>a.retrievalTargetId===targetId && a.retrievalTargetVersion===target.version && a.requirementVersion===req.version);
+    if(!previous.length)return null;
+    const last=previous[previous.length-1],criteria=getCriteria(db,targetId);
+    const checked=(last.criterionChecks||[]).filter(c=>criteria.some(k=>k.id===c.criterionId&&k.version===c.version));
+    return {attemptId:last.id,at:last.createdAt,practiceStage:last.practiceStage||'regular',
+      missed:checked.filter(c=>c.status==='missed').map(c=>c.textSnapshot),
+      unsure:checked.filter(c=>c.status==='unsure').map(c=>c.textSnapshot),
+      included:checked.filter(c=>c.status==='met').length,
+      unassessed:criteria.length-checked.length,
+      correctionNote:typeof last.correctionNote==='string'?last.correctionNote:''};
+  }
+  function assessmentCoverage(db,assessment,now=new Date()){ 
     const d=daysUntil(assessment.date,now);
     const requirements=db.requirements.filter(r=>r.active&&r.courseId===assessment.courseId&&(assessment.scope==='all'||assessment.requirementIds.includes(r.id)));
     const targets=requirements.flatMap(r=>getTargets(db,r.id,{includePending:true}).map(t=>({req:r,target:t})));
@@ -1005,5 +1027,5 @@
   }
   function validateImport(x){return migrateDb(x);}
 
-  return {DAY,id,today,addDays,daysUntil,initialDb,migrateDb,validateImport,getTarget,getTargets,getMemory,getActivities,getCriteria,addCriterion,proposeCriteria,reviseCriterion,verifyCriterion,archiveCriterion,criterionStatus,rubricProgress,chooseActivity,addRetrievalTarget,verifyRetrievalTarget,addActivityVariant,deactivateActivity,reviseSource,addCourse,addSyllabusObjectives,updateSyllabusObjective,setSyllabusLink,setSyllabusMaterialsReady,setSyllabusLearningGuide,guidedLearningInfo,archiveSyllabusObjective,syllabusCoverage,draftRequirements,addSource,addImportedDocument,addRequirement,editRequirement,verifyRequirement,integrity:I.integrity,questionCoverage:I.questionCoverage,questionWarnings:I.questionWarnings,learningObjectiveMap,variationStudio,questionStudio,adoptQuestionProposal,coverageReviewQueue,addAssessment,linkedAssessments,estimatedSeconds,durationEstimate,evidenceType,inputModeFor,evidenceSummary,eligibleCandidates,planActivities,buildReviewAgenda,forecastSchedule,recordAttempt,assessmentCoverage,stats,demoDb};
+  return {DAY,id,today,addDays,daysUntil,initialDb,migrateDb,validateImport,getTarget,getTargets,getMemory,getActivities,getCriteria,addCriterion,proposeCriteria,reviseCriterion,verifyCriterion,archiveCriterion,criterionStatus,rubricProgress,chooseActivity,addRetrievalTarget,verifyRetrievalTarget,addActivityVariant,deactivateActivity,reviseSource,addCourse,addSyllabusObjectives,updateSyllabusObjective,setSyllabusLink,setSyllabusMaterialsReady,setSyllabusLearningGuide,guidedLearningInfo,archiveSyllabusObjective,syllabusCoverage,draftRequirements,addSource,addImportedDocument,addRequirement,editRequirement,verifyRequirement,integrity:I.integrity,questionCoverage:I.questionCoverage,questionWarnings:I.questionWarnings,learningObjectiveMap,variationStudio,questionStudio,adoptQuestionProposal,coverageReviewQueue,addAssessment,linkedAssessments,estimatedSeconds,durationEstimate,evidenceType,inputModeFor,evidenceSummary,eligibleCandidates,planActivities,buildReviewAgenda,forecastSchedule,recordAttempt,latestCorrectiveFeedback,assessmentCoverage,stats,demoDb};
 });
