@@ -176,6 +176,8 @@
  }
  function reveal(db,{attemptId,slot}={}){
    const a=savedAttempt(db,attemptId),saved=firstFor(a,slot);
+   if(!a.independentReviewPair?.A?.referenceFirstPass||!a.independentReviewPair?.B?.referenceFirstPass)
+     throw Error('Import locked first passes from BOTH reviewers before releasing the reference.');
    const {requestId,submission}=saved.referenceFirstPass;
    const rec=(a.referenceFirstRequests||[]).find(r=>r.id===requestId);
    if(!rec||rec.revokedAt)throw Error('Reference-free request is missing or revoked.');
@@ -241,7 +243,8 @@
      before:firstFindings[i].status,after:f.status,changed:f.status!==firstFindings[i].status}));
    const recPost={version:1,slot:raw.slot,requestId:raw.requestId,
      firstSubmissionFingerprint:sig(first.referenceFirstPass.submission),
-     submittedAt:raw.completedAt,importedAt:now.toISOString(),submission:JSON.parse(JSON.stringify(raw)),changes};
+     submittedAt:raw.completedAt,importedAt:now.toISOString(),submission:JSON.parse(JSON.stringify(raw)),
+     submissionFingerprint:sig(raw),changes};
    (a.referencePostReviews??=[]).push(recPost);
    db.events.push({type:'reference_first.post_imported',entityId:a.id,requestId:raw.requestId,slot:raw.slot,at:recPost.importedAt});
    return recPost;
@@ -308,12 +311,14 @@
          throw Error('Invalid post-reference history.');
        const slots=new Set();
        for(const p of a.referencePostReviews){
-         if(!exact(p,['version','slot','requestId','firstSubmissionFingerprint','submittedAt','importedAt','submission','changes'])||
-           p.version!==1||!SLOTS.has(p.slot)||slots.has(p.slot)||!iso(p.submittedAt)||!iso(p.importedAt))
+         if(!exact(p,['version','slot','requestId','firstSubmissionFingerprint','submittedAt','importedAt','submission','submissionFingerprint','changes'])||
+           p.version!==1||!SLOTS.has(p.slot)||slots.has(p.slot)||!iso(p.submittedAt)||!iso(p.importedAt)||
+           p.submissionFingerprint!==sig(p.submission))
            throw Error('Invalid post-reference provenance.');
          slots.add(p.slot);
          const first=pair?.[p.slot];
-         if(!first?.referenceFirstPass||p.requestId!==first.referenceFirstPass.requestId||
+         if(!first?.referenceFirstPass||!pair?.A?.referenceFirstPass||!pair?.B?.referenceFirstPass||
+           p.requestId!==first.referenceFirstPass.requestId||
            p.firstSubmissionFingerprint!==sig(first.referenceFirstPass.submission)||
            Date.parse(p.importedAt)<Date.parse(first.reviewedAt))
            throw Error('Post-reference review is unbound to its locked first pass.');
