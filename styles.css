@@ -160,3 +160,10 @@
 
 /* Blueprint 3.7: rubric alternatives and explicit syllabus alignment */
 .rubric-alignment-form{padding:10px 0 8px;border-top:1px solid var(--border);gap:8px!important}.rubric-goal-option{display:flex;gap:9px;align-items:flex-start;line-height:1.45;overflow-wrap:anywhere}.rubric-goal-option input{margin-top:4px;flex-shrink:0}
+
+/* v4.2: compare two human judgments without squeezing evidence on narrow screens. */
+@media(max-width:600px){
+  .modal[aria-label="Compare independent reviewer judgments"] .grid.cols2,
+  .modal[aria-label="Compare independent reviewer judgments"] .grid.cols3{grid-template-columns:minmax(0,1fr)}
+  .modal[aria-label="Compare independent reviewer judgments"] .note{overflow-wrap:anywhere}
+}

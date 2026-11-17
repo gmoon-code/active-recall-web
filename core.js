@@ -10,6 +10,8 @@
   if(!D)throw Error('Missing local document-import module.');
   const H=(typeof module!=='undefined'&&module.exports)?require('./human-review.js'):globalThis.ActiveRecallHumanReview;
   if(!H)throw Error('Missing local human-review module.');
+  const P=(typeof module!=='undefined'&&module.exports)?require('./paired-review.js'):globalThis.ActiveRecallPairedReview;
+  if(!P)throw Error('Missing local paired-review module.');
   const DAY = 86400000;
   // Policy IDs are immutable labels for decisions. Changing any coefficient
   // requires a new ID; historical decisions must never be recomputed in place.
@@ -138,6 +140,7 @@
         // histories remain valid and are never rewritten by import validation.
         if(input.syllabusObjectives!==undefined)validateSyllabusObjectives(input);
         H.validate(input); // Optional, append-only v4.1 annotations; schema v5 stays compatible.
+        P.validate(input); // Optional v4.2 independent assessments/adjudication; no migration.
         return input;
       }
       const upgraded=JSON.parse(JSON.stringify(input));

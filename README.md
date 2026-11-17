@@ -1,9 +1,19 @@
-# Active Recall Web — Free Edition v4.1
+# Active Recall Web — Free Edition v4.2
 
 A local-first active-recall system with a **single multi-course automatic review agenda**, source-linked learning objectives, reviewed question drafts, and sessions that adjust to time budgets and assessments.
 
 **Public website:** https://gmoon-code.github.io/active-recall-web/
 
+
+## Blueprint 4.2 — Two-person rubric comparison and adjudication
+
+In **Progress → Two-reviewer agreement & adjudication**, two separate people can review the same saved written explanation/application against the original versioned rubric. The second reviewer receives a blank form that **hides the first reviewer's criterion judgments**. They must attest to being a different person and not having seen the first review; the app cannot independently verify their identities or conduct.
+
+Once both assessments are saved, comparison shows decisive agreements, disagreements, and uncertain/unassessed evidence separately. A person can document a reasoned resolution, including **Unresolved**; revisions append without rewriting either review. Agreement percentages are suppressed until at least 20 decisive criteria from 10 written attempts covering 5 targets. This is **descriptive human-entered agreement, not scientific correctness, independent expert grading, or evidence for a better review schedule**. Both reviewers may view the original reference answer.
+
+The original active scheduler, hypothetical shadow, review calendar, self-ratings and v4.1 evidence remain unchanged. Data stay **100% browser-local and free** on GitHub Pages; schema-v5 backups remain compatible, with no paid API, account, sync service or cloud grading. **67/67 Node checks** and targeted desktop/mobile Chromium review workflows passed. The older historical v4.0 suite of 308 tests is not part of this repository and was not rerun.
+
+[Read Blueprint 4.2](docs/BLUEPRINT_4_2_FREE.md).
 
 ## Blueprint 4.1 — Human-reviewed explanation evidence
 
