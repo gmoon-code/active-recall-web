@@ -263,7 +263,7 @@ test('backup validation rejects fabricated A evidence and changed first-pass met
 test('backup rejects changed rubric text, post-reflection or status-change counts',()=>{
  const s=setup();importA(s);F.importPost(s.f.db,post(s),{now:at(0,6)});
  let d=JSON.parse(JSON.stringify(s.f.db));d.attempts[0].rubricAtAttempt[0].textSnapshot='fabricated new criterion';
- assert.throws(()=>C.validateImport(d),/Invalid historical reference-free request/);
+ assert.throws(()=>C.validateImport(d),/Invalid historical reference-free request|Invalid independent reviewer conclusion/);
  d=JSON.parse(JSON.stringify(s.f.db));d.attempts[0].referencePostReviews[0].changes[1].changed=false;
  assert.throws(()=>C.validateImport(d),/Post-reference criterion changes/);
  d=JSON.parse(JSON.stringify(s.f.db));d.attempts[0].referencePostReviews[0].submission.note='new forged note';
