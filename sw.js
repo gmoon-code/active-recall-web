@@ -1,6 +1,6 @@
 /* Zero-cost offline caching for the GitHub Pages static application. */
-const CACHE_NAME = 'active-recall-web-v4-2';
-const STATIC_FILES = ['./', './index.html', './health.html', './styles.css', './intelligence.js', './pdf-lite.js', './document-import.js', './human-review.js', './paired-review.js', './paired-review-ui.js', './core.js', './storage.js', './app.js', './manifest.webmanifest', './favicon.svg', './icon-192.png', './icon-512.png'];
+const CACHE_NAME = 'active-recall-web-v4-3';
+const STATIC_FILES = ['./', './index.html', './health.html', './styles.css', './intelligence.js', './pdf-lite.js', './document-import.js', './human-review.js', './paired-review.js', './review-packets.js', './review-packets-ui.js', './reviewer-offline.html', './paired-review-ui.js', './core.js', './storage.js', './app.js', './manifest.webmanifest', './favicon.svg', './icon-192.png', './icon-512.png'];
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(STATIC_FILES)).then(() => self.skipWaiting()));
 });
