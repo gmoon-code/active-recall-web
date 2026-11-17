@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'none'; img-src 'none'; font-src 'none'; form-action 'none'; base-uri 'none'">
+<title>Active Recall · Synthetic Reviewer Training</title>
+<style>
+:root{color-scheme:light;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f3f7f5;color:#1d3530}
+*{box-sizing:border-box}body{margin:0}main{max-width:820px;margin:0 auto;padding:30px 16px 70px}
+h1{font-size:clamp(1.5rem,4vw,2.1rem);margin:6px 0 12px}h2{font-size:1.2rem}p{line-height:1.6}
+.card{background:white;border:1px solid #dae5df;border-radius:14px;padding:20px;margin:16px 0;box-shadow:0 4px 20px #18352b08}
+.eyebrow{color:#267363;letter-spacing:.12em;text-transform:uppercase;font-weight:700;font-size:.74rem}
+.small{font-size:.9rem;color:#4e665e}.note{padding:13px;border-radius:9px;background:#f0f6f3}
+pre{font:inherit;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.6}
+label{font-weight:600;display:block;margin:12px 0 6px}
+input[type=file],select,textarea{width:100%;padding:12px;border-radius:8px;border:1px solid #a6bdb4;background:white;color:#1d3530;font:inherit}
+textarea{min-height:90px;resize:vertical}
+fieldset{border:1px solid #cfddd5;border-radius:10px;padding:15px;margin:15px 0}
+legend{font-weight:700;max-width:100%;padding:0 5px}
+.check{display:flex;gap:9px;align-items:flex-start;margin:14px 0}.check input{margin-top:5px}.check span{line-height:1.5}
+button{background:#146856;border:0;border-radius:9px;padding:12px 18px;color:white;font:inherit;font-weight:700;cursor:pointer}
+button:hover{background:#0b4a3d}button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{outline:3px solid #47a691;outline-offset:2px}
+#status{min-height:24px}#status.error{color:#a73327;font-weight:700}
+[hidden]{display:none!important}
+@media(max-width:600px){main{padding:16px 10px 50px}.card{padding:14px}}
+</style>
+
+</head>
+<body><main>
+<div class="eyebrow">Active Recall Web · Synthetic rubric interpretation · Fully offline</div>
+<h1>Practise judging evidence before discussing the rubric.</h1>
+<p class="small">These three examples are <strong>fictional practice responses, not pilot or study records</strong>. Make a first human judgment for each criterion, identify any unclear scoring rules, and save your original response file <strong>before</strong> opening discussion prompts. The prompts are not an answer key or a grading standard. This page needs no network, account or browser storage.</p>
+<section class="card">
+<h2>1. Open your training request</h2>
+<label for="training-request-file">Choose the owner's synthetic training-request JSON</label>
+<input id="training-request-file" type="file" accept=".json,application/json"/>
+<p class="small" id="message" role="status" aria-live="polite"></p>
+</section>
+<section id="training-section" hidden>
+<form id="training-form" class="card">
+<h2>2. Record first-pass judgments</h2>
+<label for="training-slot">Reviewer slot</label>
+<select id="training-slot" required><option value="A">Reviewer A</option><option value="B">Reviewer B</option></select>
+<label for="training-role">Who is reviewing?</label>
+<select id="training-role" required><option value="other_person">Another person</option><option value="self">Learner</option></select>
+<div id="training-cases"></div>
+<label for="training-note">General note for a later human discussion (optional)</label>
+<textarea id="training-note" maxlength="2000"></textarea>
+<div id="training-b-attests" hidden>
+<label class="check"><input type="checkbox" id="different-person"><span>As Reviewer B, I am a different person from A.</span></label>
+<label class="check"><input type="checkbox" id="no-prior-a"><span>I did not consult A's judgments before making mine.</span></label>
+</div>
+<label class="check"><input type="checkbox" id="guidance-unseen" required><span>I formed these first judgments without opening the discussion guidance in this interface. This is self-reported and not independently verified.</span></label>
+<label class="check"><input type="checkbox" id="confirmed-human" required><span>I personally evaluated the fictional responses; the statuses are my own judgments, not automated grades.</span></label>
+<button type="submit">Download and lock the initial training JSON</button>
+<p class="small">Keep the downloaded file unchanged. Send it to the owner for local import. The discussion prompts become visible only after your submission is downloaded.</p>
+</form>
+<section class="card" id="guidance-section" hidden>
+<h2>3. Discussion after first judgments</h2>
+<p class="note">Your original review has been exported and is no longer editable in this page session. Work through these questions with a colleague; there is no official correct-status key and this discussion does not certify anyone's expertise.</p>
+<div id="guidance"></div>
+<p class="small">If a criterion needs rewording, revise it only for <strong>future</strong> assessments through the appropriate study-app editing controls. Never replace the original criterion or reviewer response in a saved pilot attempt. Actual reviewer identity, exposure and timing are not verified.</p>
+</section>
+</section>
+</main>
+<script>
+(function(){
+'use strict';
+const $=id=>document.getElementById(id),MAX=50000;
+const statuses=[['unassessed','Not assessed'],['included','Included'],['not_demonstrated','Not demonstrated'],['uncertain','Uncertain']];
+const issues=[['none','No rubric issue flagged'],['vague','Vague or subjective wording'],['multiple_demands','Multiple demands in one criterion'],['overlap','Overlaps another criterion'],['insufficient_evidence_rule','Missing a clear evidence rule'],['other','Other rubric concern']];
+const ID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+let request=null;
+function exact(o,fields){return !!o&&typeof o==='object'&&!Array.isArray(o)&&Object.keys(o).sort().join('|')===fields.slice().sort().join('|')}
+function sig(value){let h=2166136261,s=JSON.stringify(value);for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619)}return(h>>>0).toString(16).padStart(8,'0')}
+function msg(s,error=false){$('message').textContent=s;$('message').className=error?'small error':'small';}
+function field(parent,txt,element){
+ const label=document.createElement('label');label.htmlFor=element.id;label.textContent=txt;
+ parent.append(label,element);
+}
+function select(id,options){
+ const el=document.createElement('select');el.id=id;
+ options.forEach(([value,label])=>{const o=document.createElement('option');o.value=value;o.textContent=label;el.append(o)});
+ return el;
+}
+function area(id,max){
+ const x=document.createElement('textarea');x.id=id;x.maxLength=max;x.rows=2;return x;
+}
+function validateRequest(r){
+ if(!exact(r,['format','version','kitId','sessionId','issuedAt','casesFingerprint','cases'])||
+   r.format!=='arw-reviewer-training-request-v1'||r.version!==1||
+   r.kitId!=='synthetic-rubric-interpretation-v1'||!ID.test(r.sessionId)||
+   typeof r.issuedAt!=='string'||!Number.isFinite(Date.parse(r.issuedAt))||
+   !Array.isArray(r.cases)||r.cases.length!==3||r.casesFingerprint!==sig(r.cases))
+   throw Error('This is not an intact synthetic training request.');
+ const expectedIds=['energy-transfer','recessive-inheritance','food-web-model'];
+ const expectedRubric=[['gradient','coupling'],['alleles','genotype-phenotype'],['links','limitations','vague']];
+ r.cases.forEach((c,i)=>{
+   if(!exact(c,['id','title','question','response','criteria','discussion'])||
+     c.id!==expectedIds[i]||!c.question||!c.response||!c.discussion||
+     !Array.isArray(c.criteria)||c.criteria.length!==expectedRubric[i].length||
+     c.criteria.some((criterion,j)=>!exact(criterion,['id','text'])||
+       criterion.id!==expectedRubric[i][j]||typeof criterion.text!=='string'||!criterion.text.trim()))
+     throw Error('Unexpected or malformed synthetic exercise.');
+ });
+ return r;
+}
+function renderCases(){
+ const host=$('training-cases');host.replaceChildren();
+ request.cases.forEach((c,i)=>{
+   const section=document.createElement('section');section.className='note';section.style.marginTop='20px';
+   const h=document.createElement('h2');h.textContent=(i+1)+'. '+c.title;section.append(h);
+   const q=document.createElement('p');q.textContent='Question: '+c.question;section.append(q);
+   const p=document.createElement('pre');p.className='note';p.textContent=c.response;section.append(p);
+   c.criteria.forEach((criterion,j)=>{
+     const fs=document.createElement('fieldset'),legend=document.createElement('legend');
+     legend.textContent='Criterion '+(j+1)+': '+criterion.text;fs.append(legend);
+     const prefix='case-'+i+'-criterion-'+j+'-';
+     field(fs,'Judgment (human)',select(prefix+'status',statuses));
+     field(fs,'Exact excerpt from the fictional response (required only for Included)',area(prefix+'excerpt',700));
+     field(fs,'Reason for a missing or uncertain point',area(prefix+'reason',1200));
+     field(fs,'Is the criterion difficult to interpret?',select(prefix+'issue',issues));
+     field(fs,'Explain the ambiguity and suggest how to make it observable (if flagged)',area(prefix+'issue-note',1200));
+     section.append(fs);
+   });
+   host.append(section);
+ });
+}
+function gather(){
+ const rows=[];let assessed=0;
+ request.cases.forEach((c,i)=>c.criteria.forEach((criterion,j)=>{
+   const p='case-'+i+'-criterion-'+j+'-';
+   const status=$(p+'status').value,excerpt=$(p+'excerpt').value.trim(),
+     rationale=$(p+'reason').value.trim(),issue=$(p+'issue').value,issueNote=$(p+'issue-note').value.trim();
+   if(!statuses.some(s=>s[0]===status)||!issues.some(s=>s[0]===issue)||
+     status==='included'&&(!excerpt||!c.response.includes(excerpt))||
+     status!=='included'&&excerpt||
+     ['not_demonstrated','uncertain'].includes(status)&&rationale.length<8||
+     status==='unassessed'&&(rationale||excerpt)||
+     issue==='none'&&issueNote||issue!=='none'&&issueNote.length<12)
+     throw Error('Complete the evidence/ambiguity rules for '+c.title+' — '+criterion.id+'.');
+   if(status!=='unassessed')assessed++;
+   rows.push({caseId:c.id,criterionId:criterion.id,status,excerpt,rationale,issue,issueNote});
+ }));
+ if(!assessed)throw Error('Record at least one actual human criterion judgment.');
+ return rows;
+}
+function download(obj){
+ const blob=new Blob([JSON.stringify(obj,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob);
+ const link=document.createElement('a');link.href=url;
+ link.download='active-recall-synthetic-training-'+obj.slot.toLowerCase()+'-'+obj.sessionId+'.json';
+ document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+$('training-slot').addEventListener('change',()=>{$('training-b-attests').hidden=$('training-slot').value!=='B';});
+$('training-request-file').addEventListener('change',async()=>{
+ try{
+   const file=$('training-request-file').files?.[0];
+   if(!file||file.size>MAX)throw Error('Select a synthetic training JSON below 50 KB.');
+   request=validateRequest(JSON.parse(await file.text()));
+   $('training-form').hidden=false;$('guidance-section').hidden=true;
+   $('training-section').hidden=false;renderCases();
+   msg('Frozen synthetic exercises loaded. Do not open discussion prompts until after exporting your own judgments.');
+ }catch(e){request=null;$('training-section').hidden=true;msg(e.message,true);}
+});
+$('training-form').addEventListener('submit',e=>{
+ e.preventDefault();
+ try{
+   if(!request)throw Error('Open the owner-issued synthetic training request first.');
+   const slot=$('training-slot').value,role=$('training-role').value;
+   if(!$('confirmed-human').checked||!$('guidance-unseen').checked)
+     throw Error('Confirm independent human first judgments before opening discussion.');
+   if(slot==='B'&&(!$('different-person').checked||!$('no-prior-a').checked))
+     throw Error('Reviewer B must attest to being a different person without viewing A.');
+   const response={
+     format:'arw-reviewer-training-submission-v1',version:1,
+     kitId:request.kitId,sessionId:request.sessionId,casesFingerprint:request.casesFingerprint,
+     slot,reviewerRole:role,completedAt:new Date().toISOString(),
+     confirmed:true,discussionUnseenAttested:true,differentPersonAttested:slot==='B',
+     noPriorJudgmentsAttested:slot==='B',judgments:gather(),note:$('training-note').value.trim()
+   };
+   download(response);
+   $('training-form').hidden=true;$('guidance-section').hidden=false;
+   const host=$('guidance');host.replaceChildren();
+   request.cases.forEach((c,i)=>{
+     const h=document.createElement('h2');h.textContent=(i+1)+'. '+c.title;
+     const p=document.createElement('p');p.textContent=c.discussion;
+     host.append(h,p);
+   });
+   msg('First judgment saved. The later discussion guidance is now visible. Keep the original file.');
+ }catch(err){msg(err.message,true);}
+});
+})();
+</script>
+</body></html>

@@ -1,9 +1,23 @@
-# Active Recall Web — Free Edition v4.5
+# Active Recall Web — Free Edition v4.6
 
 A local-first active-recall system with a **single multi-course automatic review agenda**, source-linked learning objectives, reviewed question drafts, and sessions that adjust to time budgets and assessments.
 
 **Public website:** https://gmoon-code.github.io/active-recall-web/
 
+
+## Blueprint 4.6 — Independent fictional-reviewer training and rubric clarity
+
+Before involving actual pilot answers, reviewers can practise using a frozen set of **three fictional science explanations and seven rubric criteria** through a new **Progress → Reviewer training & rubric clarity** workflow. The owner creates a locally linked synthetic training cycle, then shares its request JSON and the standalone [offline reviewer training page](reviewer-training-offline.html) with A and B.
+
+Reviewers record original human statuses, exact quoted evidence and optional rubric-quality flags such as vague criteria, overlapping criteria and multi-part demands. The standalone page preserves a downloaded first-pass JSON **before displaying interpretive discussion prompts**. It provides no gold-standard labels, reviewer score, pass/fail certification or AI-generated correctness verdict. The owner imports A/B files without changing saved study attempts, old rubrics, the prospective pilot or any due date.
+
+The app highlights differences in reviewer interpretation and which **fictional** rubric criteria were flagged for discussion. Its optional coded JSON summary excludes reviewer excerpts, original notes, private study information and the local session identifier. The dashboard indicates if the session began or files were imported after a prospective pilot lock, rather than claiming verified pre-pilot preparation.
+
+**Important limit:** discussion prompts are hidden by the interface, but remain inspectable in the local HTML source. No independent verification of reviewer identity, conduct, expertise or completion time exists. Any new rubric wording should be applied to **future** attempts only; archived evidence must never be rescored retroactively.
+
+The permanently free GitHub Pages implementation retains schema-v5 backups, local-only storage and original scheduling rules. **227 Node tests and six real Chromium workflows passed** on the feature branch. These tests include two disconnected standalone reviewer sessions, a real owner import/export flow and a later pilot lock.
+
+[Read Blueprint 4.6](docs/BLUEPRINT_4_6_FREE.md) · [Use standalone offline reviewer training](reviewer-training-offline.html)
 
 ## Blueprint 4.5 — Prospective reviewer-pilot registry and coded exports
 
