@@ -41,7 +41,7 @@
           ${!ready.ok?`<p class="small warningtext">${esc(ready.reason)}</p>`:''}
           ${old?'<p class="small muted">Earlier review already exists; choose a different attempt for reference-free collection.</p>':''}
           </div><div class="btnrow">
-            <button class="btn small secondary" type="button" data-action="export-reference-first-request" data-id="${esc(x.id)}" ${!ready.ok||!!pair?.A?'disabled':''}>${rec?'Re-download first request':'Export reference-free request'}</button>
+            <button class="btn small secondary" type="button" data-action="export-reference-first-request" data-id="${esc(x.id)}" ${!ready.ok||!!pair?.B||(!!pair?.A&&!rec)?'disabled':''}>${rec?'Re-download first request':'Export reference-free request'}</button>
             ${rec&&!firstA?`<button class="btn small secondary" type="button" data-action="revoke-reference-first-request" data-id="${esc(x.id)}">Revoke</button>`:''}
             ${firstA&&firstB?`<button class="btn small secondary" type="button" data-action="export-reference-reveal" data-id="${esc(x.id)}" data-slot="A">Export A reference</button>`:''}
             ${firstA&&firstB?`<button class="btn small secondary" type="button" data-action="export-reference-reveal" data-id="${esc(x.id)}" data-slot="B">Export B reference</button>`:''}
