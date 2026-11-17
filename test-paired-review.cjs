@@ -125,7 +125,7 @@ test('same decisive findings need no adjudication',()=>{
   assert.throws(()=>adjudicate(f),/No criterion-level disagreement/);
 });
 test('adjudication cannot precede B or be recorded without a human confirmation',()=>{
-  const f=fixture();A(f);assert.throws(()=>adjudicate(f),/Two original human reviews/);
+  const f=fixture();A(f);assert.throws(()=>P.recordAdjudication(f.db,{attemptId:f.attempt.id,adjudicatorRole:'self',decisions:[],confirmed:true,now:time(0,3)}),/Two original human reviews/);
   B(f);
   assert.throws(()=>adjudicate(f,{confirmed:false}),/Confirm/);
 });
