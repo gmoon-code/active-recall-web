@@ -24,4 +24,4 @@ jobs:
           node --check intelligence.js
           node --check document-import.js
       - name: Local deterministic tests
-        run: node --test test-human-review.cjs
+        run: node --test test-human-review.cjs test-deploy-preflight.cjs
