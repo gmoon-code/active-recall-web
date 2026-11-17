@@ -15,7 +15,7 @@ The app highlights differences in reviewer interpretation and which **fictional*
 
 **Important limit:** discussion prompts are hidden by the interface, but remain inspectable in the local HTML source. No independent verification of reviewer identity, conduct, expertise or completion time exists. Any new rubric wording should be applied to **future** attempts only; archived evidence must never be rescored retroactively.
 
-The permanently free GitHub Pages implementation retains schema-v5 backups, local-only storage and original scheduling rules. **226 Node tests and six real Chromium workflows passed** on the feature branch. These tests include two disconnected standalone reviewer sessions, a real owner import/export flow and a later pilot lock.
+The permanently free GitHub Pages implementation retains schema-v5 backups, local-only storage and original scheduling rules. **227 Node tests and six real Chromium workflows passed** on the feature branch. These tests include two disconnected standalone reviewer sessions, a real owner import/export flow and a later pilot lock.
 
 [Read Blueprint 4.6](docs/BLUEPRINT_4_6_FREE.md) · [Use standalone offline reviewer training](reviewer-training-offline.html)
 
