@@ -177,6 +177,13 @@
        disagreements.push({caseId:all[i].caseId,criterionId:all[i].criterionId,
          A:a.status,B:b.status});
    }
+   // Both Unassessed (and all Uncertain comparisons) are NONDECISIVE,
+   // never substantive agreement or evidence that the rubric is valid.
+   const decisive=s.submissions.length===2?all.map((x,i)=>{
+     const a=aa[i].status,b=bb[i].status;
+     return ['included','not_demonstrated'].includes(a)&&['included','not_demonstrated'].includes(b)?
+       {a,b,caseId:x.caseId,criterionId:x.criterionId}:null;
+   }).filter(Boolean):null;
    const flagRows=all.map((x,i)=>({
       ...x,A:aa[i]?.issue??'missing',B:bb[i]?.issue??'missing'
    })).filter(x=>x.A!=='none'&&x.A!=='missing'||x.B!=='none'&&x.B!=='missing');
@@ -185,7 +192,10 @@
      Date.parse(x.importedAt)>=Date.parse(db.reviewerPilot.lockedAt)));
    return {kitId:s.kitId,sessionId:s.id,createdAt:s.issuedAt,
      A:!!A,B:!!B,totalCriteria:all.length,completed:s.submissions.length,
-     statusMatches:A&&B?all.length-disagreements.length:null,
+     decisiveComparable:decisive?.length??null,
+     decisiveAgreements:decisive?.filter(x=>x.a===x.b).length??null,
+     decisiveDisagreements:decisive?.filter(x=>x.a!==x.b).length??null,
+     nondecisive:A&&B?all.length-decisive.length:null,
      disagreements,flagged:flagRows,
      cycleAfterPilot,importedAfterPilot,
      interpretation:'These are judgments on fabricated practice responses, not calibration accuracy or qualifications. The discussion guidance provides no gold standard. Disagreements and ambiguity flags should prompt a human conversation before revising criteria for future attempts. No older rubric snapshot or pilot record changes. Self-reported reviewers, timestamps and non-exposure are not authenticated.'};
@@ -196,12 +206,14 @@
    const c=compare(db);
    return {format:FORMAT.summary,version:1,kitId:c.kitId,issuedAt:c.createdAt,
      firstACompleted:c.A,firstBCompleted:c.B,totalCriteria:c.totalCriteria,
-     statusMatches:c.statusMatches,disagreementCount:c.disagreements.length,
+     decisiveComparable:c.decisiveComparable,decisiveAgreements:c.decisiveAgreements,
+     decisiveDisagreements:c.decisiveDisagreements,nondecisive:c.nondecisive,
+     disagreementCount:c.disagreements.length,
      ambiguousCriterionCount:c.flagged.length,
      criteriaWithFlags:c.flagged.map(x=>({caseId:x.caseId,criterionId:x.criterionId,flaggedA:x.A!=='none'&&x.A!=='missing',flaggedB:x.B!=='none'&&x.B!=='missing'})),
      sessionStartedAfterLocalPilotLock:c.cycleAfterPilot,
      atLeastOneImportAfterLocalPilotLock:c.importedAfterPilot,
-     caution:'Counts from frozen synthetic scenarios. Not grades, training certification, inter-rater reliability, anonymisation, true preregistration or evidence of memory effects. Import times use local device clocks.'};
+     caution:'Both Unassessed, any Uncertain, and incomplete reviewer rows are nondecisive and NEVER counted as substantive agreement. Status differences are descriptive, not graded errors. Not a reviewer certificate, inter-rater reliability estimate, preregistration, or memory-learning effect. Import times use local clocks.'};
  }
  function validate(db){
    const s=db?.reviewerTraining;if(s===undefined)return true;
