@@ -78,6 +78,8 @@
         for(const a of input.attempts){
           if(a.practiceStage!==undefined&&!['regular','immediate_post_study'].includes(a.practiceStage))throw Error('Invalid retrieval practice stage in backup.');
           if(a.correctionNote!==undefined&&(typeof a.correctionNote!=='string'||a.correctionNote.length>2000))throw Error('Invalid learner correction note in backup.');
+          if(a.priorDueAt!==undefined&&a.priorDueAt!==null&&(typeof a.priorDueAt!=='string'||!Number.isFinite(Date.parse(a.priorDueAt))))throw Error('Invalid historical review window in backup.');
+          if(a.priorIntervalDays!==undefined&&a.priorIntervalDays!==null&&(!Number.isFinite(a.priorIntervalDays)||a.priorIntervalDays<0||a.priorIntervalDays>100000))throw Error('Invalid historical review interval in backup.');
           if(a.criterionChecks?.some(c=>c.acceptedAlternativesSnapshot!==undefined&&(!Array.isArray(c.acceptedAlternativesSnapshot)||c.acceptedAlternativesSnapshot.length>5||c.acceptedAlternativesSnapshot.some(x=>typeof x!=='string'||x.length>240))))throw Error('Invalid historic answer formulations in backup.');
           if(a.criterionChecks===undefined)continue;
           if(!Array.isArray(a.criterionChecks)||a.criterionChecks.some(c=>!c||!ids.has(c.criterionId)||!['met','missed','unsure'].includes(c.status)))throw Error('Invalid criterion attempt history.');
@@ -810,6 +812,80 @@
     }
     return result;
   }
+  // Honest *descriptive* audit of observed delayed learner reports, not a
+  // calibrated forgetting curve, objectively graded accuracy, or efficacy trial.
+  // All groups refer to the delay since the most recent attempt at the SAME
+  // requirement/target versions. A rewording shares the target, an edited
+  // objective does not silently reuse its former outcomes.
+  function delayedRetrievalAudit(db,{minDelayHours=24}={}){
+    if(!Number.isFinite(minDelayHours)||minDelayHours<1||minDelayHours>720)
+      throw Error('Delayed-review threshold must be between 1 and 720 hours.');
+    const raw=Array.isArray(db.attempts)?db.attempts:[];
+    const source=raw.slice(-50000);
+    const ordered=source.map((a,index)=>({a,index,time:Date.parse(a?.createdAt||'')}))
+      .sort((x,y)=>(Number.isFinite(x.time)?x.time:Infinity)-(Number.isFinite(y.time)?y.time:Infinity)||x.index-y.index);
+    const exclusions={invalidTimestamp:0,immediatePostStudy:0,assisted:0,noWrittenResponse:0,
+      firstAttemptOrChangedVersion:0,tooSoon:0,invalidRating:0};
+    const bins=[{key:'oneToThree',label:'1–3 days',from:24,to:96},
+      {key:'fourToSeven',label:'4–7 days',from:96,to:192},
+      {key:'eightToTwentyOne',label:'8–21 days',from:192,to:528},
+      {key:'overTwentyOne',label:'More than 21 days',from:528,to:Infinity}];
+    // Actual lower threshold is configurable for tests and future research;
+    // the visible application uses 24h, and never calls <24h delayed.
+    const makeGroup=(label)=>({label,attempts:0,reportedNoMajorGaps:0,reportedGaps:0,targets:new Set()});
+    const byLag=bins.map(b=>({...b,...makeGroup(b.label)}));
+    const byKind=['recall','explain','apply','other'].map(kind=>({kind,...makeGroup(kind)}));
+    const all=makeGroup('All delayed, independent, recorded written attempts');
+    const prior=new Map(),timing={before:0,within:0,after:0,noSnapshot:0};
+    let elapsedMin=Infinity,elapsedMax=0;
+    for(const item of ordered){
+      const a=item.a||{},t=item.time;
+      if(!Number.isFinite(t)){exclusions.invalidTimestamp++;continue;}
+      const id=a.retrievalTargetId,version=a.retrievalTargetVersion,requirement=a.requirementId,reqVersion=a.requirementVersion;
+      const key=typeof id==='string'&&id&&requirement?`${requirement}|${reqVersion??'unknown'}|${id}|${version??'unknown'}`:null;
+      const previous=key?prior.get(key):null;
+      // Always update most recent actual practice time, including assisted
+      // practice, to avoid inflating the delay after intermediate studying.
+      if(key)prior.set(key,t);
+      let reason=null;
+      if(a.practiceStage==='immediate_post_study')reason='immediatePostStudy';
+      else if(a.assisted)reason='assisted';
+      else if(inputModeFor(a)!=='written'||typeof a.response!=='string'||!a.response.trim())reason='noWrittenResponse';
+      else if(previous===undefined||previous===null||t<=previous)reason='firstAttemptOrChangedVersion';
+      else if((t-previous)/3600000<minDelayHours)reason='tooSoon';
+      else if(!['again','hard','good','easy'].includes(a.rating))reason='invalidRating';
+      if(reason){exclusions[reason]++;continue;}
+      const hours=(t-previous)/3600000;
+      const effective=a.scheduleRating||a.rating;
+      const hasGaps=(a.criterionChecks||[]).some(c=>c.status==='missed'||c.status==='unsure');
+      const positive=['good','easy'].includes(effective)&&!hasGaps;
+      const add=g=>{g.attempts++;g.targets.add(id);if(positive)g.reportedNoMajorGaps++;else g.reportedGaps++;};
+      add(all);
+      const group=byLag.find((b,i)=>hours>=Math.max(minDelayHours,b.from) && (hours<b.to||i===byLag.length-1));
+      if(group)add(group);
+      const kind=byKind.find(b=>b.kind===(['recall','explain','apply'].includes(a.activityKind)?a.activityKind:'other'));
+      add(kind);
+      elapsedMin=Math.min(elapsedMin,hours);elapsedMax=Math.max(elapsedMax,hours);
+      const dueMs=typeof a.priorDueAt==='string'?Date.parse(a.priorDueAt):NaN;
+      if(!Number.isFinite(dueMs))timing.noSnapshot++;
+      else if(t<dueMs-86400000)timing.before++;
+      else if(t>dueMs+86400000)timing.after++;
+      else timing.within++;
+    }
+    const finalise=(g,minCount=10,minTargets=5)=>({
+      ...(g.key?{key:g.key}:{}),...(g.kind?{kind:g.kind}:{}),label:g.label,
+      attempts:g.attempts,distinctTargets:g.targets.size,
+      reportedNoMajorGaps:g.reportedNoMajorGaps,reportedGaps:g.reportedGaps,
+      // Suppress percentages for tiny and non-independent samples.
+      descriptiveShare:g.attempts>=minCount&&g.targets.size>=minTargets?
+        Math.round(100*g.reportedNoMajorGaps/g.attempts):null
+    });
+    return {auditVersion:1,thresholdHours:minDelayHours,processedAttempts:source.length,
+      olderAttemptsNotAudited:raw.length-source.length,eligible:finalise(all,20,10),
+      lagGroups:byLag.map(g=>finalise(g)),kindGroups:byKind.map(g=>finalise(g)),
+      exclusions,timing,elapsedHoursRange:all.attempts?{min:Math.round(elapsedMin*10)/10,max:Math.round(elapsedMax*10)/10}:null,
+      warning:'These are learner SELF-RATINGS following written attempts at least 24 hours after the preceding practice of the same target/version. They are not independently verified correctness, validated retention probabilities, or exam predictions. The audit does not fit or change review intervals. Percentages are withheld for small groups.'};
+  }
   function requirementEligible(r){return r.active&&!r.sourceRevisionPending&&(r.origin!=='rule_draft'||r.verificationStatus==='verified')&&!((r.possibleConflictWith||r.possibleDuplicateOf)&&r.origin==='rule_draft'&&!r.verifiedAt);}
   function schedulingReasons(item){
     const reasons=[];
@@ -1062,7 +1138,7 @@
     if(typeof correctionNote!=='string'||correctionNote.length>2000)throw Error('Correction note must be plain text, at most 2,000 characters.');
     const recordedResponse=cleanString(response,20000);
     const inferredMode=inputMode||(recordedResponse?'written':'mental');
-    const attempt={id:id('attempt'),inputMode:inferredMode,activityKind:activity.kind,durationSeconds:validDuration(durationSeconds)?Math.round(durationSeconds):null,evidenceVersion:1,requirementId:r.id,requirementVersion:r.version,retrievalTargetId:target.id,retrievalTargetVersion:target.version,activityId:activity.id,activityVersion:activity.version,questionSnapshot:cleanString(questionUsed||activity.question,500),referenceSnapshot:activity.answer,focusLabelSnapshot:target.label,requirementVerified:r.verificationStatus==='verified',courseId:r.courseId,sessionId,response:recordedResponse,rating,scheduleRating,criterionChecks:checks,criterionCounts:counts,correctionNote:correctionNote.trim(),assisted:!!assisted,gradedBy:'learner',practiceStage:practiceStage||'regular',createdAt:now.toISOString()};
+    const attempt={id:id('attempt'),priorDueAt:prev?.dueAt||null,priorIntervalDays:prev?.intervalDays??null,inputMode:inferredMode,activityKind:activity.kind,durationSeconds:validDuration(durationSeconds)?Math.round(durationSeconds):null,evidenceVersion:1,requirementId:r.id,requirementVersion:r.version,retrievalTargetId:target.id,retrievalTargetVersion:target.version,activityId:activity.id,activityVersion:activity.version,questionSnapshot:cleanString(questionUsed||activity.question,500),referenceSnapshot:activity.answer,focusLabelSnapshot:target.label,requirementVerified:r.verificationStatus==='verified',courseId:r.courseId,sessionId,response:recordedResponse,rating,scheduleRating,criterionChecks:checks,criterionCounts:counts,correctionNote:correctionNote.trim(),assisted:!!assisted,gradedBy:'learner',practiceStage:practiceStage||'regular',createdAt:now.toISOString()};
     db.attempts.push(attempt);observeDuration(db,activity.kind,attempt.durationSeconds);
     db.memory[target.id]={dueAt,intervalDays:adjustedInterval,lastRating:scheduleRating,lastReviewedAt:now.toISOString(),reviewCount:(prev?.reviewCount||0)+1};
     db.events.push({type:'attempt.recorded',entityId:attempt.id,requirementId:r.id,targetId:target.id,at:attempt.createdAt});
@@ -1151,5 +1227,5 @@
   }
   function validateImport(x){return migrateDb(x);}
 
-  return {DAY,id,today,addDays,daysUntil,initialDb,migrateDb,validateImport,getTarget,getTargets,getMemory,getActivities,getCriteria,addCriterion,proposeCriteria,rubricQualityReview,addRubricEvidenceDraft,reviseCriterion,setCriterionAlternatives,rubricSyllabusAlignment,setCriterionSyllabusGoals,verifyCriterion,archiveCriterion,criterionStatus,rubricProgress,chooseActivity,addRetrievalTarget,verifyRetrievalTarget,addActivityVariant,deactivateActivity,reviseSource,addCourse,addSyllabusObjectives,updateSyllabusObjective,setSyllabusLink,setSyllabusMaterialsReady,setSyllabusLearningGuide,guidedLearningInfo,archiveSyllabusObjective,syllabusCoverage,draftRequirements,addSource,addImportedDocument,addRequirement,editRequirement,verifyRequirement,integrity:I.integrity,questionCoverage:I.questionCoverage,questionWarnings:I.questionWarnings,learningObjectiveMap,variationStudio,questionStudio,adoptQuestionProposal,coverageReviewQueue,addAssessment,linkedAssessments,estimatedSeconds,durationEstimate,evidenceType,inputModeFor,evidenceSummary,eligibleCandidates,planActivities,buildReviewAgenda,forecastSchedule,recordAttempt,latestCorrectiveFeedback,assessmentCoverage,stats,demoDb};
+  return {DAY,id,today,addDays,daysUntil,initialDb,migrateDb,validateImport,getTarget,getTargets,getMemory,getActivities,getCriteria,addCriterion,proposeCriteria,rubricQualityReview,addRubricEvidenceDraft,reviseCriterion,setCriterionAlternatives,rubricSyllabusAlignment,setCriterionSyllabusGoals,verifyCriterion,archiveCriterion,criterionStatus,rubricProgress,chooseActivity,addRetrievalTarget,verifyRetrievalTarget,addActivityVariant,deactivateActivity,reviseSource,addCourse,addSyllabusObjectives,updateSyllabusObjective,setSyllabusLink,setSyllabusMaterialsReady,setSyllabusLearningGuide,guidedLearningInfo,archiveSyllabusObjective,syllabusCoverage,draftRequirements,addSource,addImportedDocument,addRequirement,editRequirement,verifyRequirement,integrity:I.integrity,questionCoverage:I.questionCoverage,questionWarnings:I.questionWarnings,learningObjectiveMap,variationStudio,questionStudio,adoptQuestionProposal,coverageReviewQueue,addAssessment,linkedAssessments,estimatedSeconds,durationEstimate,evidenceType,inputModeFor,evidenceSummary,delayedRetrievalAudit,eligibleCandidates,planActivities,buildReviewAgenda,forecastSchedule,recordAttempt,latestCorrectiveFeedback,assessmentCoverage,stats,demoDb};
 });
