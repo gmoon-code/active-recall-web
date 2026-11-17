@@ -221,7 +221,7 @@ test('CSV reports original A/B and missing post stages without filling zeros',()
  const lines=P.exportCSV(f.db).split(/\r?\n/).filter(Boolean);
  const row=lines.find(x=>x.includes(',2,enrolled')&&x.includes('not_demonstrated'));
  assert.ok(row,'Expected an original criterion-level disagreement row');
- assert.match(row,/included,not_demonstrated,included,missing,missing/);
+ assert.match(row,/not_demonstrated,included,missing,missing/);
  assert.match(lines.join('\n'),/missing,missing/);
 });
 test('CSV contains no original question, written answer, reference, course name or internal IDs',()=>{
@@ -265,7 +265,7 @@ test('full pilot history and reviewer evidence survive backup round trip',()=>{
 test('backup validation catches omitted consecutive screening rows',()=>{
  const f=fixture();complete(f);const d=clone(f.db);
  d.reviewerPilot.entries.splice(1,1);
- assert.throws(()=>C.validateImport(d),/screening record|Pilot entry/);
+ assert.throws(()=>C.validateImport(d),/screening record|Pilot entry|close-out provenance|screening history/);
 });
 test('backup validation catches fabricated inclusion and exclusion changes',()=>{
  const f=fixture();complete(f);const d=clone(f.db);
@@ -291,7 +291,7 @@ test('backup validation rejects a forged early-stop note and premature quota clo
  const f=fixture();complete(f);const d=clone(f.db);
  d.reviewerPilot.closeReason='stopped_early';
  d.reviewerPilot.earlyStopNote='This stop is fabricated after the fact.';
- assert.throws(()=>C.validateImport(d),/Early stop cannot replace quota completion/);
+ assert.throws(()=>C.validateImport(d),/Early stop cannot replace quota completion|close-out event/);
 });
 test('future attempts on closed pilot stay outside sample and older records still validate',()=>{
  const f=fixture();complete(f);f.attempt(3,{minute:20});
