@@ -50,7 +50,7 @@
     const {a,criteria}=assertAttempt(db,attemptId);
     if(!confirmed)throw Error('Confirm that this human review was actually performed.');
     if(slot!=='A'&&slot!=='B')throw Error('Choose reviewer A or B.');
-    if(!ROLES.has(reviewerRole))throw Error('Select the reviewer's role.');
+    if(!ROLES.has(reviewerRole))throw Error('Select the reviewer role.');
     if(typeof note!=='string'||note.length>3000)throw Error('Reviewer note too long.');
     if(!(now instanceof Date)||!Number.isFinite(now.getTime())||now.getTime()<Date.parse(a.createdAt))
       throw Error('Review timestamp must follow the saved attempt.');
