@@ -45,8 +45,8 @@ The reviewer HTML contains inline CSS/JS and no browser storage, network request
 ## Engineering verification
 
 - Existing Node tests: **101** for v4.1–4.3, including six GitHub Pages deployment checks.
-- New v4.4 deterministic tests: **40**, covering absent reference content in the initial request, immutable first-pass evidence, two-reviewer locking before any reveal, guarded post-reference judgments, descriptive disagreement transitions, original due dates, corruption checks, and older backup compatibility.
-- Target: **141/141 Node tests** plus the original three Chromium workflow checks and a new end-to-end browser test running two isolated **network-disconnected** reference-free reviewer pages, importing both locked judgments, revealing to A, accepting a separate post-reference change, preserving A/B disagreement, reloading IndexedDB and checking mobile layout.
+- New v4.4 deterministic tests: **41**, covering absent reference content in the initial request, immutable first-pass evidence, two-reviewer locking before any reveal, guarded post-reference judgments, descriptive disagreement transitions, original due dates, corruption checks, and older backup compatibility.
+- Target: **142/142 Node tests** plus the original three Chromium workflow checks and a new end-to-end browser test running two isolated **network-disconnected** reference-free reviewer pages, importing both locked judgments, revealing to A, accepting a separate post-reference change, preserving A/B disagreement, reloading IndexedDB and checking mobile layout.
 - The old 308-test v4.0 suite is **not available in the published repository**, so the current test count is not a rerun of those tests.
 
 ## Next research-valid step
