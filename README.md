@@ -1,9 +1,21 @@
-# Active Recall Web — Free Edition v4.2
+# Active Recall Web — Free Edition v4.3
 
 A local-first active-recall system with a **single multi-course automatic review agenda**, source-linked learning objectives, reviewed question drafts, and sessions that adjust to time budgets and assessments.
 
 **Public website:** https://gmoon-code.github.io/active-recall-web/
 
+
+## Blueprint 4.3 — Separate-device offline reviewer packets
+
+In **Progress → Offline reviewer packets**, the learner can export one written explanation, its original reference answer and versioned rubric into a **single-answer JSON request**. Download the **standalone offline reviewer HTML page** and share it with two trusted people. It runs without networking or an account and makes each reviewer download a separate JSON judgment file. The owner's browser **imports Reviewer A first, then Reviewer B**, validating that both submissions belong to its original issued request. Malformed, revoked, duplicate, mismatched and out-of-order submissions are rejected. The existing v4.2 disagreement and adjudication interface then works with both accepted reviews.
+
+The outgoing request deliberately excludes other notes, courses, calendar data, prior review judgments and the complete learning database. However, it includes the selected answer and reference, and completed responses may contain quoted excerpts; share files carefully. Reviewers can see the reference answer, and their identity and independence remain unverified. A request UUID/fingerprint checks file provenance but is not a cryptographic signature or proof of trustworthy grading.
+
+**100% free, browser-local learning history, GitHub Pages, no accounts, cloud sync, paid services or automatic semantic grading.** All original spaced review dates, active and shadow policies, assessment priorities and prior outcomes remain untouched. Original schema-v5 backups still import.
+
+**101/101 Node tests and three targeted Chromium browser flows passed**, including isolated networking-disabled file-based reviewers and mobile checks. These are not a replacement for the historical 308-test v4.0 suite, which is not present in the repository.
+
+[Read Blueprint 4.3](docs/BLUEPRINT_4_3_FREE.md) · [Standalone reviewer page](reviewer-offline.html)
 
 ## Blueprint 4.2 — Two-person rubric comparison and adjudication
 
