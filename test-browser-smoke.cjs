@@ -47,6 +47,7 @@ async function main(){
     });
     assert.equal(seed.attemptCount,2);
     await page.reload();await page.locator('[data-page=insights]').click();
+    await page.locator('summary').filter({hasText:'Review history & limitations'}).click();
     await page.locator('[data-action=open-human-review]').first().click();
     const form=page.locator('form[data-form=save-human-review]');
     await form.waitFor();
@@ -65,6 +66,7 @@ async function main(){
     });
     assert.deepEqual(saved.reviews,['gap_identified']);
     assert.equal(saved.due,seed.originalDue);
+    await page.locator('summary').filter({hasText:'Review history & limitations'}).click();
     await page.locator('[data-action=open-human-review]').first().click();
     const again=page.locator('form[data-form=save-human-review]');
     await again.locator('[name=status_1]').selectOption('included');
@@ -81,6 +83,7 @@ async function main(){
     assert.deepEqual(saved.reviews,['gap_identified','all_supported']);
     assert.equal(saved.due,seed.originalDue);
     await page.setViewportSize({width:390,height:844});
+    await page.locator('summary').filter({hasText:'Review history & limitations'}).click();
     await page.locator('[data-action=open-human-review]').first().click();
     const mobile=await page.locator('.modal').boundingBox();
     assert.ok(mobile&&mobile.width<=391,'Review dialog must fit on a mobile screen');
