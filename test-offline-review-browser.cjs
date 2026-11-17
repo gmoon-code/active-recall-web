@@ -71,7 +71,7 @@ async function main(){
       const responseDlPromise=reviewer.waitForEvent('download');
       await reviewer.locator('#review-form button[type=submit]').click();
       const responseDl=await responseDlPromise;
-      const responsePath=await responseDl.path(),response=JSON.parse(fs.readFileSync(responsePath,'utf8'));
+      const responsePath=await responseDl.path(),bytes=fs.readFileSync(responsePath),response=JSON.parse(bytes.toString('utf8'));
       assert.equal(response.slot,slot);
       assert.equal(response.requestId,packet.requestId);
       assert.ok(!JSON.stringify(response).includes(packet.attempt.reference),'Completed response must not contain full reference');
@@ -79,16 +79,16 @@ async function main(){
       const bounds=await reviewer.locator('#review-form').boundingBox();
       assert.ok(bounds&&bounds.width<=391,'Offline reviewer form must fit mobile');
       await context.close();
-      return {path:responsePath,body:response};
+      return {bytes,body:response};
     }
     const reviewerA=await offlineReview('A');
     const reviewerB=await offlineReview('B');
-    await owner.locator('#offline-review-response-file').setInputFiles(reviewerB.path);
+    await owner.locator('#offline-review-response-file').setInputFiles({name:'reviewer-b.json',mimeType:'application/json',buffer:reviewerB.bytes});
     await owner.locator('.toast.error').waitFor();
     assert.match(await owner.locator('.toast').innerText(),/Import Reviewer A first/);
-    await owner.locator('#offline-review-response-file').setInputFiles(reviewerA.path);
+    await owner.locator('#offline-review-response-file').setInputFiles({name:'reviewer-a.json',mimeType:'application/json',buffer:reviewerA.bytes});
     await owner.locator('.toast:not(.error)').waitFor();
-    await owner.locator('#offline-review-response-file').setInputFiles(reviewerB.path);
+    await owner.locator('#offline-review-response-file').setInputFiles({name:'reviewer-b.json',mimeType:'application/json',buffer:reviewerB.bytes});
     await owner.locator('.toast:not(.error)').waitFor();
     const saved=await owner.evaluate(async()=>{
       await window.ActiveRecallStorage.ready();
