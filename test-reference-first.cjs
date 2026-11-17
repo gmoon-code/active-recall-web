@@ -162,10 +162,13 @@ test('reference reveal is unavailable until that exact reviewer first pass was i
  const s=setup();
  assert.throws(()=>F.reveal(s.f.db,{attemptId:s.f.attempt.id,slot:'A'}),/Import the locked/);
  importA(s);
+ assert.throws(()=>F.reveal(s.f.db,{attemptId:s.f.attempt.id,slot:'A'}),/BOTH reviewers/);
  assert.throws(()=>F.reveal(s.f.db,{attemptId:s.f.attempt.id,slot:'B'}),/Import the locked/);
+ importB(s);
+ assert.equal(F.reveal(s.f.db,{attemptId:s.f.attempt.id,slot:'A'}).slot,'A');
 });
 test('reveal contains saved historical reference and is bound to original first JSON',()=>{
- const s=setup();importA(s);
+ const s=setup();importA(s);importB(s);
  const r=F.reveal(s.f.db,{attemptId:s.f.attempt.id,slot:'A'});
  assert.equal(r.format,'arw-reference-reveal-v1');
  assert.equal(r.reference,s.f.attempt.referenceSnapshot);
@@ -173,14 +176,14 @@ test('reveal contains saved historical reference and is bound to original first 
  assert.equal('response' in r,false);
 });
 test('post-reference review cannot be made without correct reveal and first pass',()=>{
- const s=setup();importA(s);
+ const s=setup();importA(s);importB(s);
  const reveal=F.reveal(s.f.db,{attemptId:s.f.attempt.id,slot:'A'});
  assert.throws(()=>F.createPost(s.request,s.A,{...reveal,reference:'original but wrong reference',requestId:UUID2},{
    findings:findings(s.request),confirmed:true,referenceSeen:true}),/does not match/);
  assert.throws(()=>F.createPost(s.request,s.A,reveal,{findings:findings(s.request),confirmed:true,referenceSeen:false}),/Confirm/);
 });
 test('post-reference response remains a separate event, not an overwritten first judgment',()=>{
- const s=setup();const original=importA(s);
+ const s=setup();const original=importA(s);importB(s);
  const raw=post(s),result=F.importPost(s.f.db,raw,{now:at(0,6)});
  assert.equal(result.version,1);
  assert.equal(s.f.attempt.independentReviewPair.A,original);
@@ -189,7 +192,7 @@ test('post-reference response remains a separate event, not an overwritten first
  assert.equal(result.changes[1].changed,true);
 });
 test('post-reference comparison reports changed human labels but not correctness',()=>{
- const s=setup();importA(s);
+ const s=setup();importA(s);importB(s);
  F.importPost(s.f.db,post(s),{now:at(0,6)});
  const a=F.audit(s.f.db);
  assert.equal(a.attempts,1);assert.equal(a.posts,1);assert.equal(a.changed,1);
@@ -202,7 +205,7 @@ test('post-reference changes do not affect A/B original inter-reviewer agreement
  assert.equal(JSON.stringify(P.comparison(s.f.attempt)),before);
 });
 test('post-reference duplicate fails without losing the historical first post',()=>{
- const s=setup();importA(s);const raw=post(s);
+ const s=setup();importA(s);importB(s);const raw=post(s);
  const saved=F.importPost(s.f.db,raw,{now:at(0,6)});
  assert.throws(()=>F.importPost(s.f.db,raw,{now:at(0,7)}),/already has a post-reference/);
  assert.equal(s.f.attempt.referencePostReviews[0],saved);
@@ -224,7 +227,7 @@ test('revocation after importing a locked original is prohibited',()=>{
  assert.throws(()=>F.revoke(s.f.db,{attemptId:s.f.attempt.id,now:at(0,4)}),/first review is already imported/);
 });
 test('reveal remains tied to frozen reference after substantive question revision',()=>{
- const s=setup();importA(s);
+ const s=setup();importA(s);importB(s);
  const old=s.f.attempt.referenceSnapshot;
  C.editRequirement(s.f.db,s.f.req.id,{question:'Updated current question?',answer:'Different current answer.',kind:'explain',changeType:'substantive'});
  assert.equal(F.reveal(s.f.db,{attemptId:s.f.attempt.id,slot:'A'}).reference,old);
@@ -261,13 +264,13 @@ test('backup validation rejects fabricated A evidence and changed first-pass met
  assert.throws(()=>C.validateImport(d),/Invalid locked first-pass provenance/);
 });
 test('backup rejects changed rubric text, post-reflection or status-change counts',()=>{
- const s=setup();importA(s);F.importPost(s.f.db,post(s),{now:at(0,6)});
+ const s=setup();importA(s);importB(s);F.importPost(s.f.db,post(s),{now:at(0,6)});
  let d=JSON.parse(JSON.stringify(s.f.db));d.attempts[0].rubricAtAttempt[0].textSnapshot='fabricated new criterion';
  assert.throws(()=>C.validateImport(d),/Invalid historical reference-free request|Invalid independent reviewer conclusion/);
  d=JSON.parse(JSON.stringify(s.f.db));d.attempts[0].referencePostReviews[0].changes[1].changed=false;
  assert.throws(()=>C.validateImport(d),/Post-reference criterion changes/);
  d=JSON.parse(JSON.stringify(s.f.db));d.attempts[0].referencePostReviews[0].submission.note='new forged note';
- assert.throws(()=>C.validateImport(d),/Post-reference submission fails/);
+ assert.throws(()=>C.validateImport(d),/Invalid post-reference provenance|Post-reference submission fails/);
 });
 test('v4.4 owner UI supplies first, reveal and post controls, but not paid API',()=>{
  const f=fixture(),html=UI.panel({db:f.db,esc:x=>String(x),courseName:()=> 'Course'});
