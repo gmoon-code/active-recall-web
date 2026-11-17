@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'none'; img-src 'none'; font-src 'none'; form-action 'none'; base-uri 'none'">
+<title>Active Recall · Offline Human Reviewer</title>
+<style>
+:root{color-scheme:light;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f3f7f5;color:#1d3530}
+*{box-sizing:border-box}body{margin:0}main{max-width:820px;margin:0 auto;padding:30px 16px 70px}
+h1{font-size:clamp(1.5rem,4vw,2.1rem);margin:6px 0 12px}h2{font-size:1.2rem}p{line-height:1.6}
+.card{background:white;border:1px solid #dae5df;border-radius:14px;padding:20px;margin:16px 0;box-shadow:0 4px 20px #18352b08}
+.eyebrow{color:#267363;letter-spacing:.12em;text-transform:uppercase;font-weight:700;font-size:.74rem}
+.small{font-size:.9rem;color:#4e665e}.note{padding:13px;border-radius:9px;background:#f0f6f3}
+pre{font:inherit;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.6}
+label{font-weight:600;display:block;margin:12px 0 6px}
+input[type=file],select,textarea{width:100%;padding:12px;border-radius:8px;border:1px solid #a6bdb4;background:white;color:#1d3530;font:inherit}
+textarea{min-height:90px;resize:vertical}
+fieldset{border:1px solid #cfddd5;border-radius:10px;padding:15px;margin:15px 0}
+legend{font-weight:700;max-width:100%;padding:0 5px}
+.check{display:flex;gap:9px;align-items:flex-start;margin:14px 0}.check input{margin-top:5px}.check span{line-height:1.5}
+button{background:#146856;border:0;border-radius:9px;padding:12px 18px;color:white;font:inherit;font-weight:700;cursor:pointer}
+button:hover{background:#0b4a3d}button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{outline:3px solid #47a691;outline-offset:2px}
+#status{min-height:24px}#status.error{color:#a73327;font-weight:700}
+[hidden]{display:none!important}
+@media(max-width:600px){main{padding:16px 10px 50px}.card{padding:14px}}
+</style>
+</head>
+<body>
+<main>
+<div class="eyebrow">Active Recall Web · Independent assessment · 100% free</div>
+<h1>Offline human reviewer</h1>
+<p class="small">This is a self-contained file that works without an internet connection or an account. It does not use cloud services, AI, browser storage or network requests. You will open a single review request and save a completed JSON file to return to the learner.</p>
+<div class="card">
+<h2>1. Open the request</h2>
+<label for="packet-file">Select the review-request JSON you received</label>
+<input id="packet-file" type="file" accept=".json,application/json">
+<p class="small">A request includes the learner's original written response, reference answer and relevant rubric. Do not share it onward without permission. Opening it here does not upload anything, but storing or sending files separately can introduce privacy risks.</p>
+<p id="status" role="status" aria-live="polite"></p>
+</div>
+<section id="work" hidden>
+<div class="card">
+<h2>2. Read the original answer</h2>
+<div class="note"><strong>Original question</strong><pre id="question"></pre></div>
+<label>Written response</label><pre id="answer" class="note"></pre>
+<details open><summary><strong>Reference answer</strong></summary><pre id="reference" class="note"></pre></details>
+<p class="small">You are seeing the reference answer, so your assessment is not reference-blinded. Do not assume an exact copied excerpt proves scientific correctness; make your own judgment.</p>
+</div>
+<form id="review-form" class="card">
+<h2>3. Record your human judgment</h2>
+<label for="slot">Assigned reviewer slot</label>
+<select id="slot" required><option value="A">Reviewer A</option><option value="B">Reviewer B</option></select>
+<p class="small">The person coordinating the review must assign A and B to different people. Reviewer B must not consult Reviewer A's judgments before submitting. This page does not receive, query, or display any earlier review.</p>
+<label for="role">Your relationship to the learner</label>
+<select id="role" required><option value="other_person">Another person</option><option value="self">I am the learner</option></select>
+<div id="criteria"></div>
+<label for="note">Optional overall review note</label>
+<textarea id="note" maxlength="3000" placeholder="Describe how you interpreted the work or what would merit follow-up."></textarea>
+<div id="b-attestations" hidden>
+<label class="check"><input id="different" type="checkbox"><span>I am a different person from Reviewer A.</span></label>
+<label class="check"><input id="unseen" type="checkbox"><span>I have not viewed Reviewer A's judgments or supporting evidence before making my own assessment.</span></label>
+</div>
+<label class="check"><input id="confirmed" type="checkbox" required><span>I personally assessed this answer. The recorded judgments are human-entered, not generated or automatically graded.</span></label>
+<button type="submit">4. Save completed reviewer-response JSON</button>
+<p class="small">The completed file contains your decisions, supporting excerpts and rationales, but not the entire original answer. Return that JSON file to the person coordinating this review. The browser does not automatically send it anywhere and does not keep an online copy. If you need to preserve your work, retain your downloaded file.</p>
+</form>
+</section>
+</main>
+<script>
+(function(){
+'use strict';
+const MAX_REQUEST=120000,FORMAT='arw-offline-review-request-v1';
+const $=id=>document.getElementById(id);
+let request=null;
+const statuses=[['unassessed','Not assessed'],['included','Included'],['not_demonstrated','Not demonstrated'],['uncertain','Cannot determine']];
+function status(text,error=false){$('status').textContent=text;$('status').className=error?'error':'';}
+function fingerprint(text){let h=2166136261;for(let i=0;i<text.length;i++){h^=text.charCodeAt(i);h=Math.imul(h,16777619)}return(h>>>0).toString(16).padStart(8,'0')}
+function exactly(x,props){return x&&typeof x==='object'&&!Array.isArray(x)&&Object.keys(x).sort().join('|')===props.slice().sort().join('|')}
+function validate(r){
+ if(!exactly(r,['format','version','requestId','issuedAt','snapshotFingerprint','attempt'])||
+  r.format!==FORMAT||r.version!==1||
+  !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(r.requestId)||
+  !Number.isFinite(Date.parse(r.issuedAt))||!r.attempt||
+  !exactly(r.attempt,['attemptId','attemptAt','question','reference','response','requirementVersion','targetVersion','activityVersion','criteria'])||
+  !['question','reference','response','attemptId'].every(k=>typeof r.attempt[k]==='string'&&r.attempt[k].trim())||
+  r.attempt.question.length>500||r.attempt.reference.length>8000||r.attempt.response.length>20000||
+  !Array.isArray(r.attempt.criteria)||r.attempt.criteria.length<1||r.attempt.criteria.length>100||
+  !r.attempt.criteria.every(c=>exactly(c,['criterionId','version','textSnapshot'])&&
+    typeof c.criterionId==='string'&&c.criterionId.length<=160&&
+    Number.isSafeInteger(c.version)&&c.version>0&&typeof c.textSnapshot==='string'&&
+    c.textSnapshot.trim()&&c.textSnapshot.length<=240)||
+  fingerprint(JSON.stringify(r.attempt))!==r.snapshotFingerprint)
+    throw Error('The file does not contain a valid, unchanged Active Recall reviewer request.');
+ return r;
+}
+function field(labelText,element){const group=document.createElement('div'),label=document.createElement('label');label.textContent=labelText;element.id=element.id||'field-'+Math.random().toString(36).slice(2);label.htmlFor=element.id;group.append(label,element);return group;}
+function build(){
+ const a=request.attempt;
+ $('question').textContent=a.question;$('answer').textContent=a.response;$('reference').textContent=a.reference;
+ const area=$('criteria');area.replaceChildren();
+ a.criteria.forEach((c,i)=>{
+  const fs=document.createElement('fieldset'),legend=document.createElement('legend');legend.textContent=(i+1)+'. '+c.textSnapshot;
+  fs.append(legend);
+  const select=document.createElement('select');select.id='status-'+i;select.required=true;
+  statuses.forEach(([value,label])=>{const option=document.createElement('option');option.value=value;option.textContent=label;select.append(option)});
+  fs.append(field('Criterion judgment',select));
+  const excerpt=document.createElement('textarea');excerpt.id='excerpt-'+i;excerpt.maxLength=700;excerpt.rows=2;excerpt.placeholder='Copy the exact supporting words from the written answer';
+  fs.append(field('Exact excerpt (required for Included)',excerpt));
+  const reason=document.createElement('textarea');reason.id='reason-'+i;reason.maxLength=1200;reason.rows=2;reason.placeholder='Explain a missing relationship or why you cannot tell';
+  fs.append(field('Reason (required for Not demonstrated or Cannot determine)',reason));
+  area.append(fs);
+ });
+ $('note').value='';$('confirmed').checked=false;
+ $('slot').value='A';$('role').value='other_person';$('different').checked=false;$('unseen').checked=false;
+ $('b-attestations').hidden=true;$('work').hidden=false;
+}
+$('slot').addEventListener('change',()=>{$('b-attestations').hidden=$('slot').value!=='B';});
+$('packet-file').addEventListener('change',async()=>{
+ request=null;$('work').hidden=true;
+ const file=$('packet-file').files?.[0];if(!file)return;
+ if(file.size>MAX_REQUEST){status('Request is too large. Ask for a fresh, single-answer packet.',true);return}
+ try{
+  const r=validate(JSON.parse(await file.text()));
+  if(JSON.stringify(r).length>MAX_REQUEST)throw Error('Reviewer request exceeds the supported limit.');
+  request=r;build();status('One answer and its original rubric loaded in memory. No upload or account required.');
+ }catch(e){status(e.message||'Cannot open this file.',true)}
+});
+$('review-form').addEventListener('submit',event=>{
+ event.preventDefault();
+ try{
+  if(!request)throw Error('Open a request file first.');
+  const slot=$('slot').value;
+  if(slot==='B'&&(!$('different').checked||!$('unseen').checked))
+   throw Error('Reviewer B must confirm both independence statements.');
+  if(!$('confirmed').checked)throw Error('Confirm that you performed the human review.');
+  const findings=request.attempt.criteria.map((c,i)=>{
+   const status=$('status-'+i).value,excerpt=$('excerpt-'+i).value.trim(),rationale=$('reason-'+i).value.trim();
+   if(!statuses.some(s=>s[0]===status))throw Error('Choose a valid criterion judgment.');
+   if(excerpt&&!request.attempt.response.includes(excerpt))throw Error('Criterion '+(i+1)+': copied excerpt is not in the original response.');
+   if(status==='included'&&!excerpt)throw Error('Criterion '+(i+1)+': Included requires an exact supporting excerpt.');
+   if(['not_demonstrated','uncertain'].includes(status)&&rationale.length<8)
+     throw Error('Criterion '+(i+1)+': explain the gap or uncertainty.');
+   if(status==='unassessed'&&(excerpt||rationale))throw Error('Criterion '+(i+1)+': clear evidence/reason when Not assessed.');
+   return {criterionId:c.criterionId,criterionVersion:c.version,status,excerpt,rationale};
+  });
+  if(findings.every(f=>f.status==='unassessed'))throw Error('Assess at least one rubric criterion.');
+  const completed={
+    format:'arw-offline-review-response-v1',version:1,requestId:request.requestId,
+    snapshotFingerprint:request.snapshotFingerprint,attemptId:request.attempt.attemptId,
+    slot,reviewerRole:$('role').value,completedAt:new Date().toISOString(),confirmed:true,
+    differentPersonAttested:slot==='B',noPriorJudgmentsAttested:slot==='B',
+    findings,note:$('note').value.trim()
+  };
+  const blob=new Blob([JSON.stringify(completed,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob);
+  const link=document.createElement('a');link.href=url;link.download='active-recall-review-'+slot.toLowerCase()+'-'+request.requestId+'.json';
+  document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
+  status('Reviewer '+slot+' response file saved. Return it to the learner for manual import. Nothing was uploaded.');
+ }catch(e){status(e.message||'Could not save the review.',true);}
+});
+})();
+</script>
+</body>
+</html>
