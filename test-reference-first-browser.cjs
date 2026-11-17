@@ -91,6 +91,7 @@ async function main(){
      'Reference must remain withheld until both distinct first passes are imported.');
    await owner.locator('#reference-first-import').setInputFiles(asFile(B.firstBytes,'B-first.json'));
    await owner.locator('.toast:not(.error)').waitFor();
+   await owner.locator('summary').filter({hasText:'Export reference-free request and release later references'}).click();
    const revealButton=owner.locator('[data-action=export-reference-reveal][data-slot="A"]');
    await revealButton.waitFor({state:'visible'});
    const revealPromise=owner.waitForEvent('download');
