@@ -157,3 +157,6 @@
 @media(max-width:600px){.rubric-evidence-audit{padding:11px}.rubric-evidence-list{max-height:300px}}
 
 .rubric-evidence-context{white-space:pre-wrap;overflow-wrap:anywhere;max-height:190px;overflow:auto}
+
+/* Blueprint 3.7: rubric alternatives and explicit syllabus alignment */
+.rubric-alignment-form{padding:10px 0 8px;border-top:1px solid var(--border);gap:8px!important}.rubric-goal-option{display:flex;gap:9px;align-items:flex-start;line-height:1.45;overflow-wrap:anywhere}.rubric-goal-option input{margin-top:4px;flex-shrink:0}

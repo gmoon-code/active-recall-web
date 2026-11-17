@@ -60,11 +60,25 @@
         const knownTargets=new Set(input.retrievalTargets.map(t=>t.id)),ids=new Set();
         for(const c of input.rubricCriteria){
           if(typeof c.id!=='string'||!c.id||ids.has(c.id)||!knownTargets.has(c.targetId)||typeof c.text!=='string'||!c.text.trim()||!Number.isSafeInteger(c.version)||c.version<1)throw Error('Invalid rubric criterion.');
+          if(c.acceptedAlternatives!==undefined){
+            if(!Array.isArray(c.acceptedAlternatives)||c.acceptedAlternatives.length>5||c.acceptedAlternatives.some(x=>typeof x!=='string'||!x.trim()||x.length>240))throw Error('Invalid accepted answer formulations in backup.');
+            const all=[c.text,...c.acceptedAlternatives].map(x=>x.trim().toLocaleLowerCase());
+            if(new Set(all).size!==all.length)throw Error('Repeated accepted answer formulation in backup.');
+          }
+          if(c.syllabusGoalIds!==undefined){
+            if(!Array.isArray(c.syllabusGoalIds)||c.syllabusGoalIds.length>10||new Set(c.syllabusGoalIds).size!==c.syllabusGoalIds.length)throw Error('Invalid rubric syllabus links in backup.');
+            const req=input.requirements.find(r=>r.id===c.requirementId);
+            if(!req||c.syllabusGoalIds.some(gid=>{
+              const g=(input.syllabusObjectives||[]).find(g=>g.id===gid);
+              return !g||g.courseId!==req.courseId; // Historical alignments can outlive an archived/unlinked goal.
+            }))throw Error('Invalid cross-course rubric syllabus link in backup.');
+          }
           ids.add(c.id);
         }
         for(const a of input.attempts){
           if(a.practiceStage!==undefined&&!['regular','immediate_post_study'].includes(a.practiceStage))throw Error('Invalid retrieval practice stage in backup.');
           if(a.correctionNote!==undefined&&(typeof a.correctionNote!=='string'||a.correctionNote.length>2000))throw Error('Invalid learner correction note in backup.');
+          if(a.criterionChecks?.some(c=>c.acceptedAlternativesSnapshot!==undefined&&(!Array.isArray(c.acceptedAlternativesSnapshot)||c.acceptedAlternativesSnapshot.length>5||c.acceptedAlternativesSnapshot.some(x=>typeof x!=='string'||x.length>240))))throw Error('Invalid historic answer formulations in backup.');
           if(a.criterionChecks===undefined)continue;
           if(!Array.isArray(a.criterionChecks)||a.criterionChecks.some(c=>!c||!ids.has(c.criterionId)||!['met','missed','unsure'].includes(c.status)))throw Error('Invalid criterion attempt history.');
         }
@@ -218,9 +232,62 @@
     if(c.text===text)return c;
     if(getCriteria(db,c.targetId,{includePending:true}).some(x=>x.id!==c.id&&x.text.toLowerCase()===text.toLowerCase()))throw Error('This criterion already exists.');
     const at=new Date().toISOString();
-    c.version++;c.text=text;c.needsReview=false;c.updatedAt=at;
+    c.version++;c.text=text;c.updatedAt=at;
+    // A changed required idea may invalidate its previously accepted paraphrases
+    // and goal mapping. Keep history, but require the learner to review these again.
+    const hadSupplement=!!((c.acceptedAlternatives||[]).length||(c.syllabusGoalIds||[]).length);
+    if(hadSupplement){c.acceptedAlternatives=[];c.syllabusGoalIds=[];c.needsReview=true;}
+    else c.needsReview=false;
     db.criterionVersions.push({criterionId:c.id,version:c.version,text,createdAt:at});
     db.events.push({type:'criterion.revised',entityId:c.id,version:c.version,at});return c;
+  }
+  // One rubric point may have several learner-reviewed, acceptable expressions.
+  // These are examples for self-check; the app NEVER compares or grades answers automatically.
+  // A change increments the criterion version and holds it out of practice until verified.
+  function setCriterionAlternatives(db,criterionId,raw){
+    const c=(db.rubricCriteria||[]).find(c=>c.id===criterionId&&c.active!==false);
+    if(!c)throw Error('Criterion not found.');
+    if(typeof raw!=='string'||raw.length>1500)throw Error('Alternative formulations must be plain text under 1,500 characters.');
+    const alternatives=raw.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
+    if(alternatives.length>5||alternatives.some(x=>x.length>240))throw Error('Use no more than five alternatives, each under 240 characters.');
+    const keys=[c.text,...alternatives].map(x=>x.toLocaleLowerCase());
+    if(new Set(keys).size!==keys.length)throw Error('Alternative formulations must be distinct from the criterion and one another.');
+    if(JSON.stringify(c.acceptedAlternatives||[])===JSON.stringify(alternatives))return c;
+    const at=new Date().toISOString();
+    c.version++;c.acceptedAlternatives=alternatives;c.needsReview=true;c.updatedAt=at;
+    db.criterionVersions.push({criterionId:c.id,version:c.version,text:c.text,acceptedAlternatives:[...alternatives],createdAt:at});
+    db.events.push({type:'criterion.alternatives_revised',entityId:c.id,version:c.version,at});
+    return c;
+  }
+  // Syllabus alignment is explicit human annotation, not curriculum coverage,
+  // automated grading, a new retrieval target or evidence of recall.
+  function rubricSyllabusAlignment(db,targetId){
+    const target=(db.retrievalTargets||[]).find(t=>t.id===targetId&&t.active!==false);
+    if(!target)throw Error('Recall focus area not found.');
+    const req=db.requirements.find(r=>r.id===target.requirementId);
+    if(!req)throw Error('Requirement not found.');
+    const criteria=getCriteria(db,targetId,{includePending:true});
+    const goals=(db.syllabusObjectives||[]).filter(g=>g.active!==false&&g.courseId===req.courseId&&g.requirementIds.includes(req.id));
+    return {targetId,requirementId:req.id,goals:goals.map(g=>{
+      const linked=criteria.filter(c=>(c.syllabusGoalIds||[]).includes(g.id));
+      return {id:g.id,text:g.text,verifiedCriteria:linked.filter(c=>!c.needsReview).length,pendingCriteria:linked.filter(c=>c.needsReview).length,unmappedCriteria:criteria.length-linked.length};
+    }),warning:'Explicit links record intended alignment, not proof that a syllabus goal is fully covered or that the science is correct.'};
+  }
+  function setCriterionSyllabusGoals(db,criterionId,goalIds){
+    const c=(db.rubricCriteria||[]).find(c=>c.id===criterionId&&c.active!==false);
+    if(!c)throw Error('Criterion not found.');
+    if(!Array.isArray(goalIds)||goalIds.length>10||goalIds.some(x=>typeof x!=='string')||new Set(goalIds).size!==goalIds.length)throw Error('Invalid syllabus goal selection.');
+    const req=db.requirements.find(r=>r.id===c.requirementId&&r.active!==false);
+    if(!req)throw Error('Requirement not found.');
+    for(const gid of goalIds){
+      const g=(db.syllabusObjectives||[]).find(g=>g.id===gid&&g.active!==false);
+      if(!g||g.courseId!==req.courseId||!g.requirementIds.includes(req.id))throw Error('Link the question to an active syllabus objective in the same course first.');
+    }
+    const sorted=[...goalIds].sort();
+    if(JSON.stringify([...(c.syllabusGoalIds||[])].sort())===JSON.stringify(sorted))return c;
+    c.syllabusGoalIds=sorted;c.updatedAt=new Date().toISOString();
+    db.events.push({type:'criterion.syllabus_aligned',entityId:c.id,syllabusGoalIds:[...sorted],at:c.updatedAt});
+    return c;
   }
   function verifyCriterion(db,criterionId){
     const c=(db.rubricCriteria||[]).find(c=>c.id===criterionId&&c.active!==false);
@@ -979,7 +1046,7 @@
       const criterion=available.get(check?.criterionId);
       if(!criterion||seen.has(criterion.id)||!['met','missed','unsure'].includes(check.status))throw Error('Invalid criterion checklist selection.');
       seen.add(criterion.id);
-      return {criterionId:criterion.id,version:criterion.version,textSnapshot:criterion.text,status:check.status};
+      return {criterionId:criterion.id,version:criterion.version,textSnapshot:criterion.text,acceptedAlternativesSnapshot:[...(criterion.acceptedAlternatives||[])],status:check.status};
     });
     const counts={met:checks.filter(x=>x.status==='met').length,missed:checks.filter(x=>x.status==='missed').length,unsure:checks.filter(x=>x.status==='unsure').length,unassessed:criteria.length-checks.length};
     // If the learner explicitly reports a missing/uncertain point, a positive
@@ -1084,5 +1151,5 @@
   }
   function validateImport(x){return migrateDb(x);}
 
-  return {DAY,id,today,addDays,daysUntil,initialDb,migrateDb,validateImport,getTarget,getTargets,getMemory,getActivities,getCriteria,addCriterion,proposeCriteria,rubricQualityReview,addRubricEvidenceDraft,reviseCriterion,verifyCriterion,archiveCriterion,criterionStatus,rubricProgress,chooseActivity,addRetrievalTarget,verifyRetrievalTarget,addActivityVariant,deactivateActivity,reviseSource,addCourse,addSyllabusObjectives,updateSyllabusObjective,setSyllabusLink,setSyllabusMaterialsReady,setSyllabusLearningGuide,guidedLearningInfo,archiveSyllabusObjective,syllabusCoverage,draftRequirements,addSource,addImportedDocument,addRequirement,editRequirement,verifyRequirement,integrity:I.integrity,questionCoverage:I.questionCoverage,questionWarnings:I.questionWarnings,learningObjectiveMap,variationStudio,questionStudio,adoptQuestionProposal,coverageReviewQueue,addAssessment,linkedAssessments,estimatedSeconds,durationEstimate,evidenceType,inputModeFor,evidenceSummary,eligibleCandidates,planActivities,buildReviewAgenda,forecastSchedule,recordAttempt,latestCorrectiveFeedback,assessmentCoverage,stats,demoDb};
+  return {DAY,id,today,addDays,daysUntil,initialDb,migrateDb,validateImport,getTarget,getTargets,getMemory,getActivities,getCriteria,addCriterion,proposeCriteria,rubricQualityReview,addRubricEvidenceDraft,reviseCriterion,setCriterionAlternatives,rubricSyllabusAlignment,setCriterionSyllabusGoals,verifyCriterion,archiveCriterion,criterionStatus,rubricProgress,chooseActivity,addRetrievalTarget,verifyRetrievalTarget,addActivityVariant,deactivateActivity,reviseSource,addCourse,addSyllabusObjectives,updateSyllabusObjective,setSyllabusLink,setSyllabusMaterialsReady,setSyllabusLearningGuide,guidedLearningInfo,archiveSyllabusObjective,syllabusCoverage,draftRequirements,addSource,addImportedDocument,addRequirement,editRequirement,verifyRequirement,integrity:I.integrity,questionCoverage:I.questionCoverage,questionWarnings:I.questionWarnings,learningObjectiveMap,variationStudio,questionStudio,adoptQuestionProposal,coverageReviewQueue,addAssessment,linkedAssessments,estimatedSeconds,durationEstimate,evidenceType,inputModeFor,evidenceSummary,eligibleCandidates,planActivities,buildReviewAgenda,forecastSchedule,recordAttempt,latestCorrectiveFeedback,assessmentCoverage,stats,demoDb};
 });
