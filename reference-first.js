@@ -71,11 +71,11 @@
  function activeRequest(a){return (a.referenceFirstRequests||[]).findLast(r=>r.revokedAt===null)||null;}
  function issue(db,{attemptId,now=new Date(),requestId=null}={}){
    const a=savedAttempt(db,attemptId);
+   const prior=activeRequest(a);
+   if(prior)return validateRequest(requestFrom(a,prior));
    if(a.independentReviewPair?.A)throw Error('The first review has already been recorded for this answer.');
    if((a.offlineReviewRequests||[]).some(r=>!r.revokedAt))
      throw Error('Revoke the existing v4.3 review packet before starting a reference-free workflow.');
-   const prior=activeRequest(a);
-   if(prior)return validateRequest(requestFrom(a,prior));
    if(!(now instanceof Date)||!Number.isFinite(now.getTime())||now.getTime()<Date.parse(a.createdAt))
      throw Error('Review request time must follow the original attempt.');
    const id=requestId??(typeof crypto!=='undefined'&&crypto.randomUUID?crypto.randomUUID():null);
