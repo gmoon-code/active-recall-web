@@ -20,6 +20,8 @@
   if(!Pilot)throw Error('Missing local prospective reviewer pilot module.');
   const Training=(typeof module!=='undefined'&&module.exports)?require('./reviewer-training.js'):globalThis.ActiveRecallReviewerTraining;
   if(!Training)throw Error('Missing local synthetic reviewer-training module.');
+  const Usability=(typeof module!=='undefined'&&module.exports)?require('./reviewer-usability.js'):globalThis.ActiveRecallReviewerUsability;
+  if(!Usability)throw Error('Missing voluntary fictional reviewer-usability module.');
   const DAY = 86400000;
   // Policy IDs are immutable labels for decisions. Changing any coefficient
   // requires a new ID; historical decisions must never be recomputed in place.
@@ -153,6 +155,7 @@
         F.validate(input); // Optional v4.4 reference-withheld, locked first-pass protocol.
         Pilot.validate(input); // Optional v4.5 prospective screening protocol; no schema migration.
         Training.validate(input); // Optional v4.6 independent synthetic reviewer practice; no schema migration.
+        Usability.validate(input); // Optional v4.7 voluntary fictional reviewer usability, unchanged schema.
         return input;
       }
       const upgraded=JSON.parse(JSON.stringify(input));
