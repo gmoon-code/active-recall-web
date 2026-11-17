@@ -53,9 +53,9 @@ The audit reports the reviewer-role mix and explicit exclusion counts. It suppre
 
 ## Engineering verification
 
-This branch adds Node built-in tests covering original snapshots, missing and uncertain evidence, exact-quote anchoring, explicit confirmation, legacy data, unsafe retrospective grading, append-only corrections, schedule immutability, delayed-audit exclusions, tampered backup rejection and static UI/offline-cache integration. A free GitHub Actions job checks JavaScript syntax and runs tests. A separate six-test static preflight checks essential GitHub Pages architecture.
+This branch adds Node built-in tests covering original snapshots, missing and uncertain evidence, exact-quote anchoring, explicit confirmation, legacy data, unsafe retrospective grading, append-only corrections, schedule immutability, delayed-audit exclusions, tampered backup rejection and static UI/offline-cache integration. A free GitHub Actions job checks JavaScript syntax and runs tests. A separate six-test static preflight checks essential GitHub Pages architecture. **GitHub Actions reported 35/35 tests passed**, including six free-deployment preflights, with JavaScript syntax checks. Its real Chromium desktop/mobile browser run also passed: the interface displayed preserved question/answer and rubric snapshots, saved a human review in IndexedDB, appended a correction without overwriting the original and confirmed the live schedule was unchanged. The smoke run used a free temporary test dependency on the CI runner only; the public app requires none.
 
-The previous release reported 308 tests and desktop/mobile browser checks, but those historical test files were not present in the published repository when v4.1 development began. These new checks therefore do **not** replace or certify that original full regression suite. A desktop/mobile browser run against the actual new build remains necessary before claiming equivalent end-to-end coverage.
+The previous release reported 308 tests and desktop/mobile browser checks, but those historical test files were not present in the published repository when v4.1 development began. These new checks do **not** replace or certify that original full regression suite. The browser smoke is a targeted v4.1 workflow check, not comprehensive end-to-end or accessibility certification.
 
 ## Research priorities after v4.1
 
