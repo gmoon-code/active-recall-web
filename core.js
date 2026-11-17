@@ -265,7 +265,9 @@
       if(!g||typeof g.id!=='string'||!g.id||ids.has(g.id)||!courses.has(g.courseId)||
         typeof g.text!=='string'||!g.text.trim()||g.text.length>400||
         !Array.isArray(g.requirementIds)||g.requirementIds.length>100||
-        g.requirementIds.some(rid=>typeof rid!=='string'||requirements.get(rid)!==g.courseId))
+        g.requirementIds.some(rid=>typeof rid!=='string'||requirements.get(rid)!==g.courseId)||
+        (g.materialsReady!==undefined&&typeof g.materialsReady!=='boolean')||
+        (g.materialsReadyAt!==undefined&&g.materialsReadyAt!==null&&(typeof g.materialsReadyAt!=='string'||!Number.isFinite(Date.parse(g.materialsReadyAt)))))
         throw Error('Invalid syllabus objective or cross-course link.');
       if(new Set(g.requirementIds).size!==g.requirementIds.length)throw Error('Duplicate syllabus objective link.');
       ids.add(g.id);
@@ -305,6 +307,16 @@
     g.requirementIds=[...set];g.updatedAt=new Date().toISOString();
     db.events.push({type:linked?'syllabus.question_linked':'syllabus.question_unlinked',entityId:goalId,requirementId,at:g.updatedAt});return g;
   }
+  // Material preparation is a learner-attested workflow step. NEVER a recall grade,
+  // memory record, verified objective or claim of actual understanding.
+  function setSyllabusMaterialsReady(db,goalId,ready){
+    if(typeof ready!=='boolean')throw Error('Preparation confirmation must be true or false.');
+    const goal=getSyllabusGoal(db,goalId);
+    if(goal.materialsReady===ready)return goal;
+    const at=new Date().toISOString();goal.materialsReady=ready;goal.materialsReadyAt=ready?at:null;goal.updatedAt=at;
+    db.events.push({type:ready?'syllabus.materials_prepared':'syllabus.preparation_reopened',entityId:goal.id,at});
+    return goal;
+  }
   function archiveSyllabusObjective(db,goalId){const g=getSyllabusGoal(db,goalId);g.active=false;g.updatedAt=new Date().toISOString();db.events.push({type:'syllabus.objective_archived',entityId:g.id,at:g.updatedAt});return g;}
   const stopWords=new Set('a an and are as at be can describe do does explain for from how in into is it its of on or our the their this to under what when where which why with without using different between discuss compare identify understand able learning about evidence process concept system model'.split(' '));
   function goalTerms(s){return new Set(String(s||'').toLocaleLowerCase().match(/[\p{L}\p{N}]{3,}/gu)?.filter(x=>!stopWords.has(x))||[]);}
@@ -322,7 +334,7 @@
       const status=eligible.length?'linked_verified':mapped.length?'linked_review':'unlinked';
       const candidates=reqs.filter(r=>!g.requirementIds.includes(r.id)).map(r=>({id:r.id,question:r.question,score:goalMatch(g.text,[r.objective,r.question,r.sourceQuote].join(' ')),verified:r.verificationStatus==='verified'&&!r.sourceRevisionPending})).filter(x=>x.score>=0.55).sort((a,b)=>b.score-a.score).slice(0,3);
       const relatedSources=sources.map(s=>({id:s.id,title:s.title,score:Math.max(0,...String(s.content).slice(0,16000).split(/[.?!;\n]+/).slice(0,200).map(line=>goalMatch(g.text,line)))})).filter(x=>x.score>=0.55).sort((a,b)=>b.score-a.score).slice(0,3);
-      return {id:g.id,text:g.text,status,links:mapped.map(r=>({id:r.id,question:r.question,verified:eligible.includes(r)})),candidates,relatedSources};
+      return {id:g.id,text:g.text,status,materialsReady:g.materialsReady===true,links:mapped.map(r=>({id:r.id,question:r.question,verified:eligible.includes(r)})),candidates,relatedSources};
     });
     return {courseId,total:rows.length,linkedVerified:rows.filter(r=>r.status==='linked_verified').length,linkedReview:rows.filter(r=>r.status==='linked_review').length,unlinked:rows.filter(r=>r.status==='unlinked').length,rows,warning:'A syllabus objective is linked to a verified question only after you explicitly connect it. Suggestions use simple word overlap, not a proof of curriculum coverage, scientific accuracy or mastery.'};
   }
@@ -729,13 +741,48 @@
         priorGap:prior>1?Math.min(21,Math.max(2,Math.round(prior*1.5))):2,
         lastAssigned:null});
     }
+    // These are planning steps, not simulated learning outcomes. One *first*
+    // preparation step per unmet syllabus objective in the forecast horizon.
+    // A verified linked recall target is never duplicated as preparation.
+    const reqById=new Map(db.requirements.map(r=>[r.id,r]));
+    const goals=(db.syllabusObjectives||[]).filter(g=>g.active!==false&&db.courses.some(c=>c.id===g.courseId));
+    const preparation=goals.flatMap(g=>{
+      const mapped=(g.requirementIds||[]).map(id=>reqById.get(id)).filter(r=>r&&r.active!==false&&r.courseId===g.courseId);
+      const verified=mapped.some(r=>requirementEligible(r)&&r.verificationStatus==='verified'&&!r.sourceRevisionPending&&getTargets(db,r.id).length&&getActivities(db,r.id).length);
+      if(verified)return [];
+      const kind=mapped.length?'review_question':g.materialsReady===true?'draft_question':'prepare_sources';
+      // Course-wide assessment is a possible priority cue, NOT an asserted
+      // direct syllabus-goal/exam link or proof of objective coverage.
+      const upcoming=db.assessments.filter(a=>a.courseId===g.courseId&&daysUntil(a.date,start)>=0).map(a=>daysUntil(a.date,start));
+      const daysToCourseAssessment=upcoming.length?Math.min(...upcoming):null;
+      return [{goalId:g.id,courseId:g.courseId,kind,label:g.text,seconds:240,daysToCourseAssessment,
+        requirementId:mapped[0]?.id||null,
+        reason:kind==='prepare_sources'?'Locate and study source material before writing a question':kind==='draft_question'?'Material prepared; write and verify a retrieval question':'Review linked question and its answer before practice'}];
+    });
+    const preparationAssigned=new Set();
     const assigned=new Map();
     for(let i=0;i<horizon;i++){
       const when=dateStart(addDays(dateStart(startDate),i));when.setHours(12,0,0,0);
       const date=today(when),off=excluded.has(date),capacity=off?0:(when.getDay()===0||when.getDay()===6?weekend:weekday);
       const reserve=capacity<=5?Math.min(capacity*60,40):Math.min(180,Math.round(capacity*60*0.08));
       let available=Math.max(0,capacity*60-reserve);
-      const activities=[],perCourse={},perReq={};let previousCourse='';
+      const activities=[],preparationActivities=[],perCourse={},perReq={};let previousCourse='';
+      // Preserve short sessions for already due retrieval. When there is no
+      // review fit, a four-minute preparation step can use even a five-minute
+      // day. With longer budgets, make room for one preparation step per day.
+      const dueReviewFits=[...states.values()].some(v=>v.rounds<4&&v.nextDate<=date&&v.candidate.seconds<=available&&v.lastAssigned!==date);
+      const canPrepare=available>=240 && (!dueReviewFits||capacity>=15);
+      if(canPrepare){
+        const waiting=preparation.filter(task=>!preparationAssigned.has(task.goalId));
+        waiting.sort((a,b)=>{
+          const priority=task=>task.daysToCourseAssessment===null?0:Math.max(0,15-task.daysToCourseAssessment*2);
+          return priority(b)-priority(a)||a.goalId.localeCompare(b.goalId);
+        });
+        if(waiting.length){
+          const task=waiting[0];preparationActivities.push(task);preparationAssigned.add(task.goalId);
+          available-=task.seconds;
+        }
+      }
       // Select from *currently* eligible due windows; a missed day never
       // implies forgetting and does not create fictitious overdue attempts.
       while(available>0){
@@ -766,7 +813,7 @@
         v.priorGap=Math.min(28,Math.max(gap+1,Math.round(gap*1.8)));
         if(conditional)conditionalTotal++;else firstPassTotal++;
       }
-      rows.push({date,budgetMinutes:capacity,reserveSeconds:reserve,usedSeconds:activities.reduce((n,a)=>n+a.seconds,0),activities,
+      rows.push({date,budgetMinutes:capacity,reserveSeconds:reserve,usedSeconds:activities.reduce((n,a)=>n+a.seconds,0)+preparationActivities.reduce((n,a)=>n+a.seconds,0),activities,preparationActivities,
         overdueUnplaced:[...states.values()].filter(v=>v.rounds===0&&v.nextDate<=date).length});
     }
     const dueWithin=[...states.values()].filter(v=>v.initialDate<=endDate);
@@ -781,9 +828,10 @@
         eligibleTargets:eligible.length,blocked:focus.length-eligible.length,firstPass,conditionalOpportunities:conditional};
     });
     return {days:rows,coverage,plannedTargets:firstPassTotal,conditionalOpportunities:conditionalTotal,
+      preparationSteps:preparationAssigned.size,unplannedPreparation:preparation.length-preparationAssigned.size,preparationGoals:preparation.length,
       unplannedDue:deferred,dueInHorizon:dueWithin.length,eligibleAtStart:pool.length,
       forecastType:'conditional_review_agenda',
-      warning:'Only each target’s next known review window uses current evidence. Later spaced revisit slots are conditional planning placeholders, not simulated successful retrievals, guaranteed retention, or exam results. Actual study results automatically change the next calculation. Intervals and priorities are provisional heuristics, not validated optimal timing.'};
+      warning:'Syllabus preparation steps are planning prompts, not recorded learning or evidence of mastery. Only each target’s next known review window uses current evidence. Later spaced revisit slots are conditional planning placeholders, not simulated successful retrievals, guaranteed retention, or exam results. Actual study results automatically change the next calculation. Intervals and priorities are provisional heuristics, not validated optimal timing.'};
   }
   // Read-only workload *opportunity* forecast, not simulated learning outcomes.
   // Future answers, retention changes, and additional repetitions are unknown.
@@ -929,5 +977,5 @@
   }
   function validateImport(x){return migrateDb(x);}
 
-  return {DAY,id,today,addDays,daysUntil,initialDb,migrateDb,validateImport,getTarget,getTargets,getMemory,getActivities,getCriteria,addCriterion,proposeCriteria,reviseCriterion,verifyCriterion,archiveCriterion,criterionStatus,rubricProgress,chooseActivity,addRetrievalTarget,verifyRetrievalTarget,addActivityVariant,deactivateActivity,reviseSource,addCourse,addSyllabusObjectives,updateSyllabusObjective,setSyllabusLink,archiveSyllabusObjective,syllabusCoverage,draftRequirements,addSource,addImportedDocument,addRequirement,editRequirement,verifyRequirement,integrity:I.integrity,questionCoverage:I.questionCoverage,questionWarnings:I.questionWarnings,learningObjectiveMap,variationStudio,questionStudio,adoptQuestionProposal,coverageReviewQueue,addAssessment,linkedAssessments,estimatedSeconds,durationEstimate,evidenceType,inputModeFor,evidenceSummary,eligibleCandidates,planActivities,buildReviewAgenda,forecastSchedule,recordAttempt,assessmentCoverage,stats,demoDb};
+  return {DAY,id,today,addDays,daysUntil,initialDb,migrateDb,validateImport,getTarget,getTargets,getMemory,getActivities,getCriteria,addCriterion,proposeCriteria,reviseCriterion,verifyCriterion,archiveCriterion,criterionStatus,rubricProgress,chooseActivity,addRetrievalTarget,verifyRetrievalTarget,addActivityVariant,deactivateActivity,reviseSource,addCourse,addSyllabusObjectives,updateSyllabusObjective,setSyllabusLink,setSyllabusMaterialsReady,archiveSyllabusObjective,syllabusCoverage,draftRequirements,addSource,addImportedDocument,addRequirement,editRequirement,verifyRequirement,integrity:I.integrity,questionCoverage:I.questionCoverage,questionWarnings:I.questionWarnings,learningObjectiveMap,variationStudio,questionStudio,adoptQuestionProposal,coverageReviewQueue,addAssessment,linkedAssessments,estimatedSeconds,durationEstimate,evidenceType,inputModeFor,evidenceSummary,eligibleCandidates,planActivities,buildReviewAgenda,forecastSchedule,recordAttempt,assessmentCoverage,stats,demoDb};
 });

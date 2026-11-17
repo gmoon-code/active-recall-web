@@ -133,3 +133,10 @@
 .syllabus-candidate{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:8px 0;flex-wrap:wrap}
 .syllabus-candidate>span{flex:1 1 210px;overflow-wrap:anywhere}.syllabus-panel .quality-stats{margin-top:12px}
 @media(max-width:600px){.syllabus-row summary{align-items:flex-start}.syllabus-candidate>button{max-width:100%}}
+
+/* Blueprint 3.3 — visually separate planned preparation from real retrieval. */
+.outlook-item.preparation-step{border-left:3px solid #b68e45;background:#fbf8f0;padding:12px;border-radius:8px;margin-top:6px}
+.preparation-step .btnrow{grid-column:1/-1;justify-content:flex-start;margin-top:2px}
+@media(max-width:700px){.preparation-step .btnrow{grid-column:1/-1}.outlook-item.preparation-step{grid-template-columns:minmax(0,1fr)}}
+/* Toasts are informational; never block navigation or editing controls. */
+.toast{pointer-events:none}
