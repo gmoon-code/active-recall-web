@@ -140,3 +140,6 @@
 @media(max-width:700px){.preparation-step .btnrow{grid-column:1/-1}.outlook-item.preparation-step{grid-template-columns:minmax(0,1fr)}}
 /* Toasts are informational; never block navigation or editing controls. */
 .toast{pointer-events:none}
+
+/* Guided first-learning source preview: preserve meaningful line breaks, avoid page overflow. */
+.guided-source-text{white-space:pre-wrap;overflow-wrap:anywhere;max-height:460px;overflow-y:auto;padding:15px;line-height:1.65;font-size:13px}

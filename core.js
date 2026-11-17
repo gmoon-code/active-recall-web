@@ -63,6 +63,7 @@
           ids.add(c.id);
         }
         for(const a of input.attempts){
+          if(a.practiceStage!==undefined&&!['regular','immediate_post_study'].includes(a.practiceStage))throw Error('Invalid retrieval practice stage in backup.');
           if(a.criterionChecks===undefined)continue;
           if(!Array.isArray(a.criterionChecks)||a.criterionChecks.some(c=>!c||!ids.has(c.criterionId)||!['met','missed','unsure'].includes(c.status)))throw Error('Invalid criterion attempt history.');
         }
@@ -260,14 +261,19 @@
   function validateSyllabusObjectives(db){
     const values=db.syllabusObjectives;
     if(!Array.isArray(values)||values.length>10000)throw Error('Invalid syllabus objective records.');
-    const courses=new Set(db.courses.map(c=>c.id)),ids=new Set(),requirements=new Map(db.requirements.map(r=>[r.id,r.courseId]));
+    const courses=new Set(db.courses.map(c=>c.id)),ids=new Set(),requirements=new Map(db.requirements.map(r=>[r.id,r.courseId])),sources=new Map(db.sources.map(s=>[s.id,s]));
     for(const g of values){
       if(!g||typeof g.id!=='string'||!g.id||ids.has(g.id)||!courses.has(g.courseId)||
         typeof g.text!=='string'||!g.text.trim()||g.text.length>400||
         !Array.isArray(g.requirementIds)||g.requirementIds.length>100||
         g.requirementIds.some(rid=>typeof rid!=='string'||requirements.get(rid)!==g.courseId)||
         (g.materialsReady!==undefined&&typeof g.materialsReady!=='boolean')||
-        (g.materialsReadyAt!==undefined&&g.materialsReadyAt!==null&&(typeof g.materialsReadyAt!=='string'||!Number.isFinite(Date.parse(g.materialsReadyAt)))))
+        (g.materialsReadyAt!==undefined&&g.materialsReadyAt!==null&&(typeof g.materialsReadyAt!=='string'||!Number.isFinite(Date.parse(g.materialsReadyAt))))||
+        (g.learningGuide!==undefined&&(!g.learningGuide||typeof g.learningGuide!=='object'||Array.isArray(g.learningGuide)||
+          typeof g.learningGuide.sourceId!=='string'||!sources.has(g.learningGuide.sourceId)||sources.get(g.learningGuide.sourceId).courseId!==g.courseId||
+          !Number.isSafeInteger(g.learningGuide.sourceVersion)||g.learningGuide.sourceVersion<1||g.learningGuide.sourceVersion>sources.get(g.learningGuide.sourceId).version||
+          typeof g.learningGuide.workedExample!=='string'||g.learningGuide.workedExample.length>4000||
+          typeof g.learningGuide.updatedAt!=='string'||!Number.isFinite(Date.parse(g.learningGuide.updatedAt)))))
         throw Error('Invalid syllabus objective or cross-course link.');
       if(new Set(g.requirementIds).size!==g.requirementIds.length)throw Error('Duplicate syllabus objective link.');
       ids.add(g.id);
@@ -316,6 +322,25 @@
     const at=new Date().toISOString();goal.materialsReady=ready;goal.materialsReadyAt=ready?at:null;goal.updatedAt=at;
     db.events.push({type:ready?'syllabus.materials_prepared':'syllabus.preparation_reopened',entityId:goal.id,at});
     return goal;
+  }
+  // Learner-chosen, course-local source and learner-written worked explanation.
+  // Saving this guide never verifies a requirement or creates learning evidence.
+  function setSyllabusLearningGuide(db,goalId,{sourceId,workedExample=''}){
+    const goal=getSyllabusGoal(db,goalId),source=db.sources.find(s=>s.id===sourceId&&s.courseId===goal.courseId);
+    if(!source)throw Error('Choose a saved source from the same course.');
+    if(typeof workedExample!=='string'||workedExample.length>4000)throw Error('Worked explanation must contain no more than 4,000 characters.');
+    const at=new Date().toISOString();goal.learningGuide={sourceId:source.id,sourceVersion:source.version,workedExample:workedExample.trim(),updatedAt:at};goal.updatedAt=at;
+    db.events.push({type:'syllabus.learning_guide_saved',entityId:goal.id,sourceId:source.id,sourceVersion:source.version,at});
+    return goal.learningGuide;
+  }
+  function guidedLearningInfo(db,goalId){
+    const goal=getSyllabusGoal(db,goalId),guide=goal.learningGuide||null;
+    const source=guide?db.sources.find(s=>s.id===guide.sourceId&&s.courseId===goal.courseId):null;
+    const stale=!!guide&&(!source||source.version!==guide.sourceVersion);
+    // Only explicitly linked, current, verified questions can be retrieved.
+    const available=eligibleCandidates(db).filter(c=>c.req.courseId===goal.courseId&&goal.requirementIds.includes(c.req.id));
+    const candidate=available[0]||null;
+    return {goal,guide,source,stale,question:candidate?{requirementId:candidate.req.id,targetId:candidate.target.id,activityId:candidate.activity.id,question:candidate.activity.question,answer:candidate.activity.answer,criteria:getCriteria(db,candidate.target.id)}:null};
   }
   function archiveSyllabusObjective(db,goalId){const g=getSyllabusGoal(db,goalId);g.active=false;g.updatedAt=new Date().toISOString();db.events.push({type:'syllabus.objective_archived',entityId:g.id,at:g.updatedAt});return g;}
   const stopWords=new Set('a an and are as at be can describe do does explain for from how in into is it its of on or our the their this to under what when where which why with without using different between discuss compare identify understand able learning about evidence process concept system model'.split(' '));
@@ -643,15 +668,17 @@
   function evidenceType(a){
     if(!a||!['again','hard','good','easy'].includes(a.rating))return 'unknown';
     if(a.assisted)return 'assisted_self_report';
+    if(a.practiceStage==='immediate_post_study')return 'immediate_post_study_self_report';
     if(['again','hard'].includes(a.scheduleRating||a.rating))return 'needs_practice';
     return 'independent_self_report';
   }
   function inputModeFor(a){return ['written','oral','mental'].includes(a.inputMode)?a.inputMode:(a.response?.trim()?'written':'mental');}
   function evidenceSummary(db){
-    const result={total:db.attempts.length,written:0,oral:0,mental:0,independentSelfReport:0,assisted:0,needsPractice:0,unverifiedSource:0,withTiming:0,secondsObserved:0};
+    const result={total:db.attempts.length,written:0,oral:0,mental:0,independentSelfReport:0,assisted:0,immediatePostStudy:0,needsPractice:0,unverifiedSource:0,withTiming:0,secondsObserved:0};
     for(const a of db.attempts){result[inputModeFor(a)]++;
       const type=evidenceType(a);if(type==='independent_self_report')result.independentSelfReport++;
       if(type==='assisted_self_report')result.assisted++;
+      if(type==='immediate_post_study_self_report')result.immediatePostStudy++;
       if(type==='needs_practice')result.needsPractice++;
       if(a.requirementVerified===false)result.unverifiedSource++;
       if(validDuration(a.durationSeconds)){result.withTiming++;result.secondsObserved+=a.durationSeconds;}
@@ -879,7 +906,7 @@
     const eligibleNow=eligibleCandidates(db,start);
     return {days:rows,coverage,plannedTargets:scheduled.size,eligibleAtStart:eligibleNow.length,unplannedAtStart:eligibleNow.filter(c=>!scheduled.has(c.target.id)).length,forecastType:'first_pass_opportunities',warning:'Forecast shows possible first-pass study slots using current evidence. It does not simulate future answers, later spaced repetitions, learning gains, or exam results.'};
   }
-  function recordAttempt(db,{requirementId,targetId=null,activityId=null,response='',rating,assisted=false,sessionId=null,questionUsed=null,inputMode=null,durationSeconds=null,criterionChecks=[],now=new Date()}){
+  function recordAttempt(db,{requirementId,targetId=null,activityId=null,response='',rating,assisted=false,sessionId=null,questionUsed=null,inputMode=null,durationSeconds=null,criterionChecks=[],practiceStage=null,now=new Date()}){
     const r=db.requirements.find(x=>x.id===requirementId);if(!r)throw Error('Requirement does not exist.');
     if(!['again','hard','good','easy'].includes(rating))throw Error('Invalid rating.');
     const activity=activityId?getActivities(db,r.id).find(a=>a.id===activityId):chooseActivity(db,r.id,targetId);
@@ -906,9 +933,10 @@
     const dueAt=new Date(now.getTime()+adjustedInterval*DAY).toISOString();
     if(inputMode!==null&&!['written','oral','mental'].includes(inputMode))throw Error('Invalid response mode.');
     if(durationSeconds!==null&&(!Number.isFinite(durationSeconds)||durationSeconds<0))throw Error('Invalid activity duration.');
+    if(practiceStage!==null&&practiceStage!=='immediate_post_study')throw Error('Invalid retrieval practice stage.');
     const recordedResponse=cleanString(response,20000);
     const inferredMode=inputMode||(recordedResponse?'written':'mental');
-    const attempt={id:id('attempt'),inputMode:inferredMode,activityKind:activity.kind,durationSeconds:validDuration(durationSeconds)?Math.round(durationSeconds):null,evidenceVersion:1,requirementId:r.id,requirementVersion:r.version,retrievalTargetId:target.id,retrievalTargetVersion:target.version,activityId:activity.id,activityVersion:activity.version,questionSnapshot:cleanString(questionUsed||activity.question,500),referenceSnapshot:activity.answer,focusLabelSnapshot:target.label,requirementVerified:r.verificationStatus==='verified',courseId:r.courseId,sessionId,response:recordedResponse,rating,scheduleRating,criterionChecks:checks,criterionCounts:counts,assisted:!!assisted,gradedBy:'learner',createdAt:now.toISOString()};
+    const attempt={id:id('attempt'),inputMode:inferredMode,activityKind:activity.kind,durationSeconds:validDuration(durationSeconds)?Math.round(durationSeconds):null,evidenceVersion:1,requirementId:r.id,requirementVersion:r.version,retrievalTargetId:target.id,retrievalTargetVersion:target.version,activityId:activity.id,activityVersion:activity.version,questionSnapshot:cleanString(questionUsed||activity.question,500),referenceSnapshot:activity.answer,focusLabelSnapshot:target.label,requirementVerified:r.verificationStatus==='verified',courseId:r.courseId,sessionId,response:recordedResponse,rating,scheduleRating,criterionChecks:checks,criterionCounts:counts,assisted:!!assisted,gradedBy:'learner',practiceStage:practiceStage||'regular',createdAt:now.toISOString()};
     db.attempts.push(attempt);observeDuration(db,activity.kind,attempt.durationSeconds);
     db.memory[target.id]={dueAt,intervalDays:adjustedInterval,lastRating:scheduleRating,lastReviewedAt:now.toISOString(),reviewCount:(prev?.reviewCount||0)+1};
     db.events.push({type:'attempt.recorded',entityId:attempt.id,requirementId:r.id,targetId:target.id,at:attempt.createdAt});
@@ -977,5 +1005,5 @@
   }
   function validateImport(x){return migrateDb(x);}
 
-  return {DAY,id,today,addDays,daysUntil,initialDb,migrateDb,validateImport,getTarget,getTargets,getMemory,getActivities,getCriteria,addCriterion,proposeCriteria,reviseCriterion,verifyCriterion,archiveCriterion,criterionStatus,rubricProgress,chooseActivity,addRetrievalTarget,verifyRetrievalTarget,addActivityVariant,deactivateActivity,reviseSource,addCourse,addSyllabusObjectives,updateSyllabusObjective,setSyllabusLink,setSyllabusMaterialsReady,archiveSyllabusObjective,syllabusCoverage,draftRequirements,addSource,addImportedDocument,addRequirement,editRequirement,verifyRequirement,integrity:I.integrity,questionCoverage:I.questionCoverage,questionWarnings:I.questionWarnings,learningObjectiveMap,variationStudio,questionStudio,adoptQuestionProposal,coverageReviewQueue,addAssessment,linkedAssessments,estimatedSeconds,durationEstimate,evidenceType,inputModeFor,evidenceSummary,eligibleCandidates,planActivities,buildReviewAgenda,forecastSchedule,recordAttempt,assessmentCoverage,stats,demoDb};
+  return {DAY,id,today,addDays,daysUntil,initialDb,migrateDb,validateImport,getTarget,getTargets,getMemory,getActivities,getCriteria,addCriterion,proposeCriteria,reviseCriterion,verifyCriterion,archiveCriterion,criterionStatus,rubricProgress,chooseActivity,addRetrievalTarget,verifyRetrievalTarget,addActivityVariant,deactivateActivity,reviseSource,addCourse,addSyllabusObjectives,updateSyllabusObjective,setSyllabusLink,setSyllabusMaterialsReady,setSyllabusLearningGuide,guidedLearningInfo,archiveSyllabusObjective,syllabusCoverage,draftRequirements,addSource,addImportedDocument,addRequirement,editRequirement,verifyRequirement,integrity:I.integrity,questionCoverage:I.questionCoverage,questionWarnings:I.questionWarnings,learningObjectiveMap,variationStudio,questionStudio,adoptQuestionProposal,coverageReviewQueue,addAssessment,linkedAssessments,estimatedSeconds,durationEstimate,evidenceType,inputModeFor,evidenceSummary,eligibleCandidates,planActivities,buildReviewAgenda,forecastSchedule,recordAttempt,assessmentCoverage,stats,demoDb};
 });
