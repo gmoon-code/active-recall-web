@@ -172,6 +172,20 @@ test('a deliberate disagreement is reported without a pass/fail training percent
  assert.equal('calibrationAccuracy' in r,false);
  assert.equal('mastery' in r,false);
 });
+test('only genuinely decisive human judgments contribute to comparable agreement or disagreement',()=>{
+ const s=setup(),a=rows(s.req,{slot:'A'}),b=rows(s.req,{slot:'B'});
+ a[1]={...a[1],status:'not_demonstrated',rationale:'The answer does not explicitly describe the causal coupling.'};
+ b[1]={...b[1],status:'included',excerpt:'Protons return through ATP synthase, and ATP is produced.',rationale:''};
+ const first=submission(s.req,'A',{judgments:a}),second=submission(s.req,'B',{judgments:b});
+ T.importSubmission(s.db,first,{now:at(2)});
+ T.importSubmission(s.db,second,{now:at(3)});
+ const result=T.compare(s.db);
+ assert.equal(result.decisiveComparable,1);
+ assert.equal(result.decisiveDisagreements,1);
+ assert.equal(result.decisiveAgreements,0);
+ assert.equal(result.nondecisive,6);
+ assert.equal(result.disagreements.length,2);
+});
 test('the vague criterion is reported as a discussion topic rather than a scoring failure',()=>{
  const s=setup();importA(s);importB(s);
  const c=T.compare(s.db);
