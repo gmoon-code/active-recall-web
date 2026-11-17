@@ -37,3 +37,4 @@ jobs:
           node test-browser-smoke.cjs
           node test-paired-browser.cjs
           node test-offline-review-browser.cjs
+          node test-reference-first-browser.cjs
