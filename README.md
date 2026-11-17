@@ -1,4 +1,4 @@
-# Active Recall Web — Free Edition v3.8
+# Active Recall Web — Free Edition v3.9
 
 A local-first active-recall system with a **single multi-course automatic review agenda**, source-linked learning objectives, reviewed question drafts, and sessions that adjust to time budgets and assessments.
 
@@ -67,3 +67,7 @@ In **Knowledge → Rubric**, learners can save up to five human-reviewed alterna
 ## Blueprint 3.8 — Evidence about actual delayed retrieval
 
 Open **Progress → Delayed retrieval evidence audit** to inspect real spacing between written recall attempts (at least 24 hours after earlier practice on the same version), without counting immediately studied, hinted, or unrecorded spoken/mental responses as equivalent evidence. The audit is descriptive, based on learner self-ratings—not externally graded correctness, scientifically calibrated retention, or proof that any interval is optimal. Small-sample percentages are suppressed. New actual attempts preserve the previously proposed review due date for later evaluation; the scheduler's current interval heuristics are unchanged. Analysis is local, schema-v5 compatible, and free. See [Blueprint 3.8](docs/BLUEPRINT_3_8_FREE.md).
+
+## Blueprint 3.9 — Prospective scheduling policy audit
+
+**Progress** now records two *versioned* next-review recommendations when an actual attempt is completed: the **unchanged active interval**, which sets the real next review date, and a deliberately conservative **hypothetical shadow interval**. The audit displays counts and one-step median intervals, not a claim about which policy improves learning or predicts future workload. Historical attempts remain unchanged, and older schema-v5 JSON backups remain valid. No server, payment, cloud grading, or remote analytics is required. [Read Blueprint 3.9](docs/BLUEPRINT_3_9_FREE.md).

@@ -9,6 +9,19 @@
   const D=(typeof module !== 'undefined' && module.exports)?require('./document-import.js'):globalThis.ActiveRecallDocumentImport;
   if(!D)throw Error('Missing local document-import module.');
   const DAY = 86400000;
+  // Policy IDs are immutable labels for decisions. Changing any coefficient
+  // requires a new ID; historical decisions must never be recomputed in place.
+  const ACTIVE_SCHEDULING_POLICY = 'transparent-interval-v1';
+  const SHADOW_SCHEDULING_POLICY = 'conservative-shadow-v1';
+  // Shadow policy is a sensitivity analysis, not a recommended intervention.
+  // Nothing here predicts the learner's future answer or changes the real due date.
+  function schedulePolicyIntervals(prevInterval,scheduleRating,assisted){
+    const prior=Number.isFinite(prevInterval)&&prevInterval>0?prevInterval:0;
+    const active=scheduleRating==='again'?1/24:scheduleRating==='hard'?Math.max(0.5,prior*1.25,1):scheduleRating==='good'?Math.max(2,prior*2.15):Math.max(4,prior*3.0);
+    const conservative=scheduleRating==='again'?1/24:scheduleRating==='hard'?Math.max(1,prior*1.10):scheduleRating==='good'?Math.max(1.5,prior*1.8):Math.max(3,prior*2.4);
+    return {activeDays:assisted?Math.min(active,1):active,shadowDays:assisted?Math.min(conservative,1):conservative};
+  }
+
   const id = (prefix) => prefix + '_' + Math.random().toString(36).slice(2, 9) + Date.now().toString(36);
   const today = (date = new Date()) => `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
   const addDays = (date, n) => { const d = new Date(date.getTime()); d.setDate(d.getDate() + n); return today(d); };
@@ -80,6 +93,20 @@
           if(a.correctionNote!==undefined&&(typeof a.correctionNote!=='string'||a.correctionNote.length>2000))throw Error('Invalid learner correction note in backup.');
           if(a.priorDueAt!==undefined&&a.priorDueAt!==null&&(typeof a.priorDueAt!=='string'||!Number.isFinite(Date.parse(a.priorDueAt))))throw Error('Invalid historical review window in backup.');
           if(a.priorIntervalDays!==undefined&&a.priorIntervalDays!==null&&(!Number.isFinite(a.priorIntervalDays)||a.priorIntervalDays<0||a.priorIntervalDays>100000))throw Error('Invalid historical review interval in backup.');
+          if(a.schedulingDecision!==undefined){
+            const d=a.schedulingDecision;
+            if(!d||d.version!==1||typeof d.activePolicy!=='string'||typeof d.shadowPolicy!=='string'||
+              !/^[a-z][a-z0-9-]{1,79}$/.test(d.activePolicy)||
+              !/^[a-z][a-z0-9-]{1,79}$/.test(d.shadowPolicy)||d.activePolicy===d.shadowPolicy||
+              !Number.isFinite(d.activeIntervalDays)||d.activeIntervalDays<=0||d.activeIntervalDays>100000||
+              !Number.isFinite(d.shadowIntervalDays)||d.shadowIntervalDays<=0||d.shadowIntervalDays>100000||
+              typeof d.activeDueAt!=='string'||!Number.isFinite(Date.parse(d.activeDueAt))||
+              typeof d.shadowDueAt!=='string'||!Number.isFinite(Date.parse(d.shadowDueAt))||
+              !Number.isFinite(Date.parse(a.createdAt))||
+              Math.abs((Date.parse(d.activeDueAt)-Date.parse(a.createdAt))/DAY-d.activeIntervalDays)>0.00001||
+              Math.abs((Date.parse(d.shadowDueAt)-Date.parse(a.createdAt))/DAY-d.shadowIntervalDays)>0.00001)
+              throw Error('Invalid versioned scheduling decision in backup.');
+          }
           if(a.criterionChecks?.some(c=>c.acceptedAlternativesSnapshot!==undefined&&(!Array.isArray(c.acceptedAlternativesSnapshot)||c.acceptedAlternativesSnapshot.length>5||c.acceptedAlternativesSnapshot.some(x=>typeof x!=='string'||x.length>240))))throw Error('Invalid historic answer formulations in backup.');
           if(a.criterionChecks===undefined)continue;
           if(!Array.isArray(a.criterionChecks)||a.criterionChecks.some(c=>!c||!ids.has(c.criterionId)||!['met','missed','unsure'].includes(c.status)))throw Error('Invalid criterion attempt history.');
@@ -886,6 +913,41 @@
       exclusions,timing,elapsedHoursRange:all.attempts?{min:Math.round(elapsedMin*10)/10,max:Math.round(elapsedMax*10)/10}:null,
       warning:'These are learner SELF-RATINGS following written attempts at least 24 hours after the preceding practice of the same target/version. They are not independently verified correctness, validated retention probabilities, or exam predictions. The audit does not fit or change review intervals. Percentages are withheld for small groups.'};
   }
+  // Prospective comparison of stored *suggestions*, not retention outcomes.
+  // The alternate policy was never used to schedule the learner; no causal
+  // comparison or prediction of its effectiveness is possible from this data.
+  function schedulingPolicyAudit(db){
+    const raw=Array.isArray(db.attempts)?db.attempts:[];
+    const source=raw.slice(-50000);
+    const rows=[];
+    const kinds={recall:0,explain:0,apply:0,other:0};
+    let earlier=0,later=0,same=0,withPrior=0;
+    const seenTargets=new Set();
+    for(const a of source){
+      const d=a?.schedulingDecision;
+      if(!d||d.version!==1||d.activePolicy!==ACTIVE_SCHEDULING_POLICY||d.shadowPolicy!==SHADOW_SCHEDULING_POLICY)continue;
+      if(!Number.isFinite(d.activeIntervalDays)||!Number.isFinite(d.shadowIntervalDays)||d.activeIntervalDays<=0||d.shadowIntervalDays<=0)continue;
+      rows.push(d);
+      if(a.priorDueAt)withPrior++;
+      if(a.retrievalTargetId)seenTargets.add(a.retrievalTargetId);
+      const kind=['recall','explain','apply'].includes(a.activityKind)?a.activityKind:'other';kinds[kind]++;
+      if(d.shadowIntervalDays<d.activeIntervalDays-1e-8)earlier++;
+      else if(d.shadowIntervalDays>d.activeIntervalDays+1e-8)later++;
+      else same++;
+    }
+    const median=values=>{
+      if(!values.length)return null;
+      const sorted=values.slice().sort((a,b)=>a-b),n=sorted.length;
+      return Math.round((n%2?sorted[(n-1)/2]:(sorted[n/2-1]+sorted[n/2])/2)*100)/100;
+    };
+    return {auditVersion:1,activePolicy:ACTIVE_SCHEDULING_POLICY,shadowPolicy:SHADOW_SCHEDULING_POLICY,
+      recordedDecisions:rows.length,observedTargets:seenTargets.size,legacyWithoutSnapshots:source.length-rows.length,
+      olderAttemptsNotAudited:raw.length-source.length,withPriorDueDate:withPrior,
+      shadowEarlier:earlier,shadowLater:later,shadowSame:same,byActivityKind:kinds,
+      medianActiveDays:median(rows.map(d=>d.activeIntervalDays)),
+      medianShadowDays:median(rows.map(d=>d.shadowIntervalDays)),
+      warning:'Shadow dates are hypothetical proposals under a deliberately conservative rule, NOT observations or predicted successes. The active schedule alone determined actual practice opportunities. Differences in suggested intervals cannot establish which policy improves learning, retention, or efficiency. All outcomes remain learner self-reports.'};
+  }
   function requirementEligible(r){return r.active&&!r.sourceRevisionPending&&(r.origin!=='rule_draft'||r.verificationStatus==='verified')&&!((r.possibleConflictWith||r.possibleDuplicateOf)&&r.origin==='rule_draft'&&!r.verifiedAt);}
   function schedulingReasons(item){
     const reasons=[];
@@ -1129,18 +1191,23 @@
     // overall self-rating must not produce a long recall interval.
     const scheduleRating=(counts.missed||counts.unsure)&&['good','easy'].includes(rating)?'hard':rating;
     const prev=db.memory[target.id],prevInterval=prev?.intervalDays||0;
-    const intervalDays=scheduleRating==='again'?(1/24):scheduleRating==='hard'?Math.max(0.5,prevInterval*1.25,1):scheduleRating==='good'?Math.max(2,prevInterval*2.15):Math.max(4,prevInterval*3.0);
-    const adjustedInterval=assisted?Math.min(intervalDays,1):intervalDays;
+    const decision=schedulePolicyIntervals(prevInterval,scheduleRating,assisted);
+    const adjustedInterval=decision.activeDays;
     const dueAt=new Date(now.getTime()+adjustedInterval*DAY).toISOString();
+    const shadowDueAt=new Date(now.getTime()+decision.shadowDays*DAY).toISOString();
+    // Save both proposals prospectively, at the instant of the real rating.
+    // Only ACTIVE is ever written to memory. Shadow is an unobserved scenario.
+    const schedulingDecision={version:1,activePolicy:ACTIVE_SCHEDULING_POLICY,shadowPolicy:SHADOW_SCHEDULING_POLICY,
+      activeIntervalDays:adjustedInterval,shadowIntervalDays:decision.shadowDays,activeDueAt:dueAt,shadowDueAt};
     if(inputMode!==null&&!['written','oral','mental'].includes(inputMode))throw Error('Invalid response mode.');
     if(durationSeconds!==null&&(!Number.isFinite(durationSeconds)||durationSeconds<0))throw Error('Invalid activity duration.');
     if(practiceStage!==null&&practiceStage!=='immediate_post_study')throw Error('Invalid retrieval practice stage.');
     if(typeof correctionNote!=='string'||correctionNote.length>2000)throw Error('Correction note must be plain text, at most 2,000 characters.');
     const recordedResponse=cleanString(response,20000);
     const inferredMode=inputMode||(recordedResponse?'written':'mental');
-    const attempt={id:id('attempt'),priorDueAt:prev?.dueAt||null,priorIntervalDays:prev?.intervalDays??null,inputMode:inferredMode,activityKind:activity.kind,durationSeconds:validDuration(durationSeconds)?Math.round(durationSeconds):null,evidenceVersion:1,requirementId:r.id,requirementVersion:r.version,retrievalTargetId:target.id,retrievalTargetVersion:target.version,activityId:activity.id,activityVersion:activity.version,questionSnapshot:cleanString(questionUsed||activity.question,500),referenceSnapshot:activity.answer,focusLabelSnapshot:target.label,requirementVerified:r.verificationStatus==='verified',courseId:r.courseId,sessionId,response:recordedResponse,rating,scheduleRating,criterionChecks:checks,criterionCounts:counts,correctionNote:correctionNote.trim(),assisted:!!assisted,gradedBy:'learner',practiceStage:practiceStage||'regular',createdAt:now.toISOString()};
+    const attempt={id:id('attempt'),priorDueAt:prev?.dueAt||null,priorIntervalDays:prev?.intervalDays??null,schedulingDecision,inputMode:inferredMode,activityKind:activity.kind,durationSeconds:validDuration(durationSeconds)?Math.round(durationSeconds):null,evidenceVersion:1,requirementId:r.id,requirementVersion:r.version,retrievalTargetId:target.id,retrievalTargetVersion:target.version,activityId:activity.id,activityVersion:activity.version,questionSnapshot:cleanString(questionUsed||activity.question,500),referenceSnapshot:activity.answer,focusLabelSnapshot:target.label,requirementVerified:r.verificationStatus==='verified',courseId:r.courseId,sessionId,response:recordedResponse,rating,scheduleRating,criterionChecks:checks,criterionCounts:counts,correctionNote:correctionNote.trim(),assisted:!!assisted,gradedBy:'learner',practiceStage:practiceStage||'regular',createdAt:now.toISOString()};
     db.attempts.push(attempt);observeDuration(db,activity.kind,attempt.durationSeconds);
-    db.memory[target.id]={dueAt,intervalDays:adjustedInterval,lastRating:scheduleRating,lastReviewedAt:now.toISOString(),reviewCount:(prev?.reviewCount||0)+1};
+    db.memory[target.id]={dueAt,intervalDays:adjustedInterval,policyId:ACTIVE_SCHEDULING_POLICY,lastRating:scheduleRating,lastReviewedAt:now.toISOString(),reviewCount:(prev?.reviewCount||0)+1};
     db.events.push({type:'attempt.recorded',entityId:attempt.id,requirementId:r.id,targetId:target.id,at:attempt.createdAt});
     return {attempt,dueAt};
   }
@@ -1227,5 +1294,5 @@
   }
   function validateImport(x){return migrateDb(x);}
 
-  return {DAY,id,today,addDays,daysUntil,initialDb,migrateDb,validateImport,getTarget,getTargets,getMemory,getActivities,getCriteria,addCriterion,proposeCriteria,rubricQualityReview,addRubricEvidenceDraft,reviseCriterion,setCriterionAlternatives,rubricSyllabusAlignment,setCriterionSyllabusGoals,verifyCriterion,archiveCriterion,criterionStatus,rubricProgress,chooseActivity,addRetrievalTarget,verifyRetrievalTarget,addActivityVariant,deactivateActivity,reviseSource,addCourse,addSyllabusObjectives,updateSyllabusObjective,setSyllabusLink,setSyllabusMaterialsReady,setSyllabusLearningGuide,guidedLearningInfo,archiveSyllabusObjective,syllabusCoverage,draftRequirements,addSource,addImportedDocument,addRequirement,editRequirement,verifyRequirement,integrity:I.integrity,questionCoverage:I.questionCoverage,questionWarnings:I.questionWarnings,learningObjectiveMap,variationStudio,questionStudio,adoptQuestionProposal,coverageReviewQueue,addAssessment,linkedAssessments,estimatedSeconds,durationEstimate,evidenceType,inputModeFor,evidenceSummary,delayedRetrievalAudit,eligibleCandidates,planActivities,buildReviewAgenda,forecastSchedule,recordAttempt,latestCorrectiveFeedback,assessmentCoverage,stats,demoDb};
+  return {DAY,id,today,addDays,daysUntil,initialDb,migrateDb,validateImport,getTarget,getTargets,getMemory,getActivities,getCriteria,addCriterion,proposeCriteria,rubricQualityReview,addRubricEvidenceDraft,reviseCriterion,setCriterionAlternatives,rubricSyllabusAlignment,setCriterionSyllabusGoals,verifyCriterion,archiveCriterion,criterionStatus,rubricProgress,chooseActivity,addRetrievalTarget,verifyRetrievalTarget,addActivityVariant,deactivateActivity,reviseSource,addCourse,addSyllabusObjectives,updateSyllabusObjective,setSyllabusLink,setSyllabusMaterialsReady,setSyllabusLearningGuide,guidedLearningInfo,archiveSyllabusObjective,syllabusCoverage,draftRequirements,addSource,addImportedDocument,addRequirement,editRequirement,verifyRequirement,integrity:I.integrity,questionCoverage:I.questionCoverage,questionWarnings:I.questionWarnings,learningObjectiveMap,variationStudio,questionStudio,adoptQuestionProposal,coverageReviewQueue,addAssessment,linkedAssessments,estimatedSeconds,durationEstimate,evidenceType,inputModeFor,evidenceSummary,delayedRetrievalAudit,schedulingPolicyAudit,eligibleCandidates,planActivities,buildReviewAgenda,forecastSchedule,recordAttempt,latestCorrectiveFeedback,assessmentCoverage,stats,demoDb};
 });
