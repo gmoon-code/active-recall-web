@@ -237,54 +237,54 @@ A">${esc((a.exactAnswerKey?.answers||[]).join('\n'))}</textarea><label class="ch
     const reviewed=db.attempts.filter(a=>a.humanReviews?.length);
     const recent=db.attempts.slice().reverse().filter(a=>
       (a.activityKind==='explain'||a.activityKind==='apply')&&a.inputMode==='written'&&a.response?.trim()).slice(0,24);
-    return \`<section class="section"><div class="card">
+    return `<section class="section"><div class="card">
       <div class="card-title"><h2>Human-reviewed explanations &amp; problem-solving</h2><span class="pill blue">Manual judgments · versioned</span></div>
       <p class="small muted">Review a real saved written answer against the exact question, reference answer and criterion wording retained from that attempt. Mark what the answer actually demonstrates, quote its supporting words, and explain missing or uncertain reasoning. Revising a review adds a new record; neither review nor revision changes the original self-rating or review calendar.</p>
       <div class="grid cols3" style="margin:14px 0">
-        \${metric('Reviewed attempts',reviewed.length,'Not automatic or independent grading')}
-        \${metric('Eligible delayed judgments',audit.eligible,'24h+ independent practice, reviewed before later practice')}
-        \${metric('All criteria supported',audit.supportedShare===null?'Not enough data':audit.supportedShare+'%','Only 20+ judged attempts / 10+ distinct targets')}
+        ${metric('Reviewed attempts',reviewed.length,'Not automatic or independent grading')}
+        ${metric('Eligible delayed judgments',audit.eligible,'24h+ independent practice, reviewed before later practice')}
+        ${metric('All criteria supported',audit.supportedShare===null?'Not enough data':audit.supportedShare+'%','Only 20+ judged attempts / 10+ distinct targets')}
       </div>
-      <details class="document-outline"><summary><strong>Review history &amp; limitations</strong> <span class="small muted">\${recent.length} recent written explanations</span></summary>
+      <details class="document-outline"><summary><strong>Review history &amp; limitations</strong> <span class="small muted">${recent.length} recent written explanations</span></summary>
       <p class="small muted" style="margin:10px 0">The reviewer type is self-reported, not identity verified. An exact excerpt proves only that the quoted text is present; a person must judge whether it actually supports the criterion. Delayed eligibility is about when the answer was written, not when it was marked.</p>
-      \${recent.length?recent.map(a=>{const e=H.eligibility(a),latest=a.humanReviews?.[a.humanReviews.length-1];return \`<div class="listrow">
-        <div class="rowbody"><strong>\${esc(a.questionSnapshot)}</strong>
-        <small>\${esc(courseName(a.courseId))} · \${new Date(a.createdAt).toLocaleDateString()} · \${esc(kindLabel(a.activityKind))} · \${latest?'Review #'+latest.revision+' · '+esc(latest.finding.replaceAll('_',' ')):'Unreviewed'}</small>
-        \${!e.ok?\`<p class="small warningtext">\${esc(e.reason)}</p>\`:''}</div>
-        <button class="btn small secondary" data-action="open-human-review" data-id="\${esc(a.id)}" aria-label="Open human review for \${esc(a.questionSnapshot)}">\${latest?'View / amend':'Review answer'}</button>
-      </div>\`;}).join(''):'<p class="info">After recording a written explanation or application in Study Now, return here to review it. Add a verified criterion in Knowledge before studying if you want a traceable judgment.</p>'}
+      ${recent.length?recent.map(a=>{const e=H.eligibility(a),latest=a.humanReviews?.[a.humanReviews.length-1];return `<div class="listrow">
+        <div class="rowbody"><strong>${esc(a.questionSnapshot)}</strong>
+        <small>${esc(courseName(a.courseId))} · ${new Date(a.createdAt).toLocaleDateString()} · ${esc(kindLabel(a.activityKind))} · ${latest?'Review #'+latest.revision+' · '+esc(latest.finding.replaceAll('_',' ')):'Unreviewed'}</small>
+        ${!e.ok?`<p class="small warningtext">${esc(e.reason)}</p>`:''}</div>
+        <button class="btn small secondary" data-action="open-human-review" data-id="${esc(a.id)}" aria-label="Open human review for ${esc(a.questionSnapshot)}">${latest?'View / amend':'Review answer'}</button>
+      </div>`;}).join(''):'<p class="info">After recording a written explanation or application in Study Now, return here to review it. Add a verified criterion in Knowledge before studying if you want a traceable judgment.</p>'}
       </details>
-      <p class="info">Audit exclusions: \${audit.excluded.noReview} without a human review · \${audit.excluded.firstOrRevised} first/revised · \${audit.excluded.tooSoon} under 24h · \${audit.excluded.assistedOrImmediate} assisted/immediate · \${audit.excluded.afterLaterPractice} reviewed after later practice · \${audit.excluded.indeterminate} uncertain/unassessed without a clear gap.</p>
-      <p class="info">\${esc(audit.warning)}</p>
-    </div></section>\`;
+      <p class="info">Audit exclusions: ${audit.excluded.noReview} without a human review · ${audit.excluded.firstOrRevised} first/revised · ${audit.excluded.tooSoon} under 24h · ${audit.excluded.assistedOrImmediate} assisted/immediate · ${audit.excluded.afterLaterPractice} reviewed after later practice · ${audit.excluded.indeterminate} uncertain/unassessed without a clear gap.</p>
+      <p class="info">${esc(audit.warning)}</p>
+    </div></section>`;
   }
   function humanReviewModal(){
     const a=db.attempts.find(x=>x.id===modalReviewId),e=H.eligibility(a);
     const close='<button type="button" class="close" data-action="close-human-review" aria-label="Close review">×</button>';
-    if(!e.ok)return \`<div class="modalwrap"><div class="modal" role="dialog" aria-modal="true" aria-label="Review unavailable"><div class="modalhead"><h2>Review unavailable</h2>\${close}</div><p class="note">\${esc(e.reason)}</p><p class="small muted" style="margin-top:12px">Older responses are not silently assessed against new criteria. Existing data and study history remain unchanged.</p></div></div>\`;
+    if(!e.ok)return `<div class="modalwrap"><div class="modal" role="dialog" aria-modal="true" aria-label="Review unavailable"><div class="modalhead"><h2>Review unavailable</h2>${close}</div><p class="note">${esc(e.reason)}</p><p class="small muted" style="margin-top:12px">Older responses are not silently assessed against new criteria. Existing data and study history remain unchanged.</p></div></div>`;
     const history=a.humanReviews||[],last=history[history.length-1];
     const choices=[['included','Included — evidence in my answer'],['not_demonstrated','Not demonstrated'],['uncertain','Uncertain'],['unassessed','Not assessed']];
-    return \`<div class="modalwrap"><div class="modal" role="dialog" aria-modal="true" aria-label="Human review of explanation" style="width:min(790px,100%)"><div class="modalhead"><div><div class="eyebrow">Human review · saved attempt</div><h2>Assess the original answer</h2><p class="small muted">\${esc(courseName(a.courseId))} · \${new Date(a.createdAt).toLocaleString()} · \${esc(kindLabel(a.activityKind))}</p></div>\${close}</div>
-      <div class="note"><strong>Question at the time</strong><p>\${esc(a.questionSnapshot)}</p></div>
-      <div class="field" style="margin-top:12px"><label>Original written response (unchanged)</label><div class="answerbox">\${esc(a.response)}</div></div>
-      <details class="document-outline" open style="margin-top:12px"><summary><strong>Reference answer preserved at the time</strong></summary><div class="answerbox" style="margin-top:9px">\${esc(a.referenceSnapshot)}</div></details>
-      <form data-form="save-human-review" class="stack" style="margin-top:16px"><input type="hidden" name="attemptId" value="\${esc(a.id)}"/>
-      <div class="field"><label for="human-reviewer">Who carried out this review?</label><select id="human-reviewer" name="reviewerRole" class="select"><option value="self" \${!last||last.reviewerRole==='self'?'selected':''}>I reviewed my own answer</option><option value="other_person" \${last?.reviewerRole==='other_person'?'selected':''}>Another person reviewed it (self-reported)</option></select><small>This is not verified examiner identity or blind grading.</small></div>
+    return `<div class="modalwrap"><div class="modal" role="dialog" aria-modal="true" aria-label="Human review of explanation" style="width:min(790px,100%)"><div class="modalhead"><div><div class="eyebrow">Human review · saved attempt</div><h2>Assess the original answer</h2><p class="small muted">${esc(courseName(a.courseId))} · ${new Date(a.createdAt).toLocaleString()} · ${esc(kindLabel(a.activityKind))}</p></div>${close}</div>
+      <div class="note"><strong>Question at the time</strong><p>${esc(a.questionSnapshot)}</p></div>
+      <div class="field" style="margin-top:12px"><label>Original written response (unchanged)</label><div class="answerbox">${esc(a.response)}</div></div>
+      <details class="document-outline" open style="margin-top:12px"><summary><strong>Reference answer preserved at the time</strong></summary><div class="answerbox" style="margin-top:9px">${esc(a.referenceSnapshot)}</div></details>
+      <form data-form="save-human-review" class="stack" style="margin-top:16px"><input type="hidden" name="attemptId" value="${esc(a.id)}"/>
+      <div class="field"><label for="human-reviewer">Who carried out this review?</label><select id="human-reviewer" name="reviewerRole" class="select"><option value="self" ${!last||last.reviewerRole==='self'?'selected':''}>I reviewed my own answer</option><option value="other_person" ${last?.reviewerRole==='other_person'?'selected':''}>Another person reviewed it (self-reported)</option></select><small>This is not verified examiner identity or blind grading.</small></div>
       <h3>Criterion-by-criterion evidence</h3><p class="small muted">Use only the saved answer above. For Included, copy a verbatim excerpt. For Not demonstrated or Uncertain, explain your judgment. If you cannot assess a point, choose Not assessed; do not guess.</p>
-      \${e.criteria.map((c,i)=>{const f=last?.criteria?.[i];return \`<fieldset class="criterion-check"><legend>\${i+1}. \${esc(c.textSnapshot)} <span class="pill">v\${c.version}</span></legend>
-        <div class="field"><label for="review-status-\${i}">Human judgment</label><select class="select" name="status_\${i}" id="review-status-\${i}">\${choices.map(([val,label])=>\`<option value="\${val}" \${(f?.status||'unassessed')===val?'selected':''}>\${label}</option>\`).join('')}</select></div>
-        <div class="field" style="margin-top:10px"><label for="review-excerpt-\${i}">Exact excerpt from my original response (required for Included)</label><textarea id="review-excerpt-\${i}" name="excerpt_\${i}" class="textarea" rows="2" maxlength="700" style="min-height:65px" placeholder="Copy the words that demonstrate this point.">\${esc(f?.excerpt||'')}</textarea></div>
-        <div class="field" style="margin-top:10px"><label for="review-reason-\${i}">Reason for judgment (required for a gap or uncertainty)</label><textarea id="review-reason-\${i}" name="rationale_\${i}" class="textarea" rows="2" maxlength="1200" style="min-height:65px" placeholder="Describe which causal step, evidence, assumption, or reasoning is missing or uncertain.">\${esc(f?.rationale||'')}</textarea></div>
-      </fieldset>\`;}).join('')}
-      <div class="field"><label for="review-note">Review summary or next step (optional)</label><textarea id="review-note" class="textarea" name="note" rows="3" maxlength="3000" style="min-height:75px">\${esc(last?.note||'')}</textarea></div>
+      ${e.criteria.map((c,i)=>{const f=last?.criteria?.[i];return `<fieldset class="criterion-check"><legend>${i+1}. ${esc(c.textSnapshot)} <span class="pill">v${c.version}</span></legend>
+        <div class="field"><label for="review-status-${i}">Human judgment</label><select class="select" name="status_${i}" id="review-status-${i}">${choices.map(([val,label])=>`<option value="${val}" ${(f?.status||'unassessed')===val?'selected':''}>${label}</option>`).join('')}</select></div>
+        <div class="field" style="margin-top:10px"><label for="review-excerpt-${i}">Exact excerpt from my original response (required for Included)</label><textarea id="review-excerpt-${i}" name="excerpt_${i}" class="textarea" rows="2" maxlength="700" style="min-height:65px" placeholder="Copy the words that demonstrate this point.">${esc(f?.excerpt||'')}</textarea></div>
+        <div class="field" style="margin-top:10px"><label for="review-reason-${i}">Reason for judgment (required for a gap or uncertainty)</label><textarea id="review-reason-${i}" name="rationale_${i}" class="textarea" rows="2" maxlength="1200" style="min-height:65px" placeholder="Describe which causal step, evidence, assumption, or reasoning is missing or uncertain.">${esc(f?.rationale||'')}</textarea></div>
+      </fieldset>`;}).join('')}
+      <div class="field"><label for="review-note">Review summary or next step (optional)</label><textarea id="review-note" class="textarea" name="note" rows="3" maxlength="3000" style="min-height:75px">${esc(last?.note||'')}</textarea></div>
       <label class="checkline"><input type="checkbox" name="confirmed" value="yes" required/>I actually reviewed the original response and understand this is a human judgment, not automated grading.</label>
-      <div class="btnrow"><button type="submit" class="btn primary">\${last?'Save new review revision':'Save human review'}</button><button type="button" class="btn secondary" data-action="close-human-review">Cancel</button></div>
+      <div class="btnrow"><button type="submit" class="btn primary">${last?'Save new review revision':'Save human review'}</button><button type="button" class="btn secondary" data-action="close-human-review">Cancel</button></div>
       </form>
-      \${history.length?\`<details class="document-outline" style="margin-top:16px"><summary><strong>Past review decisions (immutable)</strong> <span class="small muted">\${history.length} version(s)</span></summary>
-        \${history.map(r=>\`<div class="criterion-check"><strong>Revision \${r.revision} · \${new Date(r.reviewedAt).toLocaleString()} · \${r.reviewerRole==='self'?'self-review':'other person (self-reported)'}</strong><p class="small">\${esc(r.finding.replaceAll('_',' '))}</p>\${r.criteria.map(f=>\`<p class="small" style="margin-top:5px"><strong>\${esc(f.criterionTextSnapshot)}:</strong> \${esc(f.status.replaceAll('_',' '))}\${f.excerpt?' · “'+esc(f.excerpt)+'”':''}\${f.rationale?' · '+esc(f.rationale):''}</p>\`).join('')}\${r.note?\`<p class="small muted">\${esc(r.note)}</p>\`:''}</div>\`).join('')}
-      </details>\`:''}
+      ${history.length?`<details class="document-outline" style="margin-top:16px"><summary><strong>Past review decisions (immutable)</strong> <span class="small muted">${history.length} version(s)</span></summary>
+        ${history.map(r=>`<div class="criterion-check"><strong>Revision ${r.revision} · ${new Date(r.reviewedAt).toLocaleString()} · ${r.reviewerRole==='self'?'self-review':'other person (self-reported)'}</strong><p class="small">${esc(r.finding.replaceAll('_',' '))}</p>${r.criteria.map(f=>`<p class="small" style="margin-top:5px"><strong>${esc(f.criterionTextSnapshot)}:</strong> ${esc(f.status.replaceAll('_',' '))}${f.excerpt?' · “'+esc(f.excerpt)+'”':''}${f.rationale?' · '+esc(f.rationale):''}</p>`).join('')}${r.note?`<p class="small muted">${esc(r.note)}</p>`:''}</div>`).join('')}
+      </details>`:''}
       <p class="info" style="margin-top:12px">A new review never rewrites the original retrieval, rubric, due date or prior reviews. Changes to study questions are not applied retroactively.</p>
-    </div></div>\`;
+    </div></div>`;
   }
 
   function insights(){const s=C.stats(db),attempts=db.attempts.slice().reverse().slice(0,12),evidence=C.evidenceSummary(db),rubric=C.rubricProgress(db);
