@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'none'; img-src 'none'; font-src 'none'; form-action 'none'; base-uri 'none'">
+<title>Active Recall · Fictional Reviewer Usability</title>
+<style>
+:root{color-scheme:light;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f3f7f5;color:#1d3530}
+*{box-sizing:border-box}body{margin:0}main{max-width:820px;margin:0 auto;padding:30px 16px 70px}
+h1{font-size:clamp(1.5rem,4vw,2.1rem);margin:6px 0 12px}h2{font-size:1.2rem}p{line-height:1.6}
+.card{background:white;border:1px solid #dae5df;border-radius:14px;padding:20px;margin:16px 0;box-shadow:0 4px 20px #18352b08}
+.eyebrow{color:#267363;letter-spacing:.12em;text-transform:uppercase;font-weight:700;font-size:.74rem}
+.small{font-size:.9rem;color:#4e665e}.note{padding:13px;border-radius:9px;background:#f0f6f3}
+pre{font:inherit;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.6}
+label{font-weight:600;display:block;margin:12px 0 6px}
+input[type=file],select,textarea{width:100%;padding:12px;border-radius:8px;border:1px solid #a6bdb4;background:white;color:#1d3530;font:inherit}
+textarea{min-height:90px;resize:vertical}
+fieldset{border:1px solid #cfddd5;border-radius:10px;padding:15px;margin:15px 0}
+legend{font-weight:700;max-width:100%;padding:0 5px}
+.check{display:flex;gap:9px;align-items:flex-start;margin:14px 0}.check input{margin-top:5px}.check span{line-height:1.5}
+button{background:#146856;border:0;border-radius:9px;padding:12px 18px;color:white;font:inherit;font-weight:700;cursor:pointer}
+button:hover{background:#0b4a3d}button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{outline:3px solid #47a691;outline-offset:2px}
+#status{min-height:24px}#status.error{color:#a73327;font-weight:700}
+[hidden]{display:none!important}
+@media(max-width:600px){main{padding:16px 10px 50px}.card{padding:14px}}
+</style>
+
+
+</head>
+<body><main>
+<div class="eyebrow">Active Recall Web · Fictional reviewer-usability exercise · Free and offline</div>
+<h1>Tell us what is confusing about evaluating an explanation.</h1>
+<p class="small">This optional exercise contains only <strong>fictional scientific explanations</strong>. It does not grade your expertise, measure learning or require a name or account. You can stop at any time without producing a file. First make your own judgments, then answer or skip short usability questions, and only afterward see discussion guidance in the interface. Your results remain on this device until <strong>you choose to download and share a file</strong>.</p>
+<section class="card">
+<h2>1. Open your invitation</h2>
+<label for="usability-invite-file">Choose the owner-issued fictional-usability invitation JSON</label>
+<input id="usability-invite-file" type="file" accept=".json,application/json"/>
+<p id="message" class="small" role="status" aria-live="polite"></p>
+</section>
+<section id="exercise-section" hidden>
+<form id="exercise-form" class="card">
+<h2>2. Make your own judgments on fictional explanations</h2>
+<p class="small">For each criterion, select Included, Not demonstrated, Uncertain or Not assessed. For Included, copy an <strong>exact excerpt</strong> from the fictional response. If you choose Not demonstrated or Uncertain, briefly explain your reasoning. If a criterion seems difficult to use, flag what makes it unclear. You may leave a criterion Not assessed.</p>
+<div id="exercise-cases"></div>
+<label class="check"><input type="checkbox" id="pre-discussion" required/>
+<span>I made my own judgments without using this page's discussion prompts. This is self-reported; source-code inspection cannot be prevented.</span></label>
+<button id="lock-exercise" type="submit">Lock my judgments and continue to optional feedback</button>
+</form>
+<section class="card" id="feedback-section" hidden>
+<h2>3. Optional feedback about the instructions</h2>
+<p class="small">For each statement, choose how clear that part of the task felt. A response of <strong>1 means strongly disagree</strong> and <strong>5 means strongly agree</strong>. You can choose Skip for any question. These ratings describe your experience, not your science expertise.</p>
+<form id="feedback-form">
+<div id="clarity-items"></div>
+<label for="biggest-obstacle">What was your biggest obstacle? (optional)</label>
+<select id="biggest-obstacle">
+ <option value="skipped">Prefer to skip</option>
+ <option value="none">No particular obstacle</option>
+ <option value="status_options">Telling status choices apart</option>
+ <option value="finding_excerpt">Finding an exact excerpt</option>
+ <option value="uncertain_option">Knowing when to use Uncertain</option>
+ <option value="criterion_wording">Rubric criteria were unclear</option>
+ <option value="interface">Finding or using controls</option>
+ <option value="other">Something else</option>
+</select>
+<label for="free-comment">What would you change? (optional, 400 characters maximum)</label>
+<textarea id="free-comment" maxlength="400"></textarea>
+<p class="small">Avoid names, school details, identifiable student records or other sensitive information. The coordinator can read any free-text comment if you share your response file, but their coded report intentionally omits your words.</p>
+<label class="check"><input id="consent-to-share" type="checkbox" required/>
+<span>I voluntarily agree to download a file containing my fictional judgments and optional feedback for a trusted coordinator. If I do not agree, I can close this page without sharing anything.</span></label>
+<button type="submit">Download my response JSON and then show discussion prompts</button>
+</form>
+</section>
+<section class="card" id="discussion-section" hidden>
+<h2>4. Discuss rubric clarity afterward</h2>
+<p class="note">Your response has been downloaded and is fixed in this page session. These are interpretive prompts, <strong>not</strong> an answer key or a certificate of reviewer accuracy. You may share the downloaded JSON with the trusted coordinator if you choose.</p>
+<div id="discussion-items"></div>
+<p class="small">This exercise cannot verify your identity, whether you had seen the prompts elsewhere, or whether other people participated. Criteria should only be revised for future assessments, never applied backward to previous study records.</p>
+</section>
+</section>
+</main>
+<script>
+(function(){
+'use strict';
+const $=id=>document.getElementById(id);
+const MAX=50000,UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const STATUSES=[['unassessed','Not assessed'],['included','Included'],['not_demonstrated','Not demonstrated'],['uncertain','Uncertain']];
+const FLAGS=[['none','No criterion concern'],['vague','Vague or subjective'],['multiple_demands','Multiple demands'],['overlap','Overlaps another criterion'],['insufficient_evidence_rule','Evidence rule unclear'],['other','Other concern']];
+const ITEM_IDS=['status','excerpt','uncertain','criteria','interface'];
+const ITEM_LABELS=[
+ 'I understood the difference between Included, Not demonstrated, Uncertain and Not assessed.',
+ 'I understood how to select an exact excerpt from the fictional written response.',
+ 'I knew when to choose Uncertain rather than assuming that an idea was absent.',
+ 'I understood what each rubric criterion asked me to look for.',
+ 'I could find and use the assessment controls without needing extra guidance.'
+];
+const OBSTACLES=['none','status_options','finding_excerpt','uncertain_option','criterion_wording','interface','other','skipped'];
+const IDS=['energy-transfer','recessive-inheritance','food-web-model'],
+ CRITERIA=[['gradient','coupling'],['alleles','genotype-phenotype'],['links','limitations','vague']];
+const INSTRUCTIONS='All exercises are fictional. Participation is voluntary, you can skip usability questions or stop without sharing a file. Choose human evidence judgments first, then give feedback before reading discussion prompts in this interface. No grades or expertise certification are calculated. Files are downloaded locally; sharing them outside the app can disclose their contents.';
+let invitation=null,original=null;
+function exact(o,fields){return !!o&&typeof o==='object'&&!Array.isArray(o)&&Object.keys(o).sort().join('|')===fields.slice().sort().join('|')}
+function sig(value){let h=2166136261,s=JSON.stringify(value);for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619)}return(h>>>0).toString(16).padStart(8,'0')}
+function message(s,error=false){$('message').textContent=s;$('message').style.color=error?'#a73327':'#267363';}
+function field(parent,text,node){const label=document.createElement('label');label.htmlFor=node.id;label.textContent=text;parent.append(label,node)}
+function select(id,options){const el=document.createElement('select');el.id=id;options.forEach(([value,text])=>{const o=document.createElement('option');o.value=value;o.textContent=text;el.append(o)});return el}
+function area(id,max){const node=document.createElement('textarea');node.id=id;node.rows=2;node.maxLength=max;return node}
+function validateInvite(raw){
+ if(!exact(raw,['format','version','method','studyId','invitationId','issuedAt','kitId','casesFingerprint','cases','items','obstacles','instructions'])||
+   raw.format!=='arw-reviewer-usability-invitation-v1'||raw.version!==1||
+   raw.method!=='fixed-invitation-synthetic-reviewer-usability-v1'||
+   !UUID.test(raw.studyId)||!UUID.test(raw.invitationId)||raw.studyId===raw.invitationId||
+   !Number.isFinite(Date.parse(raw.issuedAt))||
+   raw.kitId!=='synthetic-rubric-interpretation-v1'||!Array.isArray(raw.cases)||raw.cases.length!==3||
+   !Array.isArray(raw.items)||raw.items.length!==5||
+   !Array.isArray(raw.obstacles)||raw.obstacles.join('|')!==OBSTACLES.join('|')||
+   raw.instructions!==INSTRUCTIONS||raw.casesFingerprint!==sig(raw.cases))
+   throw Error('This is not an intact fictional reviewer-usability invitation.');
+ raw.cases.forEach((c,i)=>{
+   if(!exact(c,['id','title','question','response','criteria','discussion'])||
+     c.id!==IDS[i]||typeof c.title!=='string'||typeof c.question!=='string'||
+     typeof c.response!=='string'||typeof c.discussion!=='string'||
+     !Array.isArray(c.criteria)||c.criteria.length!==CRITERIA[i].length||
+     c.criteria.some((k,j)=>!exact(k,['id','text'])||k.id!==CRITERIA[i][j]||typeof k.text!=='string'))
+     throw Error('The fictional casebook structure is not supported.');
+ });
+ raw.items.forEach((x,i)=>{
+   if(!exact(x,['id','prompt'])||x.id!==ITEM_IDS[i]||x.prompt!==ITEM_LABELS[i])
+     throw Error('The optional clarity survey is not the fixed version.');
+ });
+ return raw;
+}
+function render(){
+ const host=$('exercise-cases');host.replaceChildren();
+ invitation.cases.forEach((c,i)=>{
+   const section=document.createElement('section');section.className='note';section.style.marginTop='20px';
+   const h=document.createElement('h2');h.textContent=(i+1)+'. '+c.title;section.append(h);
+   const q=document.createElement('p');q.textContent='Question: '+c.question;section.append(q);
+   const answer=document.createElement('pre');answer.className='note';answer.textContent=c.response;section.append(answer);
+   c.criteria.forEach((criterion,j)=>{
+     const box=document.createElement('fieldset'),legend=document.createElement('legend');
+     legend.textContent='Criterion '+(j+1)+': '+criterion.text;box.append(legend);
+     const prefix='u-'+i+'-'+j+'-';
+     field(box,'Your human judgment',select(prefix+'status',STATUSES));
+     field(box,'Verbatim excerpt (only when Included)',area(prefix+'excerpt',700));
+     field(box,'Why does the evidence not demonstrate it, or why are you uncertain?',area(prefix+'rationale',1200));
+     field(box,'Rubric clarity issue (if any)',select(prefix+'issue',FLAGS));
+     field(box,'Explain the issue (only if flagged)',area(prefix+'issue-note',1200));
+     section.append(box);
+   });
+   host.append(section);
+ });
+ const survey=$('clarity-items');survey.replaceChildren();
+ invitation.items.forEach((x,i)=>{
+   const p=document.createElement('p');p.textContent=(i+1)+'. '+x.prompt;
+   const choice=select('clarity-'+x.id,[['skip','Skip this question'],
+     ...[1,2,3,4,5].map(v=>[String(v),String(v)])]);
+   field(survey,p.textContent,choice);
+ });
+}
+function judgments(){
+ const rows=[];let assessed=0;
+ invitation.cases.forEach((c,i)=>c.criteria.forEach((k,j)=>{
+   const p='u-'+i+'-'+j+'-',status=$(p+'status').value,
+     excerpt=$(p+'excerpt').value.trim(),rationale=$(p+'rationale').value.trim(),
+     issue=$(p+'issue').value,issueNote=$(p+'issue-note').value.trim();
+   if(!STATUSES.some(x=>x[0]===status)||!FLAGS.some(x=>x[0]===issue)||
+     status==='included'&&(!excerpt||!c.response.includes(excerpt))||
+     status!=='included'&&excerpt||['not_demonstrated','uncertain'].includes(status)&&rationale.length<8||
+     status==='unassessed'&&(excerpt||rationale)||
+     issue==='none'&&issueNote||issue!=='none'&&issueNote.length<12)
+     throw Error('Check status, literal excerpt, rationale and issue explanation for '+c.title+' / '+k.id+'.');
+   if(status!=='unassessed')assessed++;
+   rows.push({caseId:c.id,criterionId:k.id,status,excerpt,rationale,issue,issueNote});
+ }));
+ if(!assessed)throw Error('Make at least one human evidence judgment before giving feedback.');
+ return rows;
+}
+function download(raw){
+ const blob=new Blob([JSON.stringify(raw,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob);
+ const link=document.createElement('a');link.href=url;link.download='reviewer-usability-response-'+raw.invitationId+'.json';
+ document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+$('usability-invite-file').addEventListener('change',async()=>{
+ try{
+   const file=$('usability-invite-file').files?.[0];
+   if(!file||file.size>MAX)throw Error('Choose an invitation JSON below 50 KB.');
+   invitation=validateInvite(JSON.parse(await file.text()));original=null;
+   $('exercise-section').hidden=false;$('exercise-form').hidden=false;
+   $('feedback-section').hidden=true;$('discussion-section').hidden=true;
+   render();message('Fictional exercise loaded. You can choose to stop at any time.');
+ }catch(e){invitation=null;original=null;$('exercise-section').hidden=true;message(e.message,true);}
+});
+$('exercise-form').addEventListener('submit',e=>{
+ e.preventDefault();try{
+   if(!invitation||!$('pre-discussion').checked)throw Error('Confirm that the judgments were made before opening in-interface discussion prompts.');
+   original=JSON.parse(JSON.stringify(judgments()));
+   $('exercise-form').hidden=true;$('feedback-section').hidden=false;
+   message('Original judgments locked in this page. Feedback is optional; questions may be skipped.');
+ }catch(err){message(err.message,true);}
+});
+$('feedback-form').addEventListener('submit',e=>{
+ e.preventDefault();try{
+   if(!invitation||!original)throw Error('Complete your fictional first judgments first.');
+   if(!$('consent-to-share').checked)throw Error('You may close this page without sharing a response.');
+   const ratings={};
+   ITEM_IDS.forEach(k=>{const v=$('clarity-'+k).value;ratings[k]=v==='skip'?null:Number(v)});
+   const biggestObstacle=$('biggest-obstacle').value;
+   if(!OBSTACLES.includes(biggestObstacle))throw Error('Unknown obstacle category.');
+   const response={format:'arw-reviewer-usability-response-v1',version:1,
+     method:'fixed-invitation-synthetic-reviewer-usability-v1',
+     studyId:invitation.studyId,invitationId:invitation.invitationId,kitId:invitation.kitId,
+     casesFingerprint:invitation.casesFingerprint,completedAt:new Date().toISOString(),
+     consentedToShare:true,discussionUnseenAttested:true,judgments:original,
+     ratings,biggestObstacle,note:$('free-comment').value.trim()};
+   download(response);
+   $('feedback-section').hidden=true;$('discussion-section').hidden=false;
+   const host=$('discussion-items');host.replaceChildren();
+   invitation.cases.forEach((c,i)=>{
+     const h=document.createElement('h2');h.textContent=(i+1)+'. '+c.title;
+     const p=document.createElement('p');p.textContent=c.discussion;host.append(h,p);
+   });
+   message('Response downloaded. You may choose whether to share it with the coordinator.');
+ }catch(err){message(err.message,true);}
+});
+})();
+</script>
+</body></html>
