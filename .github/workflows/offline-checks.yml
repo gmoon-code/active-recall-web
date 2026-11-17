@@ -22,13 +22,15 @@ jobs:
           node --check paired-review-ui.js
           node --check review-packets.js
           node --check review-packets-ui.js
+          node --check reference-first.js
+          node --check reference-first-ui.js
           node --check core.js
           node --check app.js
           node --check storage.js
           node --check intelligence.js
           node --check document-import.js
       - name: Local deterministic tests
-        run: node --test test-human-review.cjs test-paired-review.cjs test-review-packets.cjs test-deploy-preflight.cjs
+        run: node --test test-human-review.cjs test-paired-review.cjs test-review-packets.cjs test-reference-first.cjs test-deploy-preflight.cjs
       - name: Free Chromium desktop and mobile smoke
         run: |
           npm install --no-save --no-package-lock --ignore-scripts --no-audit --no-fund playwright@1.56.1
