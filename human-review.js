@@ -14,7 +14,7 @@
     // Earlier recorded checks preserve their original criterion versions and wording.
     // They are incomplete when the learner left criteria unmarked; do not fill the gaps
     // by borrowing today's potentially revised rubric.
-    return Array.isArray(attempt?.criterionChecks)?attempt.criterionChecks.filter(c=>
+    return attempt?.criterionCounts?.unassessed===0&&Array.isArray(attempt?.criterionChecks)?attempt.criterionChecks.filter(c=>
       c&&typeof c.criterionId==='string'&&Number.isInteger(c.version)&&typeof c.textSnapshot==='string'): [];
   }
   function eligibility(attempt){
@@ -86,7 +86,7 @@
     if(!Array.isArray(db?.attempts))throw Error('Invalid attempt history.');
     for(const a of db.attempts){
       if(a.rubricAtAttempt!==undefined){
-        if(!Array.isArray(a.rubricAtAttempt)||a.rubricAtAttempt.length>100)throw Error('Invalid historical rubric snapshot.');
+        if(!Array.isArray(a.rubricAtAttempt)||a.rubricAtAttempt.length>1000)throw Error('Invalid historical rubric snapshot.');
         const seen=new Set();
         for(const c of a.rubricAtAttempt){
           if(!c||typeof c.criterionId!=='string'||!c.criterionId||seen.has(c.criterionId)||
