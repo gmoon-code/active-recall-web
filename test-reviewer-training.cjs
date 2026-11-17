@@ -164,7 +164,11 @@ test('a deliberate disagreement is reported without a pass/fail training percent
  const s=setup();importA(s);importB(s);
  const r=T.compare(s.db);
  assert.equal(r.completed,2);assert.equal(r.disagreements.length,1);
- assert.equal(r.statusMatches,6);
+ assert.equal(r.decisiveComparable,0);
+ assert.equal(r.decisiveAgreements,0);
+ assert.equal(r.decisiveDisagreements,0);
+ assert.equal(r.nondecisive,7);
+ assert.equal('statusMatches' in r,false);
  assert.equal('calibrationAccuracy' in r,false);
  assert.equal('mastery' in r,false);
 });
@@ -179,7 +183,8 @@ test('the vague criterion is reported as a discussion topic rather than a scorin
 test('training report shows A missing and avoids calculating status matches prematurely',()=>{
  const s=setup();importB(s);
  const c=T.compare(s.db);
- assert.equal(c.statusMatches,null);
+ assert.equal(c.decisiveComparable,null);
+ assert.equal(c.decisiveAgreements,null);
  assert.equal(c.A,false);assert.equal(c.B,true);
 });
 test('coded summary exports no verbatim reviewer reasoning, quotes, notes, course or student IDs',()=>{
@@ -188,6 +193,9 @@ test('coded summary exports no verbatim reviewer reasoning, quotes, notes, cours
  const text=JSON.stringify(exportJson);
  assert.equal(exportJson.format,'arw-reviewer-training-summary-v1');
  assert.equal(exportJson.disagreementCount,1);
+ assert.equal(exportJson.decisiveComparable,0);
+ assert.equal(exportJson.decisiveAgreements,0);
+ assert.equal(exportJson.nondecisive,7);
  assert.equal(exportJson.ambiguousCriterionCount,1);
  assert.ok(!text.includes('Electron carriers move protons'));
  assert.ok(!text.includes('The expression complete and convincing'));
