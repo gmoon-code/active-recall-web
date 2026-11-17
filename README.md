@@ -1,9 +1,23 @@
-# Active Recall Web — Free Edition v4.6
+# Active Recall Web — Free Edition v4.7
 
 A local-first active-recall system with a **single multi-course automatic review agenda**, source-linked learning objectives, reviewed question drafts, and sessions that adjust to time budgets and assessments.
 
 **Public website:** https://gmoon-code.github.io/active-recall-web/
 
+
+## Blueprint 4.7 — Small, voluntary reviewer-usability pilot
+
+In **Progress → Reviewer usability micro-pilot**, a coordinator can preallocate **3, 5, 8, or 12 fixed invitation slots** before recruiting volunteers. Each invitation has a random code and contains only the frozen v4.6 **fictional** science explanation casebook, seven original rubric rows and a five-item optional clarity questionnaire. The separate [offline participant exercise](reviewer-usability-offline.html) runs as a standalone file without accounts, network requests or browser storage.
+
+Each participant records first-pass fictional judgments and exact text evidence, then optionally rates clarity of the response categories, quotation rules, Uncertain option, rubric criteria and navigation from **1 (strongly disagree) to 5 (strongly agree)**. Every question can be skipped. The participant can end without sharing a file; only an explicitly consented download can be imported by a coordinator. Discussion guidance becomes visible in the interface after submission, but is always inspectable in the HTML source. No technical blinding or reviewer verification is claimed.
+
+The coordinator's local dashboard counts fixed invitations, **returned files, nonreturns and skipped answers separately**. It shows fixed-category distributions and optionally local free-text comments for human inspection. A **coded CSV** includes all invitation slots, counts and fixed-category responses but no real student information, original UUIDs, excerpts or free text. An **aggregate JSON** excludes identifiable original file content as well. Coded small-group records are **not guaranteed anonymous**.
+
+Original human judgments, the v4.5 pilot cohort and **all study scheduling decisions remain unchanged**. The usability instrument is unvalidated and deliberately calculates no reviewer quality score, learning gain or retention forecast. Historic and new backups remain schema v5; everything remains **100% free**.
+
+**282 Node tests and seven real Chromium workflows passed** on the feature branch, including two disconnected fictional volunteers, one nonreturned invitation, optional question skips, safe exports, persistence, unchanged due dates and mobile layout.
+
+[Read Blueprint 4.7 and the fixed-invitation protocol](docs/BLUEPRINT_4_7_FREE.md) · [Open standalone usability exercise](reviewer-usability-offline.html)
 
 ## Blueprint 4.6 — Independent fictional-reviewer training and rubric clarity
 
