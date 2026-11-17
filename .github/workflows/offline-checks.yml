@@ -1,0 +1,31 @@
+name: Active Recall Web free offline checks
+on:
+  push:
+    branches: [main, "feature/**"]
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: JavaScript syntax
+        run: |
+          node --check human-review.js
+          node --check core.js
+          node --check app.js
+          node --check storage.js
+          node --check intelligence.js
+          node --check document-import.js
+      - name: Local deterministic tests
+        run: node --test test-human-review.cjs test-deploy-preflight.cjs
+      - name: Free Chromium desktop and mobile smoke
+        run: |
+          npm install --no-save --no-package-lock --ignore-scripts --no-audit --no-fund playwright@1.56.1
+          node test-browser-smoke.cjs

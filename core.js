@@ -8,6 +8,8 @@
   if (!I) throw Error('Missing local learning-intelligence module.');
   const D=(typeof module !== 'undefined' && module.exports)?require('./document-import.js'):globalThis.ActiveRecallDocumentImport;
   if(!D)throw Error('Missing local document-import module.');
+  const H=(typeof module!=='undefined'&&module.exports)?require('./human-review.js'):globalThis.ActiveRecallHumanReview;
+  if(!H)throw Error('Missing local human-review module.');
   const DAY = 86400000;
   // Policy IDs are immutable labels for decisions. Changing any coefficient
   // requires a new ID; historical decisions must never be recomputed in place.
@@ -135,6 +137,7 @@
         // Syllabus objectives are an OPTIONAL extension of schema v5; older local
         // histories remain valid and are never rewritten by import validation.
         if(input.syllabusObjectives!==undefined)validateSyllabusObjectives(input);
+        H.validate(input); // Optional, append-only v4.1 annotations; schema v5 stays compatible.
         return input;
       }
       const upgraded=JSON.parse(JSON.stringify(input));
@@ -1293,7 +1296,8 @@
     const recordedResponse=cleanString(response,20000);
     const inferredMode=inputMode||(recordedResponse?'written':'mental');
     const literalCheck=previewLiteralCheck(db,activity.id,recordedResponse,{assisted,inputMode:inferredMode});
-    const attempt={id:id('attempt'),priorDueAt:prev?.dueAt||null,priorIntervalDays:prev?.intervalDays??null,schedulingDecision,literalCheck,inputMode:inferredMode,activityKind:activity.kind,durationSeconds:validDuration(durationSeconds)?Math.round(durationSeconds):null,evidenceVersion:1,requirementId:r.id,requirementVersion:r.version,retrievalTargetId:target.id,retrievalTargetVersion:target.version,activityId:activity.id,activityVersion:activity.version,questionSnapshot:cleanString(questionUsed||activity.question,500),referenceSnapshot:activity.answer,focusLabelSnapshot:target.label,requirementVerified:r.verificationStatus==='verified',courseId:r.courseId,sessionId,response:recordedResponse,rating,scheduleRating,criterionChecks:checks,criterionCounts:counts,correctionNote:correctionNote.trim(),assisted:!!assisted,gradedBy:'learner',practiceStage:practiceStage||'regular',createdAt:now.toISOString()};
+    const rubricAtAttempt=(activity.kind==='explain'||activity.kind==='apply')?criteria.map(c=>({criterionId:c.id,version:c.version,textSnapshot:c.text})):undefined;
+    const attempt={id:id('attempt'),rubricAtAttempt,priorDueAt:prev?.dueAt||null,priorIntervalDays:prev?.intervalDays??null,schedulingDecision,literalCheck,inputMode:inferredMode,activityKind:activity.kind,durationSeconds:validDuration(durationSeconds)?Math.round(durationSeconds):null,evidenceVersion:1,requirementId:r.id,requirementVersion:r.version,retrievalTargetId:target.id,retrievalTargetVersion:target.version,activityId:activity.id,activityVersion:activity.version,questionSnapshot:cleanString(questionUsed||activity.question,500),referenceSnapshot:activity.answer,focusLabelSnapshot:target.label,requirementVerified:r.verificationStatus==='verified',courseId:r.courseId,sessionId,response:recordedResponse,rating,scheduleRating,criterionChecks:checks,criterionCounts:counts,correctionNote:correctionNote.trim(),assisted:!!assisted,gradedBy:'learner',practiceStage:practiceStage||'regular',createdAt:now.toISOString()};
     db.attempts.push(attempt);observeDuration(db,activity.kind,attempt.durationSeconds);
     db.memory[target.id]={dueAt,intervalDays:adjustedInterval,policyId:ACTIVE_SCHEDULING_POLICY,lastRating:scheduleRating,lastReviewedAt:now.toISOString(),reviewCount:(prev?.reviewCount||0)+1};
     db.events.push({type:'attempt.recorded',entityId:attempt.id,requirementId:r.id,targetId:target.id,at:attempt.createdAt});

@@ -1,8 +1,19 @@
-# Active Recall Web — Free Edition v4.0
+# Active Recall Web — Free Edition v4.1
 
 A local-first active-recall system with a **single multi-course automatic review agenda**, source-linked learning objectives, reviewed question drafts, and sessions that adjust to time budgets and assessments.
 
 **Public website:** https://gmoon-code.github.io/active-recall-web/
+
+
+## Blueprint 4.1 — Human-reviewed explanation evidence
+
+**Progress → Human-reviewed explanations & problem-solving** now lets you inspect a saved **written** explanation/application alongside its **original question, reference answer and contemporaneous rubric**. For each criterion, a person chooses Included / Not demonstrated / Uncertain / Not assessed. "Included" requires an exact excerpt copied from the original response; gaps and uncertainty require a written reason. The software confirms that excerpts really occur in the response, but **never infers scientific correctness or grades meaning**.
+
+Reviews can be completed by the learner or recorded as another person's review (unverified self-report). Amendments append a new version and keep earlier reviewer judgments and the original self-rating. A newer rubric is never silently applied to an older response. Older attempts without a complete saved rubric snapshot remain unreviewable rather than being given retroactive evidence. The original due date, scheduling policy, and all past practice data remain unchanged.
+
+The new Progress audit describes **actual delayed, independent, written attempts** that received a conclusive manual review and were reviewed before any subsequent practice of that same version. Percentages stay withheld until 20 eligible reviews across 10 targets. This is descriptive human judgment, **not calibrated retention, validated grading, blinded assessment, or causal evaluation of scheduling**.
+
+No cloud data, accounts, billing or paid AI. Existing schema-v5 backups still import; export your JSON backup before a version upgrade. [Read Blueprint 4.1](docs/BLUEPRINT_4_1_FREE.md).
 
 ## New in v3.1
 
