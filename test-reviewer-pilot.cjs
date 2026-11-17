@@ -154,7 +154,7 @@ test('two attempts from the same target cannot inflate the number of topics',()=
 test('a user cannot overwrite the protocol with an alternative sample size',()=>{
  const f=fixture(),p=start(f);
  p.plannedTargets=15;
- assert.throws(()=>P.validate(f.db),/Invalid|quota/);
+ assert.throws(()=>P.validate(f.db),/Invalid|quota|protocol lock/);
 });
 test('planned quota and original scheduling records remain wholly separate',()=>{
  const f=fixture();start(f);const a=f.attempt(0,{minute:1});
@@ -270,17 +270,17 @@ test('backup validation catches omitted consecutive screening rows',()=>{
 test('backup validation catches fabricated inclusion and exclusion changes',()=>{
  const f=fixture();complete(f);const d=clone(f.db);
  d.reviewerPilot.entries[0].decision='enrolled';d.reviewerPilot.entries[0].reason=null;
- assert.throws(()=>C.validateImport(d),/Pilot entry/);
+ assert.throws(()=>C.validateImport(d),/Pilot entry|screening history/);
 });
 test('backup validation catches reordering to selectively keep the most favourable answer',()=>{
  const f=fixture();complete(f);const d=clone(f.db);
  [d.reviewerPilot.entries[0],d.reviewerPilot.entries[1]]=[d.reviewerPilot.entries[1],d.reviewerPilot.entries[0]];
- assert.throws(()=>C.validateImport(d),/Pilot entry/);
+ assert.throws(()=>C.validateImport(d),/Pilot entry|screening history/);
 });
 test('backup validation rejects altered original written evidence after pilot registration',()=>{
  const f=fixture();complete(f);const d=clone(f.db);
  d.attempts[1].response='New retrospective fabricated writing';
- assert.throws(()=>C.validateImport(d),/Pilot entry/);
+ assert.throws(()=>C.validateImport(d),/Pilot entry|screening history/);
 });
 test('backup validation rejects a forged protocol version or sampling rule',()=>{
  const f=fixture();complete(f);const d=clone(f.db);
