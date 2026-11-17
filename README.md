@@ -1,9 +1,21 @@
-# Active Recall Web — Free Edition v4.3
+# Active Recall Web — Free Edition v4.4
 
 A local-first active-recall system with a **single multi-course automatic review agenda**, source-linked learning objectives, reviewed question drafts, and sessions that adjust to time budgets and assessments.
 
 **Public website:** https://gmoon-code.github.io/active-recall-web/
 
+
+## Blueprint 4.4 — Reference-free first judgments and separate reference reveal
+
+In **Progress → Reference-free first-pass review**, learners can export a new **reference-free request JSON** for one saved written explanation/application. This file includes the original question, written response and versioned checklist but **does not contain the original reference answer**. Give the request and separate [reference-free offline reviewer page](reference-reviewer-offline.html) to reviewers A and B. Both can work from disconnected devices and download their own **locked first-pass JSON** files.
+
+Import **A first, then B** into the owner's browser. **Neither reviewer can receive a reference-reveal file from the app until both first passes are imported and preserved.** The learner then exports separate A/B reference-reveal JSON files bound to those saved first passes. Each reviewer can optionally enter a second human judgment after viewing the original reference; those later judgments are kept separate and never overwrite A/B's first marks or their inter-rater comparison. Differences are descriptive human label changes, not validated grades.
+
+The scoring rubric remains visible in the first stage and may disclose expected concepts; identity, actual non-exposure, reviewer expertise and independence are self-reported and not verified. JSON fingerprints detect accidental mismatches, **not deliberate tampering or reviewer identity**. Review packet transfer may disclose learner writing and human excerpts to recipients and any services used to send files; avoid private student records.
+
+**100% free; browser-local; schema v5; no account, AI API, subscription, automatic cloud sync or payment details.** The study planner, actual due dates, self-ratings, existing A/B reviews and all historical evidence are unchanged. The old v4.3 reviewer packet exchange remains available as a separate optional workflow.
+
+[Blueprint 4.4 details](docs/BLUEPRINT_4_4_FREE.md) · [Reference-free standalone reviewer](reference-reviewer-offline.html)
 
 ## Blueprint 4.3 — Separate-device offline reviewer packets
 
