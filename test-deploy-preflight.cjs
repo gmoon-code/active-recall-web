@@ -5,9 +5,9 @@ test('static GitHub Pages entry has relative scripts and CSS',()=>{
   const s=read('index.html');assert.match(s,/src="\.\/core\.js"/);assert.match(s,/src="\.\/human-review\.js"/);assert.match(s,/href="\.\/styles\.css"/);
 });
 test('offline worker is versioned and caches review module',()=>{
-  const s=read('sw.js');assert.match(s,/active-recall-web-v4-4/);assert.match(s,/'\.\/human-review\.js'/);assert.match(s,/'\.\/paired-review\.js'/);assert.match(s,/'\.\/paired-review-ui\.js'/);assert.match(s,/'\.\/review-packets\.js'/);assert.match(s,/reviewer-offline\.html/);assert.match(s,/reference-reviewer-offline\.html/);assert.match(s,/reference-first\.js/);
+  const s=read('sw.js');assert.match(s,/active-recall-web-v4-5/);assert.match(s,/'\.\/human-review\.js'/);assert.match(s,/'\.\/paired-review\.js'/);assert.match(s,/'\.\/paired-review-ui\.js'/);assert.match(s,/'\.\/review-packets\.js'/);assert.match(s,/reviewer-offline\.html/);assert.match(s,/reference-reviewer-offline\.html/);assert.match(s,/reference-first\.js/);
   const diagnostics=read('health.html');
-  assert.match(diagnostics,/active-recall-web-v4-4/);
+  assert.match(diagnostics,/active-recall-web-v4-5/);
   assert.match(diagnostics,/reviewer-offline\.html/);assert.match(diagnostics,/reference-reviewer-offline\.html/);
   assert.doesNotMatch(diagnostics,/active-recall-web-v2-8/);
 });
