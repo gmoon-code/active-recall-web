@@ -127,6 +127,7 @@ async function main(){
    // Backups and reload must keep the owner-only source files yet never modify schedule.
    await owner.reload();await owner.locator('[data-page=insights]').click();
    assert.match(await owner.locator('#reviewer-usability').innerText(),/Nonreturns/);
+   await owner.locator('#reviewer-usability summary').filter({hasText:'Optional free-text usability comments'}).click();
    assert.match(await owner.locator('#reviewer-usability').innerText(),/PRIVATE_FEEDBACK_DO_NOT_EXPORT/);
    await owner.setViewportSize({width:390,height:844});
    const bounds=await owner.locator('#reviewer-usability').boundingBox();
