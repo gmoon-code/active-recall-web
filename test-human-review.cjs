@@ -143,10 +143,10 @@ test('no rubric at attempt prevents retrospective fabrication',()=>{
 test('legacy checked criterion snapshots remain reviewable without new rubricAtAttempt field',()=>{
   const f=fixture();
   const criterion=C.getCriteria(f.db,f.target.id)[0];
-  const a=attempt(f,{checks:[{criterionId:criterion.id,status:'met'}]});
+  const a=attempt(f,{checks:C.getCriteria(f.db,f.target.id).map(c=>({criterionId:c.id,status:'met'}))});
   delete a.rubricAtAttempt;
-  assert.equal(H.eligibility(a).criteria.length,1);
-  record(f,a,{findings:[fields(a,['included'])[0]]});
+  assert.equal(H.eligibility(a).criteria.length,2);
+  record(f,a,{findings:fields(a,['included','included'])});
   assert.equal(C.validateImport(JSON.parse(JSON.stringify(f.db))).schemaVersion,5);
 });
 test('oral, mental, empty, short factual answers cannot be human graded this way',()=>{
@@ -195,15 +195,17 @@ test('delayed audit uses actual spacing and excludes first, short, assisted, and
   const a2=attempt(f,{day:3});
   const a3=attempt(f,{day:3.2,assisted:true});
   const a4=attempt(f,{day:6,stage:'immediate_post_study'});
+  const a5=attempt(f,{day:6.2});
   record(f,a1,{now:when(0,1)});
   record(f,a2,{now:when(3,1)});
   record(f,a3,{now:when(3.2,1)});
   record(f,a4,{now:when(6,1)});
+  record(f,a5,{now:when(6.2,1)});
   const d=H.delayedAudit(f.db);
   assert.equal(d.eligible,1);
   assert.equal(d.excluded.firstOrRevised,1);
   assert.equal(d.excluded.tooSoon,1);
-  assert.equal(d.excluded.assistedOrImmediate,1);
+  assert.equal(d.excluded.assistedOrImmediate,2);
   assert.equal(d.supportedShare,null);
 });
 test('review entered after later practice is excluded from delayed-outcome audit',()=>{
