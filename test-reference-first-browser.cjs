@@ -93,6 +93,16 @@ async function main(){
    await owner.locator('.toast:not(.error)').waitFor();
    const revealPromise=owner.waitForEvent('download',{timeout:8000});
    await owner.locator('[data-action=export-reference-reveal][data-slot="A"]').click();
+   await owner.waitForTimeout(300);
+   const revealDebug=await owner.evaluate(async()=>{
+     const d=(await window.ActiveRecallStorage.load()).db,a=d.attempts[0],button=document.querySelector('[data-action=export-reference-reveal][data-slot="A"]');
+     let result;try{result=window.ActiveRecallReferenceFirst.reveal(d,{attemptId:a.id,slot:'A'}).format;}
+     catch(e){result='ERROR: '+e.message;}
+     return {button:!!button,toast:document.querySelector('.toast')?.innerText,
+       A:!!a.independentReviewPair?.A?.referenceFirstPass,B:!!a.independentReviewPair?.B?.referenceFirstPass,
+       result};
+   });
+   process.stdout.write('REVEAL_DIAGNOSTIC '+JSON.stringify(revealDebug)+'\n');
    const revealDl=await Promise.race([
      revealPromise,
      owner.locator('.toast.error').waitFor({timeout:5000}).then(async()=>{throw Error('Reveal UI rejected export: '+await owner.locator('.toast.error').innerText());})
