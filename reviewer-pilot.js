@@ -100,7 +100,7 @@
    p.closedAt=now.toISOString();p.closeReason='stopped_early';
    p.earlyStopNote=note.trim();p.closeAfter=p.entries.length;
    db.events.push({type:'reviewer_pilot.stopped_early',entityId:'reviewer-pilot',at:p.closedAt,
-     screened:p.entries.length});
+     screened:p.entries.length,noteFingerprint:H.fingerprint(p.earlyStopNote)});
    return p;
  }
  function rows(db){
@@ -197,6 +197,28 @@
      p.baselineAttemptCount>db.attempts.length||!eq(p.protocol,PROTOCOL)||
      !Array.isArray(p.entries)||p.entries.length>100000)
      throw Error('Invalid locked pilot protocol or baseline in backup.');
+   const locks=db.events.filter(e=>e.type==='reviewer_pilot.protocol_locked');
+   if(locks.length!==1||locks[0].entityId!=='reviewer-pilot'||
+     locks[0].at!==p.lockedAt||locks[0].plannedTargets!==p.plannedTargets||
+     locks[0].baselineAttemptCount!==p.baselineAttemptCount)
+     throw Error('Pilot protocol lock no longer matches its original creation event.');
+   const recordedScreening=db.events.filter(e=>e.type==='reviewer_pilot.screened');
+   if(recordedScreening.length!==p.entries.length||
+     recordedScreening.some((e,i)=>e.entityId!==p.entries[i].attemptId||
+       e.at!==p.entries[i].screenedAt||e.decision!==p.entries[i].decision||
+       e.reason!==p.entries[i].reason))
+     throw Error('Pilot screening history no longer matches original events.');
+   const stopping=db.events.filter(e=>e.type==='reviewer_pilot.stopped_early');
+   const completed=db.events.filter(e=>e.type==='reviewer_pilot.quota_reached');
+   if(p.closeReason==='stopped_early'?
+     (stopping.length!==1||completed.length!==0||
+       stopping[0].at!==p.closedAt||stopping[0].screened!==p.entries.length||
+       stopping[0].noteFingerprint!==H.fingerprint(p.earlyStopNote)):
+     p.closeReason==='target_reached'?
+     (stopping.length!==0||completed.length!==1||
+       completed[0].at!==p.closedAt||completed[0].plannedTargets!==p.plannedTargets):
+     (stopping.length!==0||completed.length!==0))
+     throw Error('Pilot close-out event no longer matches the documented stop or quota.');
    if((p.closedAt===null)!==(p.closeReason===null)||
      (p.closedAt===null)!==(p.closeAfter===null)||
      (p.closeReason!=='stopped_early'&&p.earlyStopNote!==null)||
