@@ -139,6 +139,7 @@
     const req=db.requirements.find(r=>r.id===target.requirementId&&r.active!==false);
     if(!req)throw Error('Requirement not found.');
     const activity=getActivities(db,req.id,targetId).find(a=>a.isPrimary)||getActivities(db,req.id,targetId)[0];
+    if(req.sourceRevisionPending)throw Error('Verify the revised source and question before suggesting new rubric checkpoints.');
     const quote=(target.isPrimary && req.sourceQuote)||activity?.answer||req.answer;
     const candidates=I.suggestCriteria(quote,limit);
     const existing=new Set(getCriteria(db,targetId,{includePending:true}).map(c=>I.norm(c.sourceQuote||c.text.replace(/^[^:]{2,32}:\s*/,''))));
@@ -152,6 +153,62 @@
       created.push(c);existing.add(normalized);
     }
     return created;
+  }
+  // Read-only structural rubric audit. Exact quoted evidence is not the same
+  // as a scientific accuracy check or a complete marking scheme. Never infer
+  // correctness, mastery or a memory interval from a generated suggestion.
+  function rubricQualityReview(db,targetId,{limit=12}={}){
+    const target=(db.retrievalTargets||[]).find(t=>t.id===targetId&&t.active!==false);
+    if(!target)throw Error('Recall focus area not found.');
+    const req=db.requirements.find(r=>r.id===target.requirementId&&r.active!==false);
+    if(!req)throw Error('Requirement not found.');
+    const primary=getActivities(db,req.id,targetId).find(a=>a.isPrimary)||getActivities(db,req.id,targetId)[0];
+    const source=target.isPrimary?db.sources.find(s=>s.id===req.sourceId):null;
+    const exactSource=!!(source&&typeof req.sourceQuote==='string'&&Number.isInteger(req.sourceStart)
+      &&source.content.slice(req.sourceStart,req.sourceStart+req.sourceQuote.length)===req.sourceQuote);
+    const changed=!!(target.isPrimary&&source&&(req.sourceRevisionPending||source.version!==req.sourceVersion||!exactSource));
+    const basis=exactSource?'saved source excerpt':'reference answer (not independently source-validated)';
+    const raw=exactSource?req.sourceQuote:(primary?.answer||req.answer||'');
+    const candidates=I.suggestCriteria(raw,limit);
+    const criteria=getCriteria(db,targetId,{includePending:true});
+    const suggestions=candidates.map((p,index)=>{
+      // Only the *same exact quotation* establishes a link. Human-authored
+      // paraphrases may be valid but cannot safely be scored by word overlap.
+      const matched=criteria.filter(c=>c.sourceQuote===p.sourceQuote || c.text===p.text);
+      const status=matched.some(c=>!c.needsReview)?'linked_verified':matched.length?'linked_draft':'not_explicitly_linked';
+      return {...p,index,status};
+    });
+    return {targetId,requirementId:req.id,requirementVersion:req.version,sourceVersion:source?.version??null,basis,context:raw.slice(0,750),
+      sourceChanged:changed,verifiedCriteria:criteria.filter(c=>!c.needsReview).length,pendingCriteria:criteria.filter(c=>c.needsReview).length,
+      suggestions,unlinked:suggestions.filter(p=>p.status==='not_explicitly_linked').length,
+      warning:'Heuristic scan of exact excerpts only. Unlinked does not mean absent: manually authored criteria may express the same idea. Check scientific accuracy, qualifiers and what the question actually requires.'};
+  }
+  function addRubricEvidenceDraft(db,{targetId,index,sourceVersion=null,requirementVersion=null,expectedQuote=null}={}){
+    if(!Number.isSafeInteger(index)||index<0)throw Error('Invalid evidence selection. Reopen the rubric review.');
+    const review=rubricQualityReview(db,targetId);
+    if(review.sourceChanged)throw Error('The source changed. Verify the source and question before suggesting criteria.');
+    if(review.sourceVersion!==sourceVersion||review.requirementVersion!==requirementVersion)throw Error('The source or question version changed. Reopen the rubric review.');
+    const evidence=review.suggestions[index];
+    if(!evidence)throw Error('Evidence selection no longer exists. Reopen the rubric review.');
+    if(expectedQuote!==evidence.sourceQuote)throw Error('The evidence text changed. Reopen the rubric review.');
+    if(evidence.status!=='not_explicitly_linked')throw Error('This excerpt is already linked to a checklist point.');
+    const req=db.requirements.find(r=>r.id===review.requirementId);
+    const target=db.retrievalTargets.find(t=>t.id===targetId);
+    const at=new Date().toISOString();
+    const quoteSource=review.basis==='saved source excerpt';
+    const c={id:id('criterion'),targetId,requirementId:req.id,text:evidence.text,version:1,
+      active:true,needsReview:true,origin:'offline_criterion_draft',createdAt:at,
+      sourceId:quoteSource?req.sourceId:null,sourceVersion:quoteSource?req.sourceVersion:null,
+      sourceQuote:evidence.sourceQuote,sourceStart:quoteSource?req.sourceStart+evidence.sourceStart:null,
+      sourceEnd:quoteSource?req.sourceStart+evidence.sourceEnd:null,rule:evidence.rule,structureType:evidence.type};
+    if(quoteSource){
+      const source=db.sources.find(s=>s.id===req.sourceId);
+      if(!source||source.content.slice(c.sourceStart,c.sourceEnd)!==c.sourceQuote)throw Error('Original source no longer matches the selected excerpt.');
+    }
+    db.rubricCriteria.push(c);
+    db.criterionVersions.push({criterionId:c.id,version:1,text:c.text,createdAt:at,origin:c.origin,sourceQuote:c.sourceQuote});
+    db.events.push({type:'criterion.suggested',entityId:c.id,targetId,sourceId:c.sourceId,at});
+    return c;
   }
   function reviseCriterion(db,criterionId,text){
     const c=(db.rubricCriteria||[]).find(c=>c.id===criterionId&&c.active!==false);
@@ -1027,5 +1084,5 @@
   }
   function validateImport(x){return migrateDb(x);}
 
-  return {DAY,id,today,addDays,daysUntil,initialDb,migrateDb,validateImport,getTarget,getTargets,getMemory,getActivities,getCriteria,addCriterion,proposeCriteria,reviseCriterion,verifyCriterion,archiveCriterion,criterionStatus,rubricProgress,chooseActivity,addRetrievalTarget,verifyRetrievalTarget,addActivityVariant,deactivateActivity,reviseSource,addCourse,addSyllabusObjectives,updateSyllabusObjective,setSyllabusLink,setSyllabusMaterialsReady,setSyllabusLearningGuide,guidedLearningInfo,archiveSyllabusObjective,syllabusCoverage,draftRequirements,addSource,addImportedDocument,addRequirement,editRequirement,verifyRequirement,integrity:I.integrity,questionCoverage:I.questionCoverage,questionWarnings:I.questionWarnings,learningObjectiveMap,variationStudio,questionStudio,adoptQuestionProposal,coverageReviewQueue,addAssessment,linkedAssessments,estimatedSeconds,durationEstimate,evidenceType,inputModeFor,evidenceSummary,eligibleCandidates,planActivities,buildReviewAgenda,forecastSchedule,recordAttempt,latestCorrectiveFeedback,assessmentCoverage,stats,demoDb};
+  return {DAY,id,today,addDays,daysUntil,initialDb,migrateDb,validateImport,getTarget,getTargets,getMemory,getActivities,getCriteria,addCriterion,proposeCriteria,rubricQualityReview,addRubricEvidenceDraft,reviseCriterion,verifyCriterion,archiveCriterion,criterionStatus,rubricProgress,chooseActivity,addRetrievalTarget,verifyRetrievalTarget,addActivityVariant,deactivateActivity,reviseSource,addCourse,addSyllabusObjectives,updateSyllabusObjective,setSyllabusLink,setSyllabusMaterialsReady,setSyllabusLearningGuide,guidedLearningInfo,archiveSyllabusObjective,syllabusCoverage,draftRequirements,addSource,addImportedDocument,addRequirement,editRequirement,verifyRequirement,integrity:I.integrity,questionCoverage:I.questionCoverage,questionWarnings:I.questionWarnings,learningObjectiveMap,variationStudio,questionStudio,adoptQuestionProposal,coverageReviewQueue,addAssessment,linkedAssessments,estimatedSeconds,durationEstimate,evidenceType,inputModeFor,evidenceSummary,eligibleCandidates,planActivities,buildReviewAgenda,forecastSchedule,recordAttempt,latestCorrectiveFeedback,assessmentCoverage,stats,demoDb};
 });

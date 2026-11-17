@@ -148,3 +148,12 @@
 .previous-feedback summary{cursor:pointer;color:var(--teal);font-size:12px;display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center}
 .previous-feedback[open] summary{margin-bottom:9px}
 .previous-feedback p{margin-top:7px;overflow-wrap:anywhere;white-space:pre-wrap}
+
+/* v3.6 evidence-centred rubric review. No additional services or libraries. */
+.rubric-evidence-audit{margin:16px 0;padding:15px;border:1px solid var(--border,#dde5de);border-radius:12px;background:var(--surface,#fff)}
+.rubric-evidence-list{display:grid;gap:10px;max-height:380px;overflow:auto;margin:12px 0}
+.rubric-evidence-item{padding:10px 12px;border:1px solid var(--border,#e1e6e1);border-radius:9px;overflow-wrap:anywhere}
+.rubric-evidence-item p{margin:8px 0}
+@media(max-width:600px){.rubric-evidence-audit{padding:11px}.rubric-evidence-list{max-height:300px}}
+
+.rubric-evidence-context{white-space:pre-wrap;overflow-wrap:anywhere;max-height:190px;overflow:auto}

@@ -114,39 +114,49 @@
   }
   // Conservative *suggestions*, not verified instructional objectives or AI grades.
   // Each point quotes an exact span from the learner's material for auditability.
+  // Rubric candidates are fragments quoted from the learner's saved text, not
+  // independently verified statements or semantic claims about the source.
+  // Qualifiers stay attached whenever separating them could reverse the claim.
   function suggestCriteria(text, limit = 5) {
-    const raw = String(text || '').slice(0, 20000);
-    const cap = Math.max(1, Math.min(8, Number(limit) || 5));
-    const result = [], seen = new Set();
-    for (const section of segments(raw)) {
-      const full = section.text.trim();
-      let pieces = [];
-      // Distinguish a claimed effect from a claimed mechanism, or an outcome
-      // from its stated cause. Do not split the word 'and' within noun phrases.
-      const marker = /\s+(by|because|due to|whereas)\s+/i.exec(full);
-      if (marker) {
-        const left = full.slice(0, marker.index).trim();
-        const right = full.slice(marker.index + marker[0].length).trim();
-        if (left.length >= 14 && right.length >= 14 && left.length <= 200 && right.length <= 200) {
-          pieces = [{quote:left,tag:'Claim'}, {quote:right,tag:marker[1].toLowerCase()==='by'?'Proposed mechanism':'Stated explanation'}];
-        }
+    const raw=String(text||'').slice(0,20000);
+    const cap=Math.max(1,Math.min(16,Math.floor(Number(limit)||5)));
+    const result=[],seen=new Set();
+    for(const section of segments(raw)){
+      const full=section.text.trim();
+      let pieces=[];
+      const conditional=full.match(/^(if|when|provided that)\s+(.{9,160}?)\s*(,\s*|\s+then\s+)(.{12,180})$/i);
+      const contrast=full.match(/^(.{14,180}?)\s+(whereas|in contrast to)\s+(.{14,180})$/i);
+      const causal=/\s+(by|because|due to)\s+/i.exec(full);
+      const qualification=/\b(?:only if|unless|except when|except for|provided that)\b/i.test(full);
+      if(conditional && !/\b(?:only if|unless)\b/i.test(full)){
+        // The 'if/when' clause describes the stated scope, not a causal proof.
+        pieces=[{quote:full.slice(0,conditional[0].length-conditional[4].length-conditional[3].length).trim(),tag:'Stated condition',type:'condition',rule:'conditional_pair'},
+                {quote:conditional[4].trim(),tag:'Outcome under that condition',type:'outcome',rule:'conditional_pair'}];
+      }else if(contrast && !qualification){
+        pieces=[{quote:contrast[1].trim(),tag:'First side of contrast',type:'contrast',rule:'contrast_pair'},
+                {quote:contrast[3].trim(),tag:'Other side of contrast',type:'contrast',rule:'contrast_pair'}];
+      }else if(causal && !qualification){
+        const left=full.slice(0,causal.index).trim();
+        const right=full.slice(causal.index+causal[0].length).trim();
+        if(left.length>=14 && right.length>=14 && left.length<=210 && right.length<=210)
+          pieces=[{quote:left,tag:'Claim / observed effect',type:'effect',rule:'relationship_split'},
+                  {quote:right,tag:causal[1].toLowerCase()==='by'?'Proposed mechanism':'Stated explanation',type:causal[1].toLowerCase()==='by'?'mechanism':'explanation',rule:'relationship_split'}];
       }
-      if (!pieces.length && full.length >= 22 && full.length <= 210) pieces = [{quote:full,tag:'Source statement'}];
-      for (const piece of pieces) {
-        const quote = piece.quote.replace(/[.!?。！？]+$/u,'').trim();
-        if (quote.length < 12) continue;
-        const key = norm(quote);
-        if (!key || seen.has(key)) continue;
+      if(!pieces.length&&qualification&&full.length>=22&&full.length<=225)
+        pieces=[{quote:full,tag:'Boundary or qualification',type:'qualification',rule:'qualifier_intact'}];
+      if(!pieces.length&&full.length>=22&&full.length<=225)
+        pieces=[{quote:full,tag:'Source statement',type:'statement',rule:'source_statement'}];
+      for(const piece of pieces){
+        const quote=piece.rule==='source_statement'||piece.rule==='qualifier_intact'?piece.quote:piece.quote.replace(/[.!?。！？]+$/u,'').trim();
+        if(quote.length<12)continue;
+        const key=norm(quote);
+        if(!key||seen.has(key))continue;
+        const pos=raw.indexOf(quote,Math.max(0,section.start||0));
+        if(pos<0)continue; // Never substitute invented or normalised text for an exact source excerpt.
         seen.add(key);
-        const index = raw.indexOf(piece.quote, Math.max(0,section.start || 0));
-        if (index < 0) continue; // Never fabricate provenance when an exact quote cannot be located.
-        result.push({
-          text: `${piece.tag}: ${quote}`.slice(0,240),
-          sourceQuote:piece.quote,
-          sourceStart:index, sourceEnd:index+piece.quote.length,
-          origin:'offline_criterion_draft',confidence:'review',rule:marker?'relationship_split':'source_statement'
-        });
-        if (result.length >= cap) return result;
+        result.push({text:`${piece.tag}: ${quote}`.slice(0,240),sourceQuote:quote,sourceStart:pos,sourceEnd:pos+quote.length,
+          origin:'offline_criterion_draft',confidence:'review',rule:piece.rule,type:piece.type});
+        if(result.length>=cap)return result;
       }
     }
     return result;
