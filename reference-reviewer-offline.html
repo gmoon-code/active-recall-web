@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'none'; img-src 'none'; font-src 'none'; form-action 'none'; base-uri 'none'">
+<title>Active Recall · Reference-Free First Assessment</title>
+<style>
+:root{color-scheme:light;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f3f7f5;color:#1d3530}
+*{box-sizing:border-box}body{margin:0}main{max-width:820px;margin:0 auto;padding:30px 16px 70px}
+h1{font-size:clamp(1.5rem,4vw,2.1rem);margin:6px 0 12px}h2{font-size:1.2rem}p{line-height:1.6}
+.card{background:white;border:1px solid #dae5df;border-radius:14px;padding:20px;margin:16px 0;box-shadow:0 4px 20px #18352b08}
+.eyebrow{color:#267363;letter-spacing:.12em;text-transform:uppercase;font-weight:700;font-size:.74rem}
+.small{font-size:.9rem;color:#4e665e}.note{padding:13px;border-radius:9px;background:#f0f6f3}
+pre{font:inherit;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.6}
+label{font-weight:600;display:block;margin:12px 0 6px}
+input[type=file],select,textarea{width:100%;padding:12px;border-radius:8px;border:1px solid #a6bdb4;background:white;color:#1d3530;font:inherit}
+textarea{min-height:90px;resize:vertical}
+fieldset{border:1px solid #cfddd5;border-radius:10px;padding:15px;margin:15px 0}
+legend{font-weight:700;max-width:100%;padding:0 5px}
+.check{display:flex;gap:9px;align-items:flex-start;margin:14px 0}.check input{margin-top:5px}.check span{line-height:1.5}
+button{background:#146856;border:0;border-radius:9px;padding:12px 18px;color:white;font:inherit;font-weight:700;cursor:pointer}
+button:hover{background:#0b4a3d}button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{outline:3px solid #47a691;outline-offset:2px}
+#status{min-height:24px}#status.error{color:#a73327;font-weight:700}
+[hidden]{display:none!important}
+@media(max-width:600px){main{padding:16px 10px 50px}.card{padding:14px}}
+</style>
+</head>
+<body><main>
+<div class="eyebrow">Active Recall Web · Reference-free first-pass protocol · Free/offline</div>
+<h1>Assess first. Read the reference later.</h1>
+<p class="small">This standalone file runs without an account or network connection. The initial request contains the question, original written answer and rubric, but <strong>does not contain the saved reference answer</strong>. Work with a trusted coordinator who sends the separate reference file only after receiving your locked first-pass JSON. Rubric wording may still reveal expected content; no app can verify prior outside exposure or professional expertise.</p>
+<section class="card">
+<h2>1. Open the reference-free request</h2>
+<label for="request-file">Choose the reference-free request JSON</label>
+<input id="request-file" type="file" accept=".json,application/json">
+<p id="message" role="status" aria-live="polite"></p>
+</section>
+<section id="review-section" hidden>
+<div class="card">
+<h2>2. Read the learner's original work</h2>
+<div class="note"><strong>Original question</strong><pre id="question"></pre></div>
+<label>Original learner response</label><pre class="note" id="answer"></pre>
+<p class="small">No saved reference answer is provided at this stage. The rubric necessarily describes the criteria being assessed.</p>
+</div>
+<form id="first-form" class="card">
+<h2>3. Make and lock your first assessment</h2>
+<label for="slot">Reviewer slot assigned by the coordinator</label>
+<select id="slot" required><option value="A">Reviewer A</option><option value="B">Reviewer B</option></select>
+<label for="role">Relationship to the learner</label>
+<select id="role" required><option value="other_person">Another person</option><option value="self">Learner</option></select>
+<div id="initial-criteria"></div>
+<label for="first-note">Review note (optional)</label>
+<textarea id="first-note" maxlength="3000"></textarea>
+<div id="second-attests" hidden>
+<label class="check"><input id="distinct-person" type="checkbox"><span>I am not Reviewer A.</span></label>
+<label class="check"><input id="no-prior-a" type="checkbox"><span>I have not viewed Reviewer A's judgments before assessing this answer.</span></label>
+</div>
+<label class="check"><input id="unseen-reference" type="checkbox" required><span>To the best of my knowledge, I have not viewed the saved reference answer before forming this first judgment.</span></label>
+<label class="check"><input id="confirm-first" type="checkbox" required><span>I personally assessed this answer, and my decisions are human judgments rather than automated grades.</span></label>
+<button type="submit">Download and lock first-pass JSON</button>
+<p class="small">After the file is saved, return it to the coordinator. They should import it before sharing your separate reference-reveal JSON.</p>
+</form>
+<section id="locked-section" class="card" hidden>
+<h2>4. First assessment locked</h2>
+<p class="note">Your original decisions are preserved in your exported file. They cannot be modified in the owner app by viewing the reference. Keep the original downloaded JSON.</p>
+<label for="saved-first-file">Resuming in a new session? Select your saved first-pass response JSON</label>
+<input id="saved-first-file" type="file" accept=".json,application/json">
+<label for="reveal-file">After the coordinator imports your first pass, choose their separate reference-reveal JSON</label>
+<input id="reveal-file" type="file" accept=".json,application/json">
+<div id="reference-section" hidden>
+<h2>5. Read the original reference answer</h2>
+<pre class="note" id="reference"></pre>
+<p class="small">You may document a new judgment after reading the reference. This is a <strong>separate, optional</strong> post-reference record, never a replacement for your first pass.</p>
+<form id="post-form">
+<div id="post-criteria"></div>
+<label for="post-note">What, if anything, changed after seeing the reference?</label>
+<textarea id="post-note" maxlength="3000"></textarea>
+<label class="check"><input id="confirm-seen" type="checkbox" required><span>I reviewed the reference only after saving my first-pass file. This is a human assessment, not automatic grading.</span></label>
+<button type="submit">Save optional post-reference JSON</button>
+</form>
+</div>
+</section>
+</section>
+</main>
+<script>
+(function(){
+'use strict';
+const MAX=250000,REQ='arw-reference-free-request-v1',FIRST='arw-reference-free-first-pass-v1',
+ REVEAL='arw-reference-reveal-v1',POST='arw-post-reference-review-v1';
+const $=x=>document.getElementById(x),statusList=[
+ ['unassessed','Not assessed'],['included','Included'],['not_demonstrated','Not demonstrated'],['uncertain','Cannot determine']
+];
+let request=null,locked=null,revealed=null;
+function message(t,error=false){$('message').textContent=t;$('message').className=error?'error':'';}
+function exact(o,fields){return o&&typeof o==='object'&&!Array.isArray(o)&&Object.keys(o).sort().join('|')===fields.slice().sort().join('|');}
+function fingerprint(s){let h=2166136261;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619)}return(h>>>0).toString(16).padStart(8,'0')}
+function sig(o){return fingerprint(JSON.stringify(o))}
+function validRequest(r){
+ if(!exact(r,['format','version','requestId','issuedAt','snapshotFingerprint','attempt'])||
+  r.format!==REQ||r.version!==1||typeof r.requestId!=='string'||
+  !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(r.requestId)||
+  !r.attempt||!exact(r.attempt,['attemptId','attemptAt','question','response','requirementVersion','targetVersion','activityVersion','criteria'])||
+  !['question','response','attemptId'].every(k=>typeof r.attempt[k]==='string'&&r.attempt[k].trim())||
+  r.attempt.question.length>500||r.attempt.response.length>20000||
+  !Array.isArray(r.attempt.criteria)||r.attempt.criteria.length<1||r.attempt.criteria.length>100||
+  !r.attempt.criteria.every(c=>exact(c,['criterionId','version','textSnapshot'])&&
+     typeof c.criterionId==='string'&&c.criterionId&&typeof c.textSnapshot==='string'&&c.textSnapshot.trim()&&
+     Number.isSafeInteger(c.version)&&c.version>0)||
+  sig(r.attempt)!==r.snapshotFingerprint)throw Error('Not an intact reference-free request.');
+ return r;
+}
+function validEvidence(fields){
+ if(!request||!Array.isArray(fields)||fields.length!==request.attempt.criteria.length)throw Error('Incomplete rubric.');
+ let covered=0;
+ fields.forEach((f,i)=>{
+  const c=request.attempt.criteria[i];
+  if(!exact(f,['criterionId','criterionVersion','status','excerpt','rationale'])||
+    f.criterionId!==c.criterionId||f.criterionVersion!==c.version||
+    !statusList.some(x=>x[0]===f.status)||
+    typeof f.excerpt!=='string'||f.excerpt.length>700||
+    typeof f.rationale!=='string'||f.rationale.length>1200||
+    f.excerpt!==f.excerpt.trim()||f.rationale!==f.rationale.trim()||
+    f.excerpt&&!request.attempt.response.includes(f.excerpt)||
+    f.status==='included'&&!f.excerpt||
+    ['not_demonstrated','uncertain'].includes(f.status)&&f.rationale.length<8||
+    f.status==='unassessed'&&(f.excerpt||f.rationale))
+    throw Error('Criterion '+(i+1)+' has mismatched or insufficient supporting evidence.');
+  if(f.status!=='unassessed')covered++;
+ });
+ if(!covered)throw Error('Assess at least one criterion.');
+ return fields;
+}
+function validFirst(f){
+ if(!request||!exact(f,['format','version','requestId','snapshotFingerprint','attemptId','slot','reviewerRole',
+   'completedAt','confirmed','differentPersonAttested','noPriorJudgmentsAttested','referenceUnseenAttested','findings','note'])||
+  f.format!==FIRST||f.version!==1||f.requestId!==request.requestId||
+  f.snapshotFingerprint!==request.snapshotFingerprint||f.attemptId!==request.attempt.attemptId||
+  !['A','B'].includes(f.slot)||!['self','other_person'].includes(f.reviewerRole)||
+  f.confirmed!==true||f.referenceUnseenAttested!==true||
+  f.differentPersonAttested!==(f.slot==='B')||f.noPriorJudgmentsAttested!==(f.slot==='B')||
+  typeof f.note!=='string'||f.note.length>3000||!Number.isFinite(Date.parse(f.completedAt)))
+  throw Error('First-pass file does not match this request.');
+ validEvidence(f.findings);return f;
+}
+function fieldsFor(stage){
+ return request.attempt.criteria.map((c,i)=>{
+  const status=$(stage+'-status-'+i).value,excerpt=$(stage+'-excerpt-'+i).value.trim(),rationale=$(stage+'-rationale-'+i).value.trim();
+  return {criterionId:c.criterionId,criterionVersion:c.version,status,excerpt,rationale};
+ });
+}
+function field(parent,title,control){const wrap=document.createElement('div'),label=document.createElement('label');
+ label.textContent=title;label.htmlFor=control.id;wrap.append(label,control);parent.append(wrap);}
+function drawCriteria(stage,host,values=[]){
+ host.replaceChildren();
+ request.attempt.criteria.forEach((criterion,i)=>{
+  const f=values[i],fs=document.createElement('fieldset'),legend=document.createElement('legend');
+  legend.textContent=(i+1)+'. '+criterion.textSnapshot;fs.append(legend);
+  const select=document.createElement('select');select.id=stage+'-status-'+i;
+  statusList.forEach(([value,title])=>{const opt=document.createElement('option');opt.value=value;opt.textContent=title;select.append(opt)});
+  select.value=f?.status||'unassessed';field(fs,'Human judgment',select);
+  const excerpt=document.createElement('textarea');excerpt.id=stage+'-excerpt-'+i;excerpt.maxLength=700;excerpt.rows=2;excerpt.value=f?.excerpt||'';
+  field(fs,'Exact excerpt (required for Included)',excerpt);
+  const reason=document.createElement('textarea');reason.id=stage+'-rationale-'+i;reason.maxLength=1200;reason.rows=2;reason.value=f?.rationale||'';
+  field(fs,'Reason for a gap or uncertainty',reason);host.append(fs);
+ });
+}
+function download(data,name){
+ const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+ const u=URL.createObjectURL(blob),a=document.createElement('a');a.href=u;a.download=name;
+ document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),1000);
+}
+function lockFirst(f){
+ locked=validFirst(f);
+ $('slot').value=f.slot;$('role').value=f.reviewerRole;
+ $('first-form').hidden=true;$('locked-section').hidden=false;
+ drawCriteria('post',$('post-criteria'),f.findings);
+}
+async function getJson(file){
+ if(!file||file.size>MAX)throw Error('Choose a single JSON file smaller than 250 KB.');
+ return JSON.parse(await file.text());
+}
+$('slot').addEventListener('change',()=>{$('second-attests').hidden=$('slot').value!=='B';});
+$('request-file').addEventListener('change',async()=>{
+ try{
+  request=validRequest(await getJson($('request-file').files?.[0]));locked=null;revealed=null;
+  $('review-section').hidden=false;$('first-form').hidden=false;$('locked-section').hidden=true;
+  $('reference-section').hidden=true;
+  $('question').textContent=request.attempt.question;$('answer').textContent=request.attempt.response;
+  drawCriteria('first',$('initial-criteria'));message('Reference-free request loaded. The saved reference answer is absent.');
+ }catch(e){request=null;locked=null;$('review-section').hidden=true;message(e.message,true);}
+});
+$('first-form').addEventListener('submit',e=>{
+ e.preventDefault();try{
+  if(!request)throw Error('Open a reference-free request first.');
+  const slot=$('slot').value;
+  if(!$('unseen-reference').checked||!$('confirm-first').checked)throw Error('Confirm reference non-exposure and human judgment.');
+  if(slot==='B'&&(!$('distinct-person').checked||!$('no-prior-a').checked))
+    throw Error('Reviewer B must attest to distinct identity and not seeing A.');
+  const findings=validEvidence(fieldsFor('first'));
+  const f={format:FIRST,version:1,requestId:request.requestId,snapshotFingerprint:request.snapshotFingerprint,
+    attemptId:request.attempt.attemptId,slot,reviewerRole:$('role').value,completedAt:new Date().toISOString(),
+    confirmed:true,differentPersonAttested:slot==='B',noPriorJudgmentsAttested:slot==='B',
+    referenceUnseenAttested:true,findings,note:$('first-note').value.trim()};
+  validFirst(f);
+  download(f,'active-recall-reference-free-'+slot.toLowerCase()+'-'+request.requestId+'.json');
+  lockFirst(f);message('Locked first-pass JSON downloaded. Return it to the coordinator before receiving your reveal file.');
+ }catch(err){message(err.message,true);}
+});
+$('saved-first-file').addEventListener('change',async()=>{
+ try{if(!request)throw Error('Open the original reference-free request first.');
+  lockFirst(await getJson($('saved-first-file').files?.[0]));
+  $('reference-section').hidden=true;revealed=null;
+  message('Saved first pass restored without altering its findings.');
+ }catch(e){message(e.message,true);}
+});
+$('reveal-file').addEventListener('change',async()=>{
+ try{
+  if(!locked||!request)throw Error('Lock or restore your original first-pass JSON first.');
+  const r=await getJson($('reveal-file').files?.[0]);
+  if(!exact(r,['format','version','requestId','snapshotFingerprint','attemptId','slot',
+    'firstSubmissionFingerprint','reference'])||
+    r.format!==REVEAL||r.version!==1||r.requestId!==request.requestId||
+    r.snapshotFingerprint!==request.snapshotFingerprint||r.attemptId!==request.attempt.attemptId||
+    r.slot!==locked.slot||r.firstSubmissionFingerprint!==sig(locked)||
+    typeof r.reference!=='string'||!r.reference.trim())
+    throw Error('This reveal file is not bound to the locked first pass.');
+  revealed=r;
+  $('reference').textContent=r.reference;$('reference-section').hidden=false;
+  message('Reference opened AFTER the locked first-pass file. Any new judgment will be a separate record.');
+ }catch(e){revealed=null;$('reference-section').hidden=true;message(e.message,true);}
+});
+$('post-form').addEventListener('submit',e=>{
+ e.preventDefault();try{
+  if(!revealed||!locked)throw Error('Open a matching reveal file after locking the first pass.');
+  if(!$('confirm-seen').checked)throw Error('Confirm this is a human post-reference judgment.');
+  const p={format:POST,version:1,requestId:request.requestId,
+    snapshotFingerprint:request.snapshotFingerprint,attemptId:request.attempt.attemptId,
+    slot:locked.slot,reviewerRole:locked.reviewerRole,completedAt:new Date().toISOString(),
+    firstSubmissionFingerprint:sig(locked),referenceSeenAttested:true,confirmed:true,
+    findings:validEvidence(fieldsFor('post')),note:$('post-note').value.trim()};
+  download(p,'active-recall-post-reference-'+locked.slot.toLowerCase()+'-'+request.requestId+'.json');
+  message('Optional post-reference JSON saved. The locked first pass remains unchanged.');
+ }catch(err){message(err.message,true);}
+});
+})();
+</script></body></html>
