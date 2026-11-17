@@ -88,7 +88,28 @@
           }
           ids.add(c.id);
         }
+        for(const activity of input.activities){
+          const k=activity.exactAnswerKey;
+          if(k===undefined)continue;
+          const req=input.requirements.find(r=>r.id===activity.requirementId),target=input.retrievalTargets.find(t=>t.id===activity.retrievalTargetId);
+          if(activity.kind!=='recall'||!req||!target||!k||!Number.isSafeInteger(k.version)||k.version<1||
+            !Array.isArray(k.answers)||!k.answers.length||k.answers.length>5||k.answers.some(x=>typeof x!=='string'||!x.trim()||x.length>120)||
+            new Set(k.answers.map(normaliseExactAnswer)).size!==k.answers.length||!Number.isFinite(Date.parse(k.verifiedAt))||
+            !Number.isSafeInteger(k.requirementVersion)||k.requirementVersion<1||!Number.isSafeInteger(k.targetVersion)||k.targetVersion<1||
+            !Number.isSafeInteger(k.activityVersion)||k.activityVersion<1||
+            (k.sourceVersion!==null&&k.sourceVersion!==undefined&&(!Number.isSafeInteger(k.sourceVersion)||k.sourceVersion<1)))
+            throw Error('Invalid learner-approved literal answer key in backup.');
+        }
         for(const a of input.attempts){
+          if(a.literalCheck!==undefined&&a.literalCheck!==null){
+            const k=a.literalCheck;
+            if(!k||k.version!==1||k.method!=='literal-match-v1'||!Number.isSafeInteger(k.keyVersion)||k.keyVersion<1||
+              typeof k.matched!=='boolean'||!Array.isArray(k.acceptedSnapshot)||!k.acceptedSnapshot.length||
+              k.acceptedSnapshot.length>5||k.acceptedSnapshot.some(x=>typeof x!=='string'||!x.trim()||x.length>120)||
+              a.assisted||a.inputMode!=='written'||typeof a.response!=='string'||!a.response.trim()||
+              k.matched!==k.acceptedSnapshot.some(x=>normaliseExactAnswer(x)===normaliseExactAnswer(a.response)))
+              throw Error('Invalid historical literal answer check in backup.');
+          }
           if(a.practiceStage!==undefined&&!['regular','immediate_post_study'].includes(a.practiceStage))throw Error('Invalid retrieval practice stage in backup.');
           if(a.correctionNote!==undefined&&(typeof a.correctionNote!=='string'||a.correctionNote.length>2000))throw Error('Invalid learner correction note in backup.');
           if(a.priorDueAt!==undefined&&a.priorDueAt!==null&&(typeof a.priorDueAt!=='string'||!Number.isFinite(Date.parse(a.priorDueAt))))throw Error('Invalid historical review window in backup.');
@@ -756,7 +777,7 @@
     r.question=question;r.answer=answer;r.kind=['recall','explain','apply'].includes(kind)?kind:r.kind;r.objective=cleanString(objective===undefined?previousObjective:objective,300)||question;r.version++;r.reviewedAt=new Date().toISOString();r.updatedAt=new Date().toISOString();r.verifiedAt=r.updatedAt;r.verificationStatus='verified';r.confidence='user_verified';r.possibleDuplicateOf=null;r.possibleConflictWith=null;r.sourceRevisionPending=false;
     db.requirementVersions.push({requirementId:r.id,version:r.version,objective:r.objective,question,answer,kind:r.kind,createdAt:r.updatedAt});
     const primary=getActivities(db,r.id).find(a=>a.isPrimary);
-    if(primary){primary.question=question;primary.answer=answer;primary.kind=r.kind;primary.version++;primary.updatedAt=r.updatedAt;}
+    if(primary){primary.question=question;primary.answer=answer;primary.kind=r.kind;if(r.kind!=='recall')delete primary.exactAnswerKey;primary.version++;primary.updatedAt=r.updatedAt;}
     const base=getTarget(db,r.id);if(base)base.label=cleanString(r.objective||question,160);
     if(changeType!=='wording'){
       for(const a of getActivities(db,r.id).filter(a=>!a.isPrimary)){a.active=false;a.archivedAt=r.updatedAt;}
@@ -1169,6 +1190,72 @@
     const eligibleNow=eligibleCandidates(db,start);
     return {days:rows,coverage,plannedTargets:scheduled.size,eligibleAtStart:eligibleNow.length,unplannedAtStart:eligibleNow.filter(c=>!scheduled.has(c.target.id)).length,forecastType:'first_pass_opportunities',warning:'Forecast shows possible first-pass study slots using current evidence. It does not simulate future answers, later spaced repetitions, learning gains, or exam results.'};
   }
+  // v4.0: only strict string agreement with a learner-approved literal key.
+  // This is NOT semantic correctness, an expert judgement or an AI grade.
+  function normaliseExactAnswer(s){return String(s??'').normalize('NFC').trim().replace(/\s+/gu,' ').toLowerCase();}
+  function exactKeyReady(db,activity){
+    const key=activity?.exactAnswerKey;
+    if(!key||activity.kind!=='recall'||activity.active===false||!Array.isArray(key.answers)||!key.answers.length||!key.verifiedAt)return false;
+    const req=db.requirements.find(r=>r.id===activity.requirementId);
+    const target=db.retrievalTargets.find(t=>t.id===activity.retrievalTargetId);
+    const source=req?.sourceId?db.sources.find(s=>s.id===req.sourceId):null;
+    return !!(req&&target&&requirementEligible(req)&&!target.needsReview&&
+      key.requirementVersion===req.version&&key.targetVersion===target.version&&key.activityVersion===activity.version&&
+      (key.sourceVersion??null)===(source?.version??null));
+  }
+  function setExactAnswerKey(db,activityId,answers,confirmed=false){
+    const activity=db.activities.find(a=>a.id===activityId&&a.active!==false);
+    if(!activity||activity.kind!=='recall')throw Error('Exact checking is only available for active short-answer recall questions.');
+    const req=db.requirements.find(r=>r.id===activity.requirementId);
+    const target=db.retrievalTargets.find(t=>t.id===activity.retrievalTargetId);
+    if(!req||!target||!requirementEligible(req)||target.needsReview)throw Error('Verify this learning requirement and recall focus first.');
+    if(typeof answers!=='string'||answers.length>1000)throw Error('Use at most five short literal answers.');
+    const keys=answers.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
+    if(keys.length>5||keys.some(x=>x.length>120))throw Error('Enter one to five answers, each at most 120 characters.');
+    if(new Set(keys.map(normaliseExactAnswer)).size!==keys.length)throw Error('Duplicate literal answers are not allowed.');
+    if(keys.length&&!confirmed)throw Error('Confirm that literal matching is appropriate for this factual question.');
+    const old=activity.exactAnswerKey;
+    if(!keys.length){delete activity.exactAnswerKey;db.events.push({type:'answer_key.disabled',entityId:activity.id,at:new Date().toISOString()});return null;}
+    if(old&&old.answers.join('\n')===keys.join('\n')&&exactKeyReady(db,activity))return old;
+    const source=req.sourceId?db.sources.find(s=>s.id===req.sourceId):null;
+    const key={version:(old?.version||0)+1,answers:keys,verifiedAt:new Date().toISOString(),
+      requirementVersion:req.version,targetVersion:target.version,activityVersion:activity.version,sourceVersion:source?.version??null};
+    activity.exactAnswerKey=key;
+    db.events.push({type:'answer_key.verified',entityId:activity.id,keyVersion:key.version,at:key.verifiedAt});
+    return key;
+  }
+  function previewLiteralCheck(db,activityId,response,{assisted=false,inputMode='written'}={}){
+    const activity=db.activities.find(a=>a.id===activityId);
+    if(!exactKeyReady(db,activity)||assisted||inputMode!=='written'||typeof response!=='string'||!response.trim())return null;
+    const key=activity.exactAnswerKey;
+    return {version:1,method:'literal-match-v1',keyVersion:key.version,matched:key.answers.some(x=>normaliseExactAnswer(x)===normaliseExactAnswer(response)),
+      acceptedSnapshot:[...key.answers]};
+  }
+  // Observed outcomes must have a real previous attempt on the same target
+  // and version; skipped days and future attempts are never fabricated.
+  function literalDelayedAudit(db,{minDelayHours=24}={}){
+    if(!Number.isFinite(minDelayHours)||minDelayHours<1||minDelayHours>720)throw Error('Invalid delayed-check threshold.');
+    const source=db.attempts.slice(-50000), ordered=source.map((a,i)=>({a,i,t:Date.parse(a.createdAt)})).sort((x,y)=>x.t-y.t||x.i-y.i);
+    const prior=new Map(),exclusions={noLiteralCheck:0,firstOrRevised:0,tooSoon:0,assistedOrImmediate:0};
+    let eligible=0,matched=0;const targets=new Set(),cohorts={};
+    for(const {a,t} of ordered){
+      if(!Number.isFinite(t))continue;
+      const key=`${a.requirementId}|${a.requirementVersion}|${a.retrievalTargetId}|${a.retrievalTargetVersion}`;
+      const previous=prior.get(key);prior.set(key,t);
+      if(!a.literalCheck){exclusions.noLiteralCheck++;continue;}
+      if(a.practiceStage==='immediate_post_study'||a.assisted){exclusions.assistedOrImmediate++;continue;}
+      if(previous===undefined||t<=previous){exclusions.firstOrRevised++;continue;}
+      if((t-previous)/3600000<minDelayHours){exclusions.tooSoon++;continue;}
+      eligible++;if(a.literalCheck.matched)matched++;targets.add(a.retrievalTargetId);
+      const span=(t-previous)/86400000,bin=span<4?'1–3 days':span<8?'4–7 days':span<22?'8–21 days':'22+ days';
+      const group=cohorts[bin]||(cohorts[bin]={attempts:0,matches:0,targets:new Set()});
+      group.attempts++;if(a.literalCheck.matched)group.matches++;group.targets.add(a.retrievalTargetId);
+    }
+    const summarise=(n,m,k)=>({attempts:n,matches:m,distinctTargets:k,matchShare:n>=20&&k>=10?Math.round(100*m/n):null});
+    return {version:1,processed:source.length,eligible:summarise(eligible,matched,targets.size),
+      byLag:Object.entries(cohorts).map(([lag,g])=>({lag,...summarise(g.attempts,g.matches,g.targets.size)})),exclusions,
+      warning:'Strict agreement with learner-approved answer strings—not independent validation of factual truth or semantic correctness. Minor equivalent phrasing may be marked different. Delayed results require a real earlier attempt at least 24 hours before this one. The algorithm does NOT alter review intervals or claim that either scheduling policy is superior.'};
+  }
   function recordAttempt(db,{requirementId,targetId=null,activityId=null,response='',rating,assisted=false,sessionId=null,questionUsed=null,inputMode=null,durationSeconds=null,criterionChecks=[],correctionNote='',practiceStage=null,now=new Date()}){
     const r=db.requirements.find(x=>x.id===requirementId);if(!r)throw Error('Requirement does not exist.');
     if(!['again','hard','good','easy'].includes(rating))throw Error('Invalid rating.');
@@ -1205,7 +1292,8 @@
     if(typeof correctionNote!=='string'||correctionNote.length>2000)throw Error('Correction note must be plain text, at most 2,000 characters.');
     const recordedResponse=cleanString(response,20000);
     const inferredMode=inputMode||(recordedResponse?'written':'mental');
-    const attempt={id:id('attempt'),priorDueAt:prev?.dueAt||null,priorIntervalDays:prev?.intervalDays??null,schedulingDecision,inputMode:inferredMode,activityKind:activity.kind,durationSeconds:validDuration(durationSeconds)?Math.round(durationSeconds):null,evidenceVersion:1,requirementId:r.id,requirementVersion:r.version,retrievalTargetId:target.id,retrievalTargetVersion:target.version,activityId:activity.id,activityVersion:activity.version,questionSnapshot:cleanString(questionUsed||activity.question,500),referenceSnapshot:activity.answer,focusLabelSnapshot:target.label,requirementVerified:r.verificationStatus==='verified',courseId:r.courseId,sessionId,response:recordedResponse,rating,scheduleRating,criterionChecks:checks,criterionCounts:counts,correctionNote:correctionNote.trim(),assisted:!!assisted,gradedBy:'learner',practiceStage:practiceStage||'regular',createdAt:now.toISOString()};
+    const literalCheck=previewLiteralCheck(db,activity.id,recordedResponse,{assisted,inputMode:inferredMode});
+    const attempt={id:id('attempt'),priorDueAt:prev?.dueAt||null,priorIntervalDays:prev?.intervalDays??null,schedulingDecision,literalCheck,inputMode:inferredMode,activityKind:activity.kind,durationSeconds:validDuration(durationSeconds)?Math.round(durationSeconds):null,evidenceVersion:1,requirementId:r.id,requirementVersion:r.version,retrievalTargetId:target.id,retrievalTargetVersion:target.version,activityId:activity.id,activityVersion:activity.version,questionSnapshot:cleanString(questionUsed||activity.question,500),referenceSnapshot:activity.answer,focusLabelSnapshot:target.label,requirementVerified:r.verificationStatus==='verified',courseId:r.courseId,sessionId,response:recordedResponse,rating,scheduleRating,criterionChecks:checks,criterionCounts:counts,correctionNote:correctionNote.trim(),assisted:!!assisted,gradedBy:'learner',practiceStage:practiceStage||'regular',createdAt:now.toISOString()};
     db.attempts.push(attempt);observeDuration(db,activity.kind,attempt.durationSeconds);
     db.memory[target.id]={dueAt,intervalDays:adjustedInterval,policyId:ACTIVE_SCHEDULING_POLICY,lastRating:scheduleRating,lastReviewedAt:now.toISOString(),reviewCount:(prev?.reviewCount||0)+1};
     db.events.push({type:'attempt.recorded',entityId:attempt.id,requirementId:r.id,targetId:target.id,at:attempt.createdAt});
@@ -1294,5 +1382,5 @@
   }
   function validateImport(x){return migrateDb(x);}
 
-  return {DAY,id,today,addDays,daysUntil,initialDb,migrateDb,validateImport,getTarget,getTargets,getMemory,getActivities,getCriteria,addCriterion,proposeCriteria,rubricQualityReview,addRubricEvidenceDraft,reviseCriterion,setCriterionAlternatives,rubricSyllabusAlignment,setCriterionSyllabusGoals,verifyCriterion,archiveCriterion,criterionStatus,rubricProgress,chooseActivity,addRetrievalTarget,verifyRetrievalTarget,addActivityVariant,deactivateActivity,reviseSource,addCourse,addSyllabusObjectives,updateSyllabusObjective,setSyllabusLink,setSyllabusMaterialsReady,setSyllabusLearningGuide,guidedLearningInfo,archiveSyllabusObjective,syllabusCoverage,draftRequirements,addSource,addImportedDocument,addRequirement,editRequirement,verifyRequirement,integrity:I.integrity,questionCoverage:I.questionCoverage,questionWarnings:I.questionWarnings,learningObjectiveMap,variationStudio,questionStudio,adoptQuestionProposal,coverageReviewQueue,addAssessment,linkedAssessments,estimatedSeconds,durationEstimate,evidenceType,inputModeFor,evidenceSummary,delayedRetrievalAudit,schedulingPolicyAudit,eligibleCandidates,planActivities,buildReviewAgenda,forecastSchedule,recordAttempt,latestCorrectiveFeedback,assessmentCoverage,stats,demoDb};
+  return {DAY,id,today,addDays,daysUntil,initialDb,migrateDb,validateImport,getTarget,getTargets,getMemory,getActivities,getCriteria,addCriterion,proposeCriteria,rubricQualityReview,addRubricEvidenceDraft,reviseCriterion,setCriterionAlternatives,rubricSyllabusAlignment,setCriterionSyllabusGoals,verifyCriterion,archiveCriterion,criterionStatus,rubricProgress,chooseActivity,addRetrievalTarget,verifyRetrievalTarget,addActivityVariant,deactivateActivity,reviseSource,addCourse,addSyllabusObjectives,updateSyllabusObjective,setSyllabusLink,setSyllabusMaterialsReady,setSyllabusLearningGuide,guidedLearningInfo,archiveSyllabusObjective,syllabusCoverage,draftRequirements,addSource,addImportedDocument,addRequirement,editRequirement,verifyRequirement,integrity:I.integrity,questionCoverage:I.questionCoverage,questionWarnings:I.questionWarnings,learningObjectiveMap,variationStudio,questionStudio,adoptQuestionProposal,coverageReviewQueue,addAssessment,linkedAssessments,estimatedSeconds,durationEstimate,evidenceType,inputModeFor,evidenceSummary,delayedRetrievalAudit,schedulingPolicyAudit,eligibleCandidates,planActivities,buildReviewAgenda,forecastSchedule,setExactAnswerKey,exactKeyReady,previewLiteralCheck,literalDelayedAudit,recordAttempt,latestCorrectiveFeedback,assessmentCoverage,stats,demoDb};
 });

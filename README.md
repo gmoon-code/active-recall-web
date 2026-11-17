@@ -1,4 +1,4 @@
-# Active Recall Web — Free Edition v3.9
+# Active Recall Web — Free Edition v4.0
 
 A local-first active-recall system with a **single multi-course automatic review agenda**, source-linked learning objectives, reviewed question drafts, and sessions that adjust to time budgets and assessments.
 
@@ -71,3 +71,12 @@ Open **Progress → Delayed retrieval evidence audit** to inspect real spacing b
 ## Blueprint 3.9 — Prospective scheduling policy audit
 
 **Progress** now records two *versioned* next-review recommendations when an actual attempt is completed: the **unchanged active interval**, which sets the real next review date, and a deliberately conservative **hypothetical shadow interval**. The audit displays counts and one-step median intervals, not a claim about which policy improves learning or predicts future workload. Historical attempts remain unchanged, and older schema-v5 JSON backups remain valid. No server, payment, cloud grading, or remote analytics is required. [Read Blueprint 3.9](docs/BLUEPRINT_3_9_FREE.md).
+
+
+## Blueprint 4.0 — Strict short-answer checks, without changing the scheduler
+
+In **Knowledge → Literal check**, you can explicitly approve up to five short answer strings for a verified, recall-type question. The local app checks typed responses against those strings **only after you reveal the reference answer**. It ignores case and repeated whitespace, but does not understand synonyms, scientific equivalence, calculations, or complex reasoning; a valid explanation can produce NO MATCH.
+
+This optional result is stored separately from your own answer rating, alongside the exact approved key version. It **does not override your self-rating or change review intervals**. In **Progress → Delayed short-answer literal checks**, results are described for actual independent written attempts spaced at least 24 hours after prior practice. Percentages are withheld for fewer than 20 checks across fewer than 10 distinct recall targets. Historical attempted answers and the calendar remain unchanged, and old schema-v5 JSON backups stay compatible.
+
+**Everything remains permanently free and browser-local.** Literal matching is a narrow observation, not a validated grade, independent scientific correctness judgment, or evidence that one spaced scheduling policy is superior. See [Blueprint 4.0](docs/BLUEPRINT_4_0_FREE.md).
