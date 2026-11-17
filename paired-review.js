@@ -59,6 +59,8 @@
     if(slot==='B'&&(!pair?.A||pair.B))throw Error('Reviewer B requires an existing A review and may be recorded once.');
     if(slot==='B'&&(!differentPerson||!noPriorJudgments))
       throw Error('Reviewer B must attest to being a different person and not seeing A’s judgments before reviewing.');
+    if(slot==='B'&&pair.A.reviewerRole==='self'&&reviewerRole==='self')
+      throw Error('Both reviewers cannot be the learner. Choose an actual separate person for B.');
     if(slot==='B'&&now.getTime()<Date.parse(pair.A.reviewedAt))
       throw Error('Reviewer B cannot predate reviewer A.');
     const checked=buildFindings(a,criteria,findings);
@@ -175,7 +177,7 @@
           if(!x||x.criterionId!==row.criterionId||x.criterionVersion!==row.criterionVersion||
             x.textSnapshot!==row.text||x.Astatus!==row.A.status||x.Bstatus!==row.B.status||
             !RESOLUTIONS.has(x.resolution)||typeof x.reason!=='string'||
-            x.reason.length<8||x.reason.length>1200)
+            x.reason.trim().length<8||x.reason.length>1200||x.reason!==x.reason.trim())
             throw Error('Invalid adjudication criterion in backup.');
         }
       }
@@ -189,8 +191,8 @@
     for(const a of pairs){
       const c=comparison(a);if(!c)continue;
       comparable+=c.comparable;agreements+=c.agreements;disagreements+=c.disagreements;
-      excluded+=c.uncertainOrUnassessed;authors.add(a.id);
-      if(c.comparable)targets.add(a.retrievalTargetId);
+      excluded+=c.uncertainOrUnassessed;
+      if(c.comparable){authors.add(a.id);targets.add(a.retrievalTargetId);}
       if(c.differences.length){
         const latest=a.independentReviewPair.adjudications.at(-1);
         if(latest) {adjudicated++;unresolved+=latest.decisions.filter(d=>d.resolution==='unresolved').length;}
