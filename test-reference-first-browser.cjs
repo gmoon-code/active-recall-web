@@ -91,9 +91,13 @@ async function main(){
      'Reference must remain withheld until both distinct first passes are imported.');
    await owner.locator('#reference-first-import').setInputFiles(asFile(B.firstBytes,'B-first.json'));
    await owner.locator('.toast:not(.error)').waitFor();
-   const revealPromise=owner.waitForEvent('download');
+   const revealPromise=owner.waitForEvent('download',{timeout:8000});
    await owner.locator('[data-action=export-reference-reveal][data-slot="A"]').click();
-   const revealDl=await revealPromise,revealPath=await revealDl.path();
+   const revealDl=await Promise.race([
+     revealPromise,
+     owner.locator('.toast.error').waitFor({timeout:5000}).then(async()=>{throw Error('Reveal UI rejected export: '+await owner.locator('.toast.error').innerText());})
+       .catch(error=>{if(error.name==='TimeoutError')return new Promise(()=>{});throw error;})
+   ]),revealPath=await revealDl.path();
    const revealBytes=fs.readFileSync(revealPath),reveal=JSON.parse(revealBytes.toString('utf8'));
    assert.equal(reveal.reference,original.reference);
    assert.equal(reveal.firstSubmissionFingerprint,await owner.evaluate(first=>window.ActiveRecallHumanReview.fingerprint(JSON.stringify(first)),A.first));
