@@ -142,6 +142,10 @@ test('A and B first passes become original immutable paired reviews',()=>{
  assert.equal(two.referenceFirstPass.submission.referenceUnseenAttested,true);
  assert.equal(P.comparison(s.f.attempt).disagreements,1);
 });
+test('an active reference-free request can be re-downloaded for B after A imported',()=>{
+ const s=setup();importA(s);
+ assert.deepEqual(F.issue(s.f.db,{attemptId:s.f.attempt.id,requestId:UUID2,now:at(0,4)}),s.request);
+});
 test('B must have the same reference-free request as A; no crossed handoffs',()=>{
  const s=setup();importA(s);
  const other={...s.B,requestId:UUID2};
