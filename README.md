@@ -1,9 +1,21 @@
-# Active Recall Web — Free Edition v4.4
+# Active Recall Web — Free Edition v4.5
 
 A local-first active-recall system with a **single multi-course automatic review agenda**, source-linked learning objectives, reviewed question drafts, and sessions that adjust to time budgets and assessments.
 
 **Public website:** https://gmoon-code.github.io/active-recall-web/
 
+
+## Blueprint 4.5 — Prospective reviewer-pilot registry and coded exports
+
+A new **Progress → Prospective human-review pilot** section lets learners lock a descriptive evaluation protocol **before** recording the study attempts that will be screened. Choose a fixed number of **3–30 distinct eligible retrieval targets**; the default is six. The app then screens **every newly recorded original study attempt in order** and logs exclusions such as assisted/oral responses, immediate-post-study attempts, unverified explanations, absent original rubrics, and repeated retrieval targets. It automatically closes enrolment when the preselected eligible quota is reached. Incomplete A/B reviews and optional post-reference judgments are reported as **missing**, never counted as wrong or silently excluded.
+
+Reviewers can use the established **v4.4 reference-free A/B workflow** for enrolled answers. The pilot audit reports original criterion-level decisive agreements, disagreements and nondecisive rows, without inventing correctness or memory retention estimates. A premature stop is documented as an explicit deviation rather than deleting unfinished work. The local versioned protocol, original selection records and append-only event history are checked during schema-v5 backup validation.
+
+Download either a **protocol + descriptive summary JSON** or a **coded rubric-status CSV**. The CSV includes only automatically generated case order, criterion positions and categorical statuses; it excludes the learner's question, written answer, reference, course, quotes, reviewer notes, original IDs and timestamps. It is **data-minimised, not guaranteed anonymous**, and locally generated timestamps are not externally authenticated preregistration. No files are uploaded.
+
+**183/183 Node tests and five real Chromium browser workflows passed** on the feature branch, including prospective enrolment, privacy-safe exports, and unchanged scheduled due dates. All prior reviewer tools, original study evidence, browser-local storage, GitHub Pages hosting and the 100% free/no-payment requirement remain intact.
+
+[Read Blueprint 4.5 and the pilot protocol](docs/BLUEPRINT_4_5_FREE.md)
 
 ## Blueprint 4.4 — Reference-free first judgments and separate reference reveal
 
