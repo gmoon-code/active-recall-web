@@ -14,6 +14,8 @@
   if(!P)throw Error('Missing local paired-review module.');
   const R=(typeof module!=='undefined'&&module.exports)?require('./review-packets.js'):globalThis.ActiveRecallReviewPackets;
   if(!R)throw Error('Missing local offline reviewer-packet module.');
+  const F=(typeof module!=='undefined'&&module.exports)?require('./reference-first.js'):globalThis.ActiveRecallReferenceFirst;
+  if(!F)throw Error('Missing reference-free human review module.');
   const DAY = 86400000;
   // Policy IDs are immutable labels for decisions. Changing any coefficient
   // requires a new ID; historical decisions must never be recomputed in place.
@@ -144,6 +146,7 @@
         H.validate(input); // Optional, append-only v4.1 annotations; schema v5 stays compatible.
         P.validate(input); // Optional v4.2 independent assessments/adjudication; no migration.
         R.validate(input); // Optional v4.3 request provenance and completed file history.
+        F.validate(input); // Optional v4.4 reference-withheld, locked first-pass protocol.
         return input;
       }
       const upgraded=JSON.parse(JSON.stringify(input));
