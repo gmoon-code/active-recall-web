@@ -182,7 +182,7 @@
    const {rows:ignored,...counts}=a;
    return {format:'arw-reviewer-pilot-summary-v1',version:1,
      protocol:{...p.protocol},localLockedAt:p.lockedAt,plannedTargets:p.plannedTargets,
-     status:a.status,earlyStopNote:p.earlyStopNote,
+     status:a.status,earlyStopDocumented:p.closeReason==='stopped_early',
      reportedCounts:counts,
      privacy:'No original answers, question text, reviewer rationales, notes, or internal attempt IDs exported.',
      note:'A mutable local lock is not a public preregistration. Counts are descriptive, not correctness or learning effects.'};
