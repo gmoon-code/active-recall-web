@@ -1,4 +1,8 @@
-# Active Recall Web — Free Edition v4.17
+# Active Recall Web — Free Edition v4.18
+
+## Blueprint 4.18 — Is the evidence ready for a memory-model comparison?
+
+Open **Progress → Memory-model evaluation readiness** to inspect how much genuinely delayed, written retrieval evidence is available. The read-only audit separates strict short-answer literal matching from self-reviewed and other-person-reviewed explanations, shows distinct target counts, exclusion reasons, and illustrative earlier/later chronological partitions. It explicitly reports that there are **no prospective recall-probability forecasts**: current and hypothetical interval timestamps cannot establish which scheduling model predicts retention better. **No FSRS model, grading, policy change, due-date adjustment, new schema field or network call** is introduced. The audit is not a readiness certification or a measure of mastery. [Read Blueprint 4.18](docs/BLUEPRINT_4_18_FREE.md).
 
 ## Blueprint 4.17 — Why does the app select these study questions?
 

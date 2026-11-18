@@ -38,7 +38,7 @@ jobs:
           node --check intelligence.js
           node --check document-import.js
       - name: Local deterministic tests
-        run: node --test test-human-review.cjs test-paired-review.cjs test-review-packets.cjs test-reference-first.cjs test-reviewer-pilot.cjs test-reviewer-training.cjs test-reviewer-usability.cjs test-question-quality.cjs test-manual-qa.cjs test-qa-import.cjs test-qa-delete.cjs test-qa-purge.cjs test-deploy-preflight.cjs test-study-rhythm.cjs test-study-rhythm-app.cjs test-priority-inspector.cjs
+        run: node --test test-human-review.cjs test-paired-review.cjs test-review-packets.cjs test-reference-first.cjs test-reviewer-pilot.cjs test-reviewer-training.cjs test-reviewer-usability.cjs test-question-quality.cjs test-manual-qa.cjs test-qa-import.cjs test-qa-delete.cjs test-qa-purge.cjs test-deploy-preflight.cjs test-study-rhythm.cjs test-study-rhythm-app.cjs test-priority-inspector.cjs test-memory-readiness.cjs
       - name: Free Chromium desktop and mobile smoke
         run: |
           npm install --no-save --no-package-lock --ignore-scripts --no-audit --no-fund playwright@1.56.1
@@ -56,3 +56,4 @@ jobs:
           node test-study-rhythm-browser.cjs
           node test-schedule-simulator-browser.cjs
           node test-priority-inspector-browser.cjs
+          node test-memory-readiness-browser.cjs
