@@ -314,7 +314,7 @@ test('static delivery includes pilot module before core and UI before app',()=>{
   app=fs.readFileSync('./app.js','utf8');
  assert.ok(html.indexOf('reviewer-pilot.js')<html.indexOf('core.js'));
  assert.ok(html.indexOf('reviewer-pilot-ui.js')<html.indexOf('app.js'));
- assert.match(sw,/active-recall-web-v4-18/);
+ assert.match(sw,/active-recall-web-v4-19/);
  assert.match(core,/Pilot\.observe\(db,attempt\)/);
  assert.match(core,/Pilot\.validate\(input\)/);
  assert.match(app,/case 'export-reviewer-pilot-csv'/);
