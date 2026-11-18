@@ -580,14 +580,16 @@
   function draftRequirements(text, limit=12){
     return I.analyzeNotes(text, [], null, limit).drafts;
   }
-  function addSource(db, {courseId,title,content,preserveRaw=false}) {
+  function addSource(db, {courseId,title,content,preserveRaw=false,generateDrafts=true}) {
     if(!db.courses.some(c=>c.id===courseId))throw Error('Choose an existing course.');
     title=cleanString(title,120)||'Untitled learning'; content=preserveRaw?String(content??''):cleanString(content,20000);
     if(content.length>20000)throw Error('Source part exceeds the 20,000 character limit.');
     if(!content)throw Error('Enter your learning notes.');
     const createdAt=new Date().toISOString();
-    const source={id:id('source'),courseId,title,content,version:1,createdAt,analysisEngine:'offline-rules-v1',duplicateLinks:[],conflictLinks:[]};
-    const analysis=I.analyzeNotes(content,db.requirements,courseId,12);
+    const source={id:id('source'),courseId,title,content,version:1,createdAt,analysisEngine:generateDrafts?'offline-rules-v1':'manual-notes-only',duplicateLinks:[],conflictLinks:[]};
+    // Saving lecture notes must not force low-confidence questions into the
+    // knowledge base. Rule proposals are opt-in from the capture UI.
+    const analysis=generateDrafts?I.analyzeNotes(content,db.requirements,courseId,12):{drafts:[],duplicates:[],conflicts:[]};
     // Preserve source even when all content was already captured.
     db.sources.push(source);db.sourceVersions.push({sourceId:source.id,version:1,title,content,createdAt}); db.events.push({type:'source.created',entityId:source.id,at:createdAt});
     for(const conflict of analysis.conflicts) source.conflictLinks.push(conflict.existingRequirementId);
@@ -608,7 +610,7 @@
   }
   // Import is all-or-nothing. Each part is a complete, exact slice of the
   // extracted text, with source offsets relative to that slice.
-  function addImportedDocument(db,{courseId,title,document}){
+  function addImportedDocument(db,{courseId,title,document,generateDrafts=true}){
     if(!db.courses.some(c=>c.id===courseId))throw Error('Choose an existing course.');
     if(!document||!['txt','md','pdf'].includes(document.format))throw Error('Invalid imported document.');
     if(document.format==='pdf'&&document.reviewed!==true)throw Error('Review extracted PDF text against the original before importing.');
@@ -621,7 +623,7 @@
     const baseTitle=cleanString(title||filename,90)||'Imported document';
     for(let i=0;i<parts.length;i++){
       const part=parts[i],displayTitle=parts.length===1?baseTitle:`${baseTitle} — part ${i+1}/${parts.length}`;
-      const result=addSource(candidate,{courseId,title:displayTitle,content:part.text,preserveRaw:true});
+      const result=addSource(candidate,{courseId,title:displayTitle,content:part.text,preserveRaw:true,generateDrafts});
       Object.assign(result.source,{documentGroupId,importName:filename,importFormat:document.format,importPart:i+1,importPartCount:parts.length,importOffsetStart:part.start,importOffsetEnd:part.end,importPageCount:document.pageCount||null,importAudit:document.format==='pdf'?{mode:document.extractionAudit?.mode||'unknown',pages:document.extractionAudit?.pages||[],missingPages:document.extractionAudit?.missingPages||[],missingPagesAcknowledged:document.missingPagesAcknowledged===true,reviewedAt:startedAt,textCorrected:content!==D.validateText(document.originalExtractedText||document.content),extractionWarning:document.warning||''}:null,documentOutline:outline.filter(h=>h.start>=part.start&&h.start<part.end).map(h=>({...h,start:h.start-part.start,end:Math.min(h.end,part.end)-part.start}))});
       results.push(result);
     }
@@ -786,12 +788,13 @@
       .map(p=>({key:p.key,question:p.question,answer:r.answer,kind:r.kind,structure:p.structure,sourceQuote:r.sourceQuote}));
     return {requirementId:r.id,targetId:t.id,reason:candidates.length?'Review and edit before saving. Variations share the original focus and due date.':'No safe new automatic rewording available. You can write one manually.',candidates};
   }
-  function addRequirement(db,{courseId,sourceId=null,question,answer,kind='explain',sourceQuote='',origin='manual',confidence='manual',objective='',format='',sourceStart=null,sourceEnd=null,possibleDuplicateOf=null,possibleConflictWith=null}){
+  function addRequirement(db,{courseId,sourceId=null,lectureTitle='',question,answer,kind='explain',sourceQuote='',origin='manual',confidence='manual',objective='',format='',sourceStart=null,sourceEnd=null,possibleDuplicateOf=null,possibleConflictWith=null}){
     if(!db.courses.some(c=>c.id===courseId))throw Error('Choose an existing course.');
+    if(sourceId&&!db.sources.some(s=>s.id===sourceId&&s.courseId===courseId))throw Error('Choose lecture notes from the same course.');
     question=cleanString(question,500); answer=cleanString(answer,4000);
     if(!question||!answer)throw Error('Both the question and reference answer are required.');
     const now=new Date().toISOString();
-    const req={id:id('req'),courseId,sourceId,sourceVersion:sourceId?(db.sources.find(s=>s.id===sourceId)?.version||1):null,question,answer,sourceQuote:cleanString(sourceQuote,1200),kind:['recall','explain','apply'].includes(kind)?kind:'explain',origin,confidence,objective:cleanString(objective,300),format,sourceStart,sourceEnd,possibleDuplicateOf,possibleConflictWith,verificationStatus:origin==='rule_draft'?'draft':'verified',verifiedAt:origin==='rule_draft'?null:now,version:1,active:true,createdAt:now,updatedAt:now};
+    const req={id:id('req'),courseId,sourceId,lectureTitle:sourceId?'':cleanString(lectureTitle,120),sourceVersion:sourceId?(db.sources.find(s=>s.id===sourceId)?.version||1):null,question,answer,sourceQuote:cleanString(sourceQuote,1200),kind:['recall','explain','apply'].includes(kind)?kind:'explain',origin,confidence,objective:cleanString(objective,300),format,sourceStart,sourceEnd,possibleDuplicateOf,possibleConflictWith,verificationStatus:origin==='rule_draft'?'draft':'verified',verifiedAt:origin==='rule_draft'?null:now,version:1,active:true,createdAt:now,updatedAt:now};
     db.requirements.push(req);
     db.requirementVersions.push({requirementId:req.id,version:1,objective:req.objective||question,question,answer,kind:req.kind,createdAt:now});
     db.retrievalTargets.push({id:baseTargetId(req.id),requirementId:req.id,label:cleanString(req.objective||question,160),createdAt:now,isPrimary:true,active:true,needsReview:false,version:1});
@@ -799,16 +802,45 @@
     db.events.push({type:'requirement.created',entityId:req.id,at:now});
     return req;
   }
-  function editRequirement(db,reqId,{question,answer,kind,objective,changeType='substantive'}){
+  function addManualQuestionBatch(db,{courseId,sourceId=null,lectureTitle='',text,kind='recall'}){
+    if(!db.courses.some(c=>c.id===courseId))throw Error('Choose an existing course.');
+    if(sourceId&&!db.sources.some(s=>s.id===sourceId&&s.courseId===courseId))throw Error('Choose lecture notes from the same course.');
+    text=String(text??'');
+    if(!text.trim()||text.length>45000)throw Error('Paste up to 45,000 characters of question and answer pairs.');
+    if(!['recall','explain','apply'].includes(kind))throw Error('Choose a supported practice type.');
+    const pairs=[];let current=null,readingAnswer=false;
+    const finish=()=>{
+      if(!current)return;
+      current.question=current.question.trim();current.answer=current.answer.trim();
+      if(!readingAnswer||!current.question||!current.answer)throw Error('Every Q: line needs a nonempty A: line. No questions were imported.');
+      if(current.question.length>500||current.answer.length>4000)throw Error('A question or answer is too long. No questions were imported.');
+      pairs.push(current);current=null;readingAnswer=false;
+      if(pairs.length>50)throw Error('Import at most 50 questions at a time.');
+    };
+    for(const line of text.replace(/\r\n?/g,'\n').split('\n')){
+      const question=line.match(/^\s*(?:Q|Question)\s*:\s*(.*)$/i),answer=line.match(/^\s*(?:A|Answer)\s*:\s*(.*)$/i);
+      if(question){finish();current={question:question[1],answer:''};continue;}
+      if(answer){if(!current||readingAnswer)throw Error('Each Q: must have exactly one A:. No questions were imported.');current.answer=answer[1];readingAnswer=true;continue;}
+      if(!line.trim()||/^\s*---\s*$/.test(line)){if(current&&readingAnswer)current.answer+='\n';continue;}
+      if(!current||!readingAnswer)throw Error('Use Q: question followed by A: answer for every pair. No questions were imported.');
+      current.answer+='\n'+line;
+    }
+    finish();
+    if(!pairs.length)throw Error('No Q: / A: pairs found.');
+    const keys=new Set();
+    for(const p of pairs){const key=p.question.toLocaleLowerCase();if(keys.has(key)||db.requirements.some(r=>r.active!==false&&r.courseId===courseId&&r.question.toLocaleLowerCase()===key&&r.sourceId===(sourceId||null)&&(!sourceId?(r.lectureTitle||'')===cleanString(lectureTitle,120):true)))throw Error('Repeated question in this lecture. No questions were imported.');keys.add(key);}
+    return pairs.map(p=>addRequirement(db,{courseId,sourceId,lectureTitle,question:p.question,answer:p.answer,kind}));
+  }
+  function editRequirement(db,reqId,{question,answer,kind,objective,lectureTitle,changeType='substantive'}){
     const r=db.requirements.find(r=>r.id===reqId);if(!r)throw Error('Requirement not found.');
     question=cleanString(question,500);answer=cleanString(answer,4000);
     if(!question||!answer)throw Error('Question and reference answer cannot be empty.');
     // Editing an unverified generated draft is NOT a substitute for reviewing
     // the source and answer. Keep it out of study until explicit confirmation.
-    const keepPending=r.origin==='rule_draft'&&(r.verificationStatus!=='verified'||r.sourceRevisionPending);
+    const keepPending=!!r.sourceRevisionPending||(r.origin==='rule_draft'&&r.verificationStatus!=='verified');
     db.events.push({type:'requirement.revised',entityId:r.id,at:new Date().toISOString(),priorVersion:r.version,old:{question:r.question,answer:r.answer,kind:r.kind}});
     const previousObjective=r.objective||r.question;
-    r.question=question;r.answer=answer;r.kind=['recall','explain','apply'].includes(kind)?kind:r.kind;r.objective=cleanString(objective===undefined?previousObjective:objective,300)||question;r.version++;r.updatedAt=new Date().toISOString();r.reviewedAt=keepPending?null:r.updatedAt;r.verifiedAt=keepPending?null:r.updatedAt;r.verificationStatus=keepPending?'draft':'verified';r.confidence=keepPending?'review':'user_verified';r.possibleDuplicateOf=null;r.possibleConflictWith=null;r.sourceRevisionPending=false;
+    r.question=question;r.answer=answer;r.kind=['recall','explain','apply'].includes(kind)?kind:r.kind;r.objective=cleanString(objective===undefined?previousObjective:objective,300)||question;if(lectureTitle!==undefined&&!r.sourceId)r.lectureTitle=cleanString(lectureTitle,120);r.version++;r.updatedAt=new Date().toISOString();r.reviewedAt=keepPending?null:r.updatedAt;r.verifiedAt=keepPending?null:r.updatedAt;r.verificationStatus=keepPending?'draft':'verified';r.confidence=keepPending?'review':'user_verified';r.possibleDuplicateOf=null;r.possibleConflictWith=null;
     db.requirementVersions.push({requirementId:r.id,version:r.version,objective:r.objective,question,answer,kind:r.kind,createdAt:r.updatedAt});
     const primary=getActivities(db,r.id).find(a=>a.isPrimary);
     if(primary){primary.question=question;primary.answer=answer;primary.kind=r.kind;if(r.kind!=='recall')delete primary.exactAnswerKey;primary.version++;primary.updatedAt=r.updatedAt;}
@@ -1447,5 +1479,5 @@
   }
   function validateImport(x){return migrateDb(x);}
 
-  return {DAY,id,today,addDays,daysUntil,initialDb,migrateDb,validateImport,getTarget,getTargets,getMemory,getActivities,getCriteria,addCriterion,proposeCriteria,rubricQualityReview,addRubricEvidenceDraft,reviseCriterion,setCriterionAlternatives,rubricSyllabusAlignment,setCriterionSyllabusGoals,verifyCriterion,archiveCriterion,criterionStatus,rubricProgress,chooseActivity,addRetrievalTarget,verifyRetrievalTarget,addActivityVariant,deactivateActivity,reviseSource,addCourse,addSyllabusObjectives,updateSyllabusObjective,setSyllabusLink,setSyllabusMaterialsReady,setSyllabusLearningGuide,guidedLearningInfo,archiveSyllabusObjective,syllabusCoverage,draftRequirements,addSource,addImportedDocument,addRequirement,editRequirement,verifyRequirement,questionQualityAudit,confirmQuestionQuality,integrity:I.integrity,questionCoverage:I.questionCoverage,questionWarnings:I.questionWarnings,learningObjectiveMap,variationStudio,questionStudio,adoptQuestionProposal,coverageReviewQueue,addAssessment,linkedAssessments,estimatedSeconds,durationEstimate,evidenceType,inputModeFor,evidenceSummary,delayedRetrievalAudit,schedulingPolicyAudit,eligibleCandidates,planActivities,buildReviewAgenda,forecastSchedule,setExactAnswerKey,exactKeyReady,previewLiteralCheck,literalDelayedAudit,recordAttempt,latestCorrectiveFeedback,assessmentCoverage,stats,demoDb};
+  return {DAY,id,today,addDays,daysUntil,initialDb,migrateDb,validateImport,getTarget,getTargets,getMemory,getActivities,getCriteria,addCriterion,proposeCriteria,rubricQualityReview,addRubricEvidenceDraft,reviseCriterion,setCriterionAlternatives,rubricSyllabusAlignment,setCriterionSyllabusGoals,verifyCriterion,archiveCriterion,criterionStatus,rubricProgress,chooseActivity,addRetrievalTarget,verifyRetrievalTarget,addActivityVariant,deactivateActivity,reviseSource,addCourse,addSyllabusObjectives,updateSyllabusObjective,setSyllabusLink,setSyllabusMaterialsReady,setSyllabusLearningGuide,guidedLearningInfo,archiveSyllabusObjective,syllabusCoverage,draftRequirements,addSource,addImportedDocument,addRequirement,addManualQuestionBatch,editRequirement,verifyRequirement,questionQualityAudit,confirmQuestionQuality,integrity:I.integrity,questionCoverage:I.questionCoverage,questionWarnings:I.questionWarnings,learningObjectiveMap,variationStudio,questionStudio,adoptQuestionProposal,coverageReviewQueue,addAssessment,linkedAssessments,estimatedSeconds,durationEstimate,evidenceType,inputModeFor,evidenceSummary,delayedRetrievalAudit,schedulingPolicyAudit,eligibleCandidates,planActivities,buildReviewAgenda,forecastSchedule,setExactAnswerKey,exactKeyReady,previewLiteralCheck,literalDelayedAudit,recordAttempt,latestCorrectiveFeedback,assessmentCoverage,stats,demoDb};
 });

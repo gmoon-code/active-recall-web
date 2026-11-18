@@ -1,0 +1,98 @@
+/* Free browser end-to-end workflow: notes -> own lecture Q&A -> edit -> study. */
+'use strict';
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const path=require('node:path');
+const http=require('node:http');
+const {chromium}=require('playwright');
+
+async function main(){
+  const root=process.cwd();
+  const mime={'.html':'text/html','.js':'text/javascript','.css':'text/css','.svg':'image/svg+xml','.png':'image/png','.webmanifest':'application/manifest+json'};
+  const server=http.createServer((req,res)=>{
+    const name=decodeURIComponent(new URL(req.url,'http://localhost').pathname).replace(/^\/+/, '')||'index.html';
+    const file=path.resolve(root,name);
+    if(!file.startsWith(root+path.sep)){res.writeHead(403).end();return;}
+    fs.readFile(file,(err,data)=>{if(err){res.writeHead(404).end();return;}res.writeHead(200,{'Content-Type':mime[path.extname(file)]||'application/octet-stream','Cache-Control':'no-store'}).end(data);});
+  });
+  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+  let browser;
+  try{
+    browser=await chromium.launch({headless:true,executablePath:process.env.CHROME_BIN||'/usr/bin/google-chrome',args:['--no-sandbox']});
+    const page=await browser.newPage({viewport:{width:1280,height:900}}),errors=[];
+    page.on('pageerror',e=>errors.push(e.message));
+    await page.goto('http://127.0.0.1:'+server.address().port+'/');
+    await page.locator('.navbtn[data-page=courses]').click();
+    await page.locator('[data-form=add-course] [name=name]').fill('AP Biology');
+    await page.locator('[data-form=add-course] [type=submit]').click();
+    await page.locator('.navbtn[data-page=capture]').click();
+    await page.locator('[data-form=capture] [name=title]').fill('Lecture 8 — Enzymes');
+    await page.locator('[data-form=capture] [name=content]').fill('ATP synthase produces ATP only when a proton gradient is present.');
+    assert.equal(await page.locator('[data-form=capture] [name=generateDrafts]').isChecked(),false);
+    await page.locator('[data-form=capture] [type=submit]').click();
+    await page.locator('#qa-source').waitFor();
+    assert.match(await page.locator('#qa-source option:checked').innerText(),/Lecture 8/);
+    let state=await page.evaluate(async()=>{const {db}=await window.ActiveRecallStorage.load();return {sources:db.sources.length,questions:db.requirements.length};});
+    assert.equal(state.sources,1);
+    assert.equal(state.questions,0,'Notes alone must not invent questions by default.');
+    await page.locator('#qa-question').fill('How does a proton gradient power ATP synthase?');
+    await page.locator('#qa-answer').fill('The enzyme uses proton movement down its electrochemical gradient to drive ATP formation.');
+    await page.locator('[data-form=quick-add-question] [type=submit]').click();
+    await page.locator('.qa-item').first().waitFor();
+    assert.match(await page.locator('.qa-item').first().innerText(),/How does a proton gradient/);
+    assert.equal(await page.locator('#qa-source option:checked').innerText(),'Lecture 8 — Enzymes');
+    await page.locator('#qa-question').fill('Which molecule is synthesised by ATP synthase?');
+    await page.locator('#qa-answer').fill('ATP.');
+    await page.locator('[data-form=quick-add-question] [type=submit]').click();
+    assert.equal(await page.locator('.qa-item').count(),2);
+    await page.waitForFunction(async()=>{const {db}=await window.ActiveRecallStorage.load();return db.requirements.length===2;});
+    const seeded=await page.evaluate(async()=>{
+      const C=window.ActiveRecallCore,S=window.ActiveRecallStorage,{db}=await S.load();
+      const r=db.requirements.find(r=>r.question.startsWith('How does a proton gradient'));
+      const target=C.getTarget(db,r.id),activity=C.getActivities(db,r.id)[0];
+      C.recordAttempt(db,{requirementId:r.id,targetId:target.id,activityId:activity.id,rating:'good',response:'Proton flow'});
+      await S.save(db,null);await S.ready();return {id:r.id,targetId:target.id,due:db.memory[target.id].dueAt};
+    });
+    await page.reload();await page.locator('.navbtn[data-page=questions]').click();
+    const row=page.locator('[data-question-id="'+seeded.id+'"]');
+    await row.locator('[data-action=qa-edit]').click();
+    await row.locator('[name=question]').fill('Explain how the proton gradient powers ATP synthase.');
+    await row.locator('[name=changeType]').selectOption('wording');
+    await row.locator('[data-form=quick-edit-question] [type=submit]').click();
+    await page.waitForFunction(async()=>{const {db}=await window.ActiveRecallStorage.load();return db.requirements.some(r=>r.id===document.querySelector('[data-question-id]')?.dataset.questionId&&r.version===2)||db.requirements.some(r=>r.question.startsWith('Explain how the proton')&&r.version===2);});
+    state=await page.evaluate(async()=>{const {db}=await window.ActiveRecallStorage.load();const r=db.requirements.find(r=>r.question.startsWith('Explain how the proton'));return {due:db.memory[r.id+':focus']?.dueAt||Object.values(db.memory)[0]?.dueAt,attempts:db.attempts.length,sourceId:r.sourceId,version:r.version};});
+    assert.equal(state.due,seeded.due);
+    assert.equal(state.attempts,1);
+    assert.equal(state.version,2);
+    assert.ok(state.sourceId);
+    await row.locator('[data-action=qa-edit]').click();
+    await row.locator('[name=answer]').fill('ATP synthase is a membrane protein that produces ATP; here the tested mechanism has changed.');
+    await row.locator('[name=changeType]').selectOption('substantive');
+    await row.locator('[data-form=quick-edit-question] [type=submit]').click();
+    await page.waitForFunction(async()=>{const {db}=await window.ActiveRecallStorage.load();return db.requirements.some(r=>r.version===3);});
+    state=await page.evaluate(async()=>{const {db}=await window.ActiveRecallStorage.load();return {memory:db.memory,attempts:db.attempts.length};});
+    assert.equal(Object.keys(state.memory).length,0,'Substantive edits must reset target interval.');
+    assert.equal(state.attempts,1,'Earlier study evidence must survive.');
+    await page.locator('.qa-bulk summary').click();
+    await page.locator('#qa-bulk-text').fill('Q: Where does the citric acid cycle occur?\nA: In the mitochondrial matrix of eukaryotic cells.\n\nQ: What does NADH carry?\nA: High-energy electrons.');
+    await page.locator('[data-form=quick-bulk-questions] [type=submit]').click();
+    assert.equal(await page.locator('.qa-item').count(),4,'Batch-pasted questions should appear under the same lecture.');
+    await page.locator('#qa-source').selectOption('');
+    await page.locator('#qa-lecture-title').fill('Lecture 9 — No notes uploaded');
+    await page.locator('#qa-question').fill('How do I organise lecture questions without notes?');
+    await page.locator('#qa-answer').fill('Use a lecture title in My Q&A.');
+    await page.locator('[data-form=quick-add-question] [type=submit]').click();
+    assert.equal(await page.locator('.qa-item').count(),1,'New title-only lecture should get its own filter group.');
+    assert.match(await page.locator('#qa-filter option:checked').innerText(),/Lecture 9/);
+    await page.locator('.navbtn[data-page=study]').click();
+    assert.ok(await page.locator('[data-action=start-session]').count(),'Manually authored questions must enter the review plan.');
+    await page.setViewportSize({width:390,height:844});
+    await page.locator('.navbtn[data-page=questions]').click();
+    const composer=await page.locator('.qa-composer').boundingBox();
+    assert.ok(composer&&composer.width<=390,'Writing form must fit mobile width.');
+    assert.ok(composer.y<(await page.locator('.qa-main').boundingBox()).y,'On mobile, add-question form must appear before the list.');
+    assert.deepEqual(errors,[]);
+    process.stdout.write('PASS: lecture capture without drafts; self-authored linked Q&A; repeated additions; wording/substantive edits; preserved attempts; mobile editor.\n');
+  }finally{if(browser)await browser.close();await new Promise(resolve=>server.close(resolve));}
+}
+main().catch(e=>{console.error(e);process.exitCode=1;});

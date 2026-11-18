@@ -309,7 +309,7 @@ test('static v4.6 files are cached and loaded before core and owner UI',()=>{
    sw=fs.readFileSync('sw.js','utf8'),core=fs.readFileSync('core.js','utf8');
  assert.ok(index.indexOf('reviewer-training.js')<index.indexOf('core.js'));
  assert.ok(index.indexOf('reviewer-training-ui.js')<index.indexOf('app.js'));
- assert.match(sw,/active-recall-web-v4-8/);
+ assert.match(sw,/active-recall-web-v4-9/);
  assert.match(sw,/reviewer-training-offline\.html/);
  assert.match(core,/Training\.validate\(input\)/);
 });
