@@ -70,6 +70,52 @@
       status:restDay?'rest':!due.length&&!prepSeconds?'clear':shortfallSeconds?'overload':unplaced.length?'prioritization_gap':'fit'
     };
   }
+  function compareSchedules(db,core,{now=new Date(),proposal}={}){
+    const saved=preferences(db);
+    if(!proposal||proposal.days!==saved.days)throw Error('Compare schedules over the same planning horizon.');
+    const normalize=p=>({days:p.days,weekdayMinutes:p.weekdayMinutes,weekendMinutes:p.weekendMinutes,
+      missedDates:[...new Set(p.missedDates||[])].sort()});
+    const baselinePrefs=normalize(saved),proposedPrefs=normalize(proposal);
+    // Reuse the real agenda and its exact validation. No user data is changed.
+    const baseline=core.buildReviewAgenda(db,{start:now,...baselinePrefs});
+    const alternative=core.buildReviewAgenda(db,{start:now,...proposedPrefs});
+    const summarise=agenda=>({
+      availableMinutes:agenda.days.reduce((n,d)=>n+d.budgetMinutes,0),
+      assignedMinutes:Math.ceil(agenda.days.reduce((n,d)=>n+d.usedSeconds,0)/60),
+      firstPasses:agenda.plannedTargets,
+      unplacedKnown:agenda.unplannedDue,
+      preparationSteps:agenda.preparationSteps,
+      unplacedPreparation:agenda.unplannedPreparation,
+      conditionalSlots:agenda.conditionalOpportunities
+    });
+    const firstSlots=agenda=>{
+      const result=new Map();
+      for(const day of agenda.days)for(const slot of day.activities){
+        if(!slot.conditional&&!result.has(slot.targetId))result.set(slot.targetId,day.date);
+      }
+      return result;
+    };
+    const before=firstSlots(baseline),after=firstSlots(alternative);
+    const movement={added:0,removed:0,earlier:0,later:0,same:0};
+    for(const [id,date] of before){
+      if(!after.has(id))movement.removed++;
+      else if(after.get(id)<date)movement.earlier++;
+      else if(after.get(id)>date)movement.later++;
+      else movement.same++;
+    }
+    for(const id of after.keys())if(!before.has(id))movement.added++;
+    const examChanges=baseline.coverage.map((exam,i)=>({
+      title:exam.title,date:exam.date,eligible:exam.eligibleTargets,
+      before:exam.firstPass,after:alternative.coverage[i]?.firstPass??0
+    }));
+    return {baselinePrefs,proposedPrefs,changed:JSON.stringify(baselinePrefs)!==JSON.stringify(proposedPrefs),
+      baseline:summarise(baseline),alternative:summarise(alternative),movement,examChanges,
+      days:baseline.days.map((d,i)=>({date:d.date,beforeCapacity:d.budgetMinutes,afterCapacity:alternative.days[i].budgetMinutes,
+        beforeFirst:d.activities.filter(a=>!a.conditional).length,
+        afterFirst:alternative.days[i].activities.filter(a=>!a.conditional).length,
+        beforeWaiting:d.overdueUnplaced,afterWaiting:alternative.days[i].overdueUnplaced})),
+      warning:'This is a read-only comparison of possible study slots under the same provisional scheduling rules. It does not simulate correct answers, forgetting, future review dates, grades or adherence. A shifted slot is not a changed memory due date. Only the learner can apply availability changes.'};
+  }
   function recordDailyPlan(db, core, {now=new Date(),reason='first_open'}={}) {
     const date=localDate(now);
     if (!['first_open','availability_changed'].includes(reason)) throw Error('Invalid study-plan record reason.');
@@ -176,5 +222,5 @@
     }
     return true;
   }
-  return {preferences,capacityOn,studyFit,recordDailyPlan,history,logOutsideStudy,deleteOutsideStudy,validate,localDate};
+  return {preferences,capacityOn,studyFit,compareSchedules,recordDailyPlan,history,logOutsideStudy,deleteOutsideStudy,validate,localDate};
 });

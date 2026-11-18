@@ -54,3 +54,4 @@ jobs:
           node test-qa-import-browser.cjs
           node test-qa-delete-browser.cjs
           node test-study-rhythm-browser.cjs
+          node test-schedule-simulator-browser.cjs

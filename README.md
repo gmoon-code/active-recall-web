@@ -1,4 +1,8 @@
-# Active Recall Web — Free Edition v4.15
+# Active Recall Web — Free Edition v4.16
+
+## Blueprint 4.16 — Compare study schedules before applying changes
+
+In **Calendar → What if I changed my study time?**, enter alternative weekday/weekend minutes or unavailable dates and press **Preview schedule changes**. The app calculates two plans using the same current question priorities and time horizon, without saving the proposal. Compare available/assigned minutes, first known review opportunities, due work not placed, preparation, conditional revisits, question opportunities moved earlier/later, and assessment-specific opportunity counts. Only **Apply proposed availability** followed by explicit confirmation changes saved availability and appends a dated plan revision. Discarding or cancelling leaves your information unchanged. This does not change recall memory, due dates or question results; it is **not FSRS** and does not estimate forgetting or future exam results. [Read Blueprint 4.16](docs/BLUEPRINT_4_16_FREE.md).
 
 ## Blueprint 4.15 — Log study outside the app
 

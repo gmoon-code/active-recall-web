@@ -4,6 +4,7 @@
   let db, page='home', focusedCourse=null, duration=25, currentSessionId=null, modalReqId=null, modalSourceId=null, modalReviewId=null, modalPairId=null, qualityReqId=null, toastTimer=null;
   let pendingDocument=null, documentImportBusy=false, studioSourceId=null, syllabusEditingId=null, syllabusFocusedId=null;
   let focusedLecture='', editingQuestionId=null, lastWrittenLecture='', lastWrittenSourceId='', pendingQuestionImport=null;
+  let schedulePreview=null;
   let selectingQuestions=false, selectedQuestionIds=new Set(),permanentDeleteBusy=false;
   let guidedGoalId=null, guidedStep='source', guidedAnswer='', guidedRevealed=false, guidedStartedAt=0;
   let outlookSettings={days:21,weekdayMinutes:25,weekendMinutes:60,missedDates:[]};
@@ -59,13 +60,13 @@
     }
   }
   function notify(message,error=false){let old=$('.toast');if(old)old.remove();const el=document.createElement('div');el.className='toast'+(error?' error':'');el.textContent=message;document.body.appendChild(el);if(toastTimer)clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.remove(),3800);}
-  function transact(fn){try{recordFirstOpenPlan();const ret=fn();save();render();return ret;}catch(e){notify(e.message||'Something went wrong.',true);}}
+  function transact(fn){try{recordFirstOpenPlan();const ret=fn();schedulePreview=null;save();render();return ret;}catch(e){notify(e.message||'Something went wrong.',true);}}
   function recordFirstOpenPlan(){if(!db)return;const snapshot=Rh.recordDailyPlan(db,C);if(snapshot)save();}
   function courseOptions(selected='',placeholder='Select a course'){return `<option value="">${esc(placeholder)}</option>`+db.courses.map(c=>`<option value="${esc(c.id)}" ${c.id===selected?'selected':''}>${esc(c.name)}</option>`).join('');}
   function empty(title,desc,cta='',action=''){return `<div class="empty"><div class="bigemoji">✧</div><h2>${esc(title)}</h2><p>${esc(desc)}</p>${cta?`<button class="btn primary" data-action="${action}">${esc(cta)}</button>`:''}</div>`;}
   const nav=[['home','◫','Overview'],['capture','✎','Capture'],['questions','?','My Q&A'],['study','◉','Study Now'],['courses','▤','Knowledge'],['assessments','▦','Assessments'],['forecast','◴','Calendar'],['insights','◷','Progress']];
   function sidebar(){return `<aside class="sidebar"><div class="brand"><span class="mark">✳</span><span>active<span style="color:#176d5e">recall</span></span></div><nav class="nav" aria-label="Main navigation">${nav.map(([key,icon,label])=>`<button class="navbtn ${page===key?'active':''}" data-action="navigate" data-page="${key}" ${page===key?'aria-current="page"':''}><span class="navicon">${icon}</span>${label}</button>`).join('')}</nav><div class="sidefoot"><strong><span class="statusdot"></span>100% free · Browser-local</strong><p>Hosted as a static site. No payments, API keys, accounts, or cloud sync. Export backups regularly.</p></div></aside>`;}
-  function header(){return `<div class="topline"><div class="path">ACTIVE RECALL WEB <span style="color:#b7c4bd">/</span> ${esc(nav.find(x=>x[0]===page)?.[2]||(page==='guided'?'Guided learning':''))}</div><div class="topright"><span class="tag">Blueprint 4.15 · Free</span><span class="avatar" aria-label="Local learner profile">A</span></div></div>`;}
+  function header(){return `<div class="topline"><div class="path">ACTIVE RECALL WEB <span style="color:#b7c4bd">/</span> ${esc(nav.find(x=>x[0]===page)?.[2]||(page==='guided'?'Guided learning':''))}</div><div class="topright"><span class="tag">Blueprint 4.16 · Free</span><span class="avatar" aria-label="Local learner profile">A</span></div></div>`;}
   function shell(content){return `<div class="app">${sidebar()}<main class="main">${header()}${content}<div class="footer">Free &amp; static · Notes stay in this browser · Export backups · Review generated drafts before relying on them · <a href="./health.html">Site diagnostics</a></div></main></div>${modalReqId?editModal():''}${qualityReqId?questionQualityModal():''}${modalSourceId?editSourceModal():''}${studioSourceId?studioModal():''}${modalReviewId?humanReviewModal():''}${modalPairId?PU.modal({db,esc,courseName,attemptId:modalPairId}):''}`;}
   function dashboard(){const integrity=C.integrity(db);const s=C.stats(db),preview=C.planActivities(db,15).items.slice(0,4),topUpcoming=s.upcoming.slice(0,3);
     return `<div class="hero"><div><div class="eyebrow">Your learning, organised</div><h1>One place to learn.<br>One queue to remember.</h1><p>Add knowledge as you encounter it. Study across your courses without organising separate decks or planning every review.</p><div class="btnrow" style="margin-top:22px"><button class="btn primary" data-action="navigate" data-page="study">Start studying ↗</button><button class="btn secondary" data-action="navigate" data-page="questions">+ Write my questions</button><button class="btn secondary" data-action="navigate" data-page="capture">+ Add lecture notes</button></div></div><span class="orb"></span><span class="orb2"></span></div>
@@ -498,6 +499,20 @@ A">${esc((a.exactAnswerKey?.answers||[]).join('\n'))}</textarea><label class="ch
     const report=C.buildReviewAgenda(db,{start:new Date(),...prefs});
     const hours=Math.round(report.days.reduce((n,d)=>n+d.budgetMinutes,0)/6)/10;
     const todayKey=C.today();
+    const scenario=schedulePreview?.proposedPrefs||prefs;
+    const simulation=schedulePreview?`<div class="schedule-comparison" role="region" aria-label="Schedule comparison results">
+      <h3>Current plan versus your proposal</h3>
+      <p class="small muted">Same ${schedulePreview.baselinePrefs.days}-day horizon · only proposed study availability changes · no data has been saved</p>
+      <div class="schedule-comparison-grid">
+        <div class="schedule-compare-head">Measure</div><div class="schedule-compare-head">Current</div><div class="schedule-compare-head">Proposed</div>
+        ${[['Available minutes','availableMinutes'],['Assigned minutes (estimated)','assignedMinutes'],['Known first-pass review slots','firstPasses'],['Known due reviews not placed','unplacedKnown'],['Preparation steps assigned','preparationSteps'],['Preparation steps not placed','unplacedPreparation'],['Conditional revisit slots','conditionalSlots']].map(([name,key])=>`<span>${esc(name)}</span><strong>${schedulePreview.baseline[key]}</strong><strong>${schedulePreview.alternative[key]}</strong>`).join('')}
+      </div>
+      <p class="small"><strong>Known question opportunities:</strong> ${schedulePreview.movement.added} newly placed, ${schedulePreview.movement.removed} no longer placed; ${schedulePreview.movement.earlier} moved earlier, ${schedulePreview.movement.later} moved later, ${schedulePreview.movement.same} unchanged.</p>
+      ${schedulePreview.examChanges.length?`<h4>Before each assessment · known first review opportunities</h4><div class="schedule-exams">${schedulePreview.examChanges.map(e=>`<div>${esc(e.title)} (${esc(fmtDate(e.date))}): ${e.before}/${e.eligible} → ${e.after}/${e.eligible} eligible targets</div>`).join('')}</div>`:''}
+      <details><summary>Compare all ${schedulePreview.days.length} planned days</summary><div class="schedule-days">${schedulePreview.days.map(d=>`<div><strong>${esc(fmtDate(d.date))}</strong><span>${d.beforeCapacity} → ${d.afterCapacity} min available</span><span>${d.beforeFirst} → ${d.afterFirst} known review slots</span><span>${d.beforeWaiting} → ${d.afterWaiting} reviews waiting</span></div>`).join('')}</div></details>
+      <p class="info">${esc(schedulePreview.warning)} Added review slots are opportunities, not predicted learning gains. Conditional revisits are not guaranteed.</p>
+      <div class="btnrow"><button type="button" class="btn primary" data-action="apply-schedule-preview" ${!schedulePreview.changed?'disabled':''}>Apply proposed availability</button><button type="button" class="btn secondary" data-action="discard-schedule-preview">Discard comparison</button></div>
+    </div>`:'';
     const rows=report.days.map(d=>{
       const tasks=d.activities.map(a=>{
         const req=reqById(a.requirementId),target=C.getTargets(db,a.requirementId,{includePending:true}).find(t=>t.id===a.targetId);
@@ -521,6 +536,11 @@ A">${esc((a.exactAnswerKey?.answers||[]).join('\n'))}</textarea><label class="ch
       <div class="field"><label for="outlook-missed">Unavailable dates</label><input id="outlook-missed" class="input" name="missedDates" maxlength="500" placeholder="2026-11-20, 2026-11-22" value="${esc(prefs.missedDates.join(', '))}"/><small>Comma-separated YYYY-MM-DD dates; the calendar will move tasks to available days.</small></div>
       <div class="wide"><button class="btn primary" type="submit">Save availability and recalculate ↗</button></div>
     </form></div></section>
+    <section class="section"><div class="card"><div class="card-title"><h2>What if I changed my study time?</h2><span class="pill blue">Private simulation · no automatic changes</span></div>
+      <p class="small muted">Try different weekday/weekend minutes or unavailable dates. Compare the exact scheduler's known first opportunities over your current ${prefs.days}-day horizon before deciding whether to apply a change. No answers or future memory are simulated.</p>
+      <form class="formgrid" data-form="simulate-schedule"><div class="field"><label for="sim-weekday">Proposed weekday minutes</label><input class="input" id="sim-weekday" name="weekdayMinutes" type="number" min="0" max="720" step="1" value="${scenario.weekdayMinutes}" required/></div><div class="field"><label for="sim-weekend">Proposed weekend minutes</label><input class="input" id="sim-weekend" name="weekendMinutes" type="number" min="0" max="720" step="1" value="${scenario.weekendMinutes}" required/></div><div class="field wide"><label for="sim-unavailable">Proposed unavailable dates</label><input class="input" id="sim-unavailable" name="missedDates" maxlength="500" placeholder="YYYY-MM-DD, YYYY-MM-DD" value="${esc(scenario.missedDates.join(', '))}"/><small>Changes here do not change the saved availability above.</small></div><div class="wide"><button class="btn secondary" type="submit">Preview schedule changes ↗</button></div></form>
+      ${simulation}
+    </div></section>
     <section class="section"><div class="grid cols4">${metric('Available time',hours+' h','Across '+report.days.length+' days')}${metric('Known review slots',report.plannedTargets,'First opportunity for each target')}${metric('Conditional revisits',report.conditionalOpportunities,'Later windows, not assumed results')}${metric('Could not fit',report.unplannedDue,'Known due reviews · preparation overflow shown below')}</div></section>
     <section class="section"><div class="card"><div class="card-title"><h2>Preparation before retrieval</h2><span class="pill blue">Planning steps · not recall grades</span></div><p class="small muted">${report.preparationGoals} syllabus objective(s) still need source preparation, a trustworthy question, or verification. ${report.preparationSteps} have a four-minute planning step in this outlook; ${report.unplannedPreparation} could not fit. These are small starting tasks, not proof that the objective has been learned. Mark materials prepared only after locating and studying them, then write or review a source-supported question. Spaced retrieval starts only after verification.</p></div></section>
     <section class="section grid cols2 outlook-summary"><div class="card"><div class="card-title"><h2>Upcoming assessment coverage</h2><span class="pill blue">Opportunities, not mastery</span></div>${report.coverage.length?report.coverage.map(c=>`<div class="outlook-exam"><div class="outlook-exam-top"><strong>${esc(c.title)}</strong><span class="small muted">${fmtDate(c.date)}</span></div><p class="small muted">${esc(courseName(c.courseId))} · ${c.firstPass}/${c.eligibleTargets} targets with a known review opportunity before the assessment · ${c.conditionalOpportunities} conditional revisits${c.blocked?` · ${c.blocked} held for verification`:''}.</p><div class="progress"><span style="width:${c.eligibleTargets?Math.round(c.firstPass*100/c.eligibleTargets):0}%"></span></div></div>`).join(''):'<p class="muted small">Add an upcoming assessment to see whether eligible learning targets have a proposed study slot before the deadline.</p>'}<p class="info" style="margin-top:12px">A scheduled opportunity is not a forecast of grades, proof of learning, predicted retention or exam readiness.</p></div>
@@ -572,6 +592,32 @@ A">${esc((a.exactAnswerKey?.answers||[]).join('\n'))}</textarea><label class="ch
   function pauseSession(se){if(se.paused)return;se.elapsedMs=sessionElapsedMs(se);se.paused=true;se.runningSince=null;}
   function resumeSession(se){if(!se.paused)return;se.runningSince=Date.now();se.paused=false;}
   function handleAction(btn){const action=btn.dataset.action;const se=activeSession();switch(action){
+    case 'discard-schedule-preview':schedulePreview=null;render();break;
+    case 'apply-schedule-preview':{
+      const preview=schedulePreview;
+      if(!preview?.changed){notify('Preview a changed schedule first.',true);break;}
+      const form=$('form[data-form="simulate-schedule"]');
+      if(!form){notify('Return to the schedule comparison before applying.',true);break;}
+      const f=new FormData(form);
+      try{
+        const proposal={days:preview.proposedPrefs.days,weekdayMinutes:Number(f.get('weekdayMinutes')),
+          weekendMinutes:Number(f.get('weekendMinutes')),
+          missedDates:String(f.get('missedDates')||'').split(/[\s,]+/).filter(Boolean)};
+        const current=Rh.compareSchedules(db,C,{proposal});
+        if(JSON.stringify(current.proposedPrefs)!==JSON.stringify(preview.proposedPrefs)||
+          JSON.stringify(current.baselinePrefs)!==JSON.stringify(preview.baselinePrefs)){
+          notify('The proposal or saved plan changed. Preview again before applying.',true);break;
+        }
+        if(!window.confirm('Apply the previewed availability to your calendar? This will change future proposed study slots but will not change questions, attempts or memory due dates.'))break;
+        transact(()=>{
+          db.agendaPreferences={...preview.proposedPrefs};
+          outlookSettings={...preview.proposedPrefs};
+          Rh.recordDailyPlan(db,C,{reason:'availability_changed'});
+        });
+        notify('Availability applied. Your review dates and previous study records are unchanged.');
+      }catch(error){notify(error.message||'Please preview the schedule again.',true);}
+      break;
+    }
     case 'delete-outside-study':if(confirm('Delete this self-reported outside-study entry?'))transact(()=>{Rh.deleteOutsideStudy(db,btn.dataset.id);notify('Outside-study entry removed.');});break;
     case 'navigate':page=btn.dataset.page;modalReqId=null;modalReviewId=null;modalPairId=null;studioSourceId=null;editingQuestionId=null;if(page!=='questions'){pendingQuestionImport=null;selectingQuestions=false;selectedQuestionIds.clear();}render();break;
     case 'navigate-courses':page='courses';render();break;
@@ -775,6 +821,16 @@ A">${esc((a.exactAnswerKey?.answers||[]).join('\n'))}</textarea><label class="ch
         transact(()=>{Pilot.start(db,{plannedTargets:Number(f.get('plannedTargets')),confirmed:f.get('confirmed')==='yes'});
           notify('Local reviewer pilot rules locked. New attempts will be screened prospectively.');});break;
       case 'outlook':{try{const days=Number(f.get('days')),weekdayMinutes=Number(f.get('weekdayMinutes')),weekendMinutes=Number(f.get('weekendMinutes'));const missedDates=String(f.get('missedDates')||'').split(/[\s,]+/).filter(Boolean);C.buildReviewAgenda(db,{days,weekdayMinutes,weekendMinutes,missedDates});outlookSettings={days,weekdayMinutes,weekendMinutes,missedDates};transact(()=>{db.agendaPreferences={...outlookSettings};Rh.recordDailyPlan(db,C,{reason:'availability_changed'});});notify('Availability saved. Today’s revised plan is recorded without rewriting the original snapshot.');}catch(error){notify(error.message,true);}break;}
+      case 'simulate-schedule':{
+        try{
+          const base=Rh.preferences(db),proposal={days:base.days,weekdayMinutes:Number(f.get('weekdayMinutes')),
+            weekendMinutes:Number(f.get('weekendMinutes')),
+            missedDates:String(f.get('missedDates')||'').split(/[\s,]+/).filter(Boolean)};
+          schedulePreview=Rh.compareSchedules(db,C,{proposal});
+          render();notify('Comparison ready. Nothing was changed or saved.');
+        }catch(error){notify(error.message||'Invalid comparison settings.',true);}
+        break;
+      }
       case 'outside-study':transact(()=>{Rh.logOutsideStudy(db,{date:String(f.get('date')||''),minutes:Number(f.get('minutes')),kind:String(f.get('kind')||''),note:String(f.get('note')||'')});notify('Outside study recorded as a self-report. Review dates are unchanged.');});break;
       case 'add-course':transact(()=>{const c=C.addCourse(db,f.get('name'));focusedCourse=c.id;notify('Course created.');});break;
       case 'guided-source':{transact(()=>{const info=C.guidedLearningInfo(db,guidedGoalId);C.setSyllabusLearningGuide(db,guidedGoalId,{sourceId:f.get('sourceId'),workedExample:info.guide?.workedExample||''});notify('Source selected. Review its current contents before continuing.');});break;}
