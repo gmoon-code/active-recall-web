@@ -188,3 +188,19 @@
 .qa-composer .card-title{margin-bottom:18px}
 @media(max-width:1000px){.qa-workspace{grid-template-columns:1fr}.qa-composer{grid-row:1}}
 @media(max-width:620px){.qa-two{grid-template-columns:1fr}.qa-item-head{flex-direction:column}.qa-item-head .btnrow{flex-wrap:wrap}.navbtn{flex:1;min-width:0;width:auto;font-size:9px;padding:6px 1px}.navicon{font-size:18px}}
+
+/* v4.10: inspect every uploaded question locally before importing. */
+.qa-bulk{border-top:1px solid var(--line);margin-top:21px;padding-top:15px}
+.qa-bulk>summary{cursor:pointer;color:var(--teal);font-size:13px;margin-bottom:11px}
+.qa-bulk>.field{margin:14px 0}
+.qa-bulk .field small{overflow-wrap:anywhere}
+.qa-import-or{text-align:center;color:var(--muted);font-size:12px;font-weight:750;margin:13px 0}
+.qa-import-preview{border:1px solid #afcfbe;background:#f6fcf7;border-radius:14px;padding:14px;margin-top:18px;overflow-wrap:anywhere}
+.qa-import-preview .card-title{align-items:start;flex-wrap:wrap}
+.qa-import-list{max-height:380px;overflow:auto;border:1px solid var(--line);border-radius:10px;background:white;margin:13px 0}
+.qa-import-row{padding:10px 12px;border-bottom:1px solid var(--line)}
+.qa-import-row:last-child{border-bottom:0}
+.qa-import-row strong{display:block;font-size:12px;overflow-wrap:anywhere}
+.qa-import-row small{color:var(--muted)}
+.qa-import-row .qa-answer{font-size:12px;margin:5px 0}
+@media(max-width:620px){.qa-import-preview{padding:10px}.qa-import-list{max-height:300px}}

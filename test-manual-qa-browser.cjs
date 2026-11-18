@@ -79,6 +79,8 @@ async function main(){
     await page.locator('.qa-bulk summary').click();
     await page.locator('#qa-bulk-text').fill('Q: Where does the citric acid cycle occur?\nA: In the mitochondrial matrix of eukaryotic cells.\n\nQ: What does NADH carry?\nA: High-energy electrons.');
     await page.locator('[data-form=quick-bulk-questions] [type=submit]').click();
+    assert.match(await page.locator('.qa-import-preview').innerText(),/Ready to import 2 question/);
+    await page.locator('[data-action=qa-confirm-import]').click();
     assert.equal(await page.locator('.qa-item').count(),4,'Batch-pasted questions should appear under the same lecture.');
     await page.locator('#qa-source').selectOption('');
     await page.locator('#qa-lecture-title').fill('Lecture 9 — No notes uploaded');

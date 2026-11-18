@@ -8,6 +8,8 @@
   if (!I) throw Error('Missing local learning-intelligence module.');
   const D=(typeof module !== 'undefined' && module.exports)?require('./document-import.js'):globalThis.ActiveRecallDocumentImport;
   if(!D)throw Error('Missing local document-import module.');
+  const QA=(typeof module !== 'undefined' && module.exports)?require('./qa-import.js'):globalThis.ActiveRecallQAImport;
+  if(!QA)throw Error('Missing local question-list import module.');
   const H=(typeof module!=='undefined'&&module.exports)?require('./human-review.js'):globalThis.ActiveRecallHumanReview;
   if(!H)throw Error('Missing local human-review module.');
   const P=(typeof module!=='undefined'&&module.exports)?require('./paired-review.js'):globalThis.ActiveRecallPairedReview;
@@ -802,34 +804,37 @@
     db.events.push({type:'requirement.created',entityId:req.id,at:now});
     return req;
   }
-  function addManualQuestionBatch(db,{courseId,sourceId=null,lectureTitle='',text,kind='recall'}){
+  function previewManualQuestionImport(db,{courseId,sourceId=null,lectureTitle='',text,kind='recall',format='auto'}){
     if(!db.courses.some(c=>c.id===courseId))throw Error('Choose an existing course.');
-    if(sourceId&&!db.sources.some(s=>s.id===sourceId&&s.courseId===courseId))throw Error('Choose lecture notes from the same course.');
-    text=String(text??'');
-    if(!text.trim()||text.length>45000)throw Error('Paste up to 45,000 characters of question and answer pairs.');
+    const source=sourceId?db.sources.find(s=>s.id===sourceId&&s.courseId===courseId):null;
+    if(sourceId&&!source)throw Error('Choose lecture notes from the same course.');
     if(!['recall','explain','apply'].includes(kind))throw Error('Choose a supported practice type.');
-    const pairs=[];let current=null,readingAnswer=false;
-    const finish=()=>{
-      if(!current)return;
-      current.question=current.question.trim();current.answer=current.answer.trim();
-      if(!readingAnswer||!current.question||!current.answer)throw Error('Every Q: line needs a nonempty A: line. No questions were imported.');
-      if(current.question.length>500||current.answer.length>4000)throw Error('A question or answer is too long. No questions were imported.');
-      pairs.push(current);current=null;readingAnswer=false;
-      if(pairs.length>50)throw Error('Import at most 50 questions at a time.');
-    };
-    for(const line of text.replace(/\r\n?/g,'\n').split('\n')){
-      const question=line.match(/^\s*(?:Q|Question)\s*:\s*(.*)$/i),answer=line.match(/^\s*(?:A|Answer)\s*:\s*(.*)$/i);
-      if(question){finish();current={question:question[1],answer:''};continue;}
-      if(answer){if(!current||readingAnswer)throw Error('Each Q: must have exactly one A:. No questions were imported.');current.answer=answer[1];readingAnswer=true;continue;}
-      if(!line.trim()||/^\s*---\s*$/.test(line)){if(current&&readingAnswer)current.answer+='\n';continue;}
-      if(!current||!readingAnswer)throw Error('Use Q: question followed by A: answer for every pair. No questions were imported.');
-      current.answer+='\n'+line;
-    }
-    finish();
-    if(!pairs.length)throw Error('No Q: / A: pairs found.');
+    const parsed=QA.parse(text,{format}),course=db.courses.find(c=>c.id===courseId);
     const keys=new Set();
-    for(const p of pairs){const key=p.question.toLocaleLowerCase();if(keys.has(key)||db.requirements.some(r=>r.active!==false&&r.courseId===courseId&&r.question.toLocaleLowerCase()===key&&r.sourceId===(sourceId||null)&&(!sourceId?(r.lectureTitle||'')===cleanString(lectureTitle,120):true)))throw Error('Repeated question in this lecture. No questions were imported.');keys.add(key);}
-    return pairs.map(p=>addRequirement(db,{courseId,sourceId,lectureTitle,question:p.question,answer:p.answer,kind}));
+    const rows=parsed.rows.map((row,index)=>{
+      if(row.courseName&&row.courseName.toLocaleLowerCase()!==course.name.toLocaleLowerCase())
+        throw Error('Row '+(index+1)+': the file names a different course. Select the correct course or split the file.');
+      if(source&&row.lectureTitle&&row.lectureTitle.toLocaleLowerCase()!==source.title.toLocaleLowerCase())
+        throw Error('Row '+(index+1)+': this lecture name differs from the selected notes. Choose No notes linked to use file lecture titles.');
+      const selectedLecture=source?'':(row.lectureTitle||cleanString(lectureTitle,120));
+      const actualKind=row.kind||kind,questionKey=row.question.toLocaleLowerCase();
+      const key=JSON.stringify([sourceId||null,selectedLecture.toLocaleLowerCase(),questionKey]);
+      if(keys.has(key)||db.requirements.some(r=>r.active!==false&&r.courseId===courseId&&r.question.toLocaleLowerCase()===questionKey&&
+        (r.sourceId||null)===(sourceId||null)&&(!sourceId?(r.lectureTitle||'').toLocaleLowerCase()===selectedLecture.toLocaleLowerCase():true)))
+        throw Error('Repeated question in this lecture (row '+(index+1)+'). No questions were imported.');
+      keys.add(key);
+      return {courseId,sourceId,lectureTitle:selectedLecture,question:row.question,answer:row.answer,kind:actualKind};
+    });
+    return {format:parsed.format,rows,courseId,courseName:course.name};
+  }
+  function importManualQuestionList(db,options){
+    // Parse and validate the complete list against the CURRENT database before
+    // inserting anything; preview does not grant permission to change records.
+    const preview=previewManualQuestionImport(db,options);
+    return preview.rows.map(row=>addRequirement(db,row));
+  }
+  function addManualQuestionBatch(db,{courseId,sourceId=null,lectureTitle='',text,kind='recall'}){
+    return importManualQuestionList(db,{courseId,sourceId,lectureTitle,text,kind,format:'qa'});
   }
   function editRequirement(db,reqId,{question,answer,kind,objective,lectureTitle,changeType='substantive'}){
     const r=db.requirements.find(r=>r.id===reqId);if(!r)throw Error('Requirement not found.');
@@ -1479,5 +1484,5 @@
   }
   function validateImport(x){return migrateDb(x);}
 
-  return {DAY,id,today,addDays,daysUntil,initialDb,migrateDb,validateImport,getTarget,getTargets,getMemory,getActivities,getCriteria,addCriterion,proposeCriteria,rubricQualityReview,addRubricEvidenceDraft,reviseCriterion,setCriterionAlternatives,rubricSyllabusAlignment,setCriterionSyllabusGoals,verifyCriterion,archiveCriterion,criterionStatus,rubricProgress,chooseActivity,addRetrievalTarget,verifyRetrievalTarget,addActivityVariant,deactivateActivity,reviseSource,addCourse,addSyllabusObjectives,updateSyllabusObjective,setSyllabusLink,setSyllabusMaterialsReady,setSyllabusLearningGuide,guidedLearningInfo,archiveSyllabusObjective,syllabusCoverage,draftRequirements,addSource,addImportedDocument,addRequirement,addManualQuestionBatch,editRequirement,verifyRequirement,questionQualityAudit,confirmQuestionQuality,integrity:I.integrity,questionCoverage:I.questionCoverage,questionWarnings:I.questionWarnings,learningObjectiveMap,variationStudio,questionStudio,adoptQuestionProposal,coverageReviewQueue,addAssessment,linkedAssessments,estimatedSeconds,durationEstimate,evidenceType,inputModeFor,evidenceSummary,delayedRetrievalAudit,schedulingPolicyAudit,eligibleCandidates,planActivities,buildReviewAgenda,forecastSchedule,setExactAnswerKey,exactKeyReady,previewLiteralCheck,literalDelayedAudit,recordAttempt,latestCorrectiveFeedback,assessmentCoverage,stats,demoDb};
+  return {DAY,id,today,addDays,daysUntil,initialDb,migrateDb,validateImport,getTarget,getTargets,getMemory,getActivities,getCriteria,addCriterion,proposeCriteria,rubricQualityReview,addRubricEvidenceDraft,reviseCriterion,setCriterionAlternatives,rubricSyllabusAlignment,setCriterionSyllabusGoals,verifyCriterion,archiveCriterion,criterionStatus,rubricProgress,chooseActivity,addRetrievalTarget,verifyRetrievalTarget,addActivityVariant,deactivateActivity,reviseSource,addCourse,addSyllabusObjectives,updateSyllabusObjective,archiveSyllabusObjective,setSyllabusLink,setSyllabusMaterialsReady,setSyllabusLearningGuide,guidedLearningInfo,syllabusCoverage,draftRequirements,addSource,addImportedDocument,addRequirement,previewManualQuestionImport,importManualQuestionList,addManualQuestionBatch,editRequirement,verifyRequirement,questionQualityAudit,confirmQuestionQuality,integrity:I.integrity,questionCoverage:I.questionCoverage,questionWarnings:I.questionWarnings,learningObjectiveMap,variationStudio,questionStudio,adoptQuestionProposal,coverageReviewQueue,addAssessment,linkedAssessments,estimatedSeconds,durationEstimate,evidenceType,inputModeFor,evidenceSummary,delayedRetrievalAudit,schedulingPolicyAudit,eligibleCandidates,planActivities,buildReviewAgenda,forecastSchedule,setExactAnswerKey,exactKeyReady,previewLiteralCheck,literalDelayedAudit,recordAttempt,latestCorrectiveFeedback,assessmentCoverage,stats,demoDb};
 });

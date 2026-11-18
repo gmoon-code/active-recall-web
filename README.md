@@ -1,8 +1,20 @@
-# Active Recall Web — Free Edition v4.9
+# Active Recall Web — Free Edition v4.10
 
 A local-first active-recall system with a **single multi-course automatic review agenda**, source-linked learning objectives, reviewed question drafts, and sessions that adjust to time budgets and assessments.
 
 **Public website:** https://gmoon-code.github.io/active-recall-web/
+
+## Blueprint 4.10 — Paste or upload complete Q&A lists
+
+Open **My Q&A → Paste or upload a list of questions & answers**. Select the destination **course** and (optionally) lecture, then either paste or choose a file. The local importer accepts:
+
+- **TXT/Markdown:** one `Q:` line followed by one `A:` line, repeated (including multiline answers).
+- **CSV/TSV:** exported from Excel or Google Sheets, with `Question` and `Answer` headers (or simply two columns). Optional `Lecture`, `Type` and `Course` columns preserve lecture grouping and retrieval type or check the selected course.
+- **JSON:** an array of `{ "question": "...", "answer": "..." }` objects, with optional lecture/type/course fields.
+
+**Preview the entire parsed list before clicking Confirm and save.** Uploading a file or previewing pasted text **does not create questions** or schedule reviews. All 200-or-fewer entries are checked together for structural problems, wrong courses, lecture-source mismatches and duplicate questions. If any entry fails, the entire import is rejected, without changing existing records. Source notes, attempts, review dates, scheduling policies, rubrics and backups are preserved. Imported questions remain learner-authored reference answers—not automatically scientifically checked or semantically graded. Maximum input size: **400 KB**. `.xlsx` should be exported to `.csv` or `.tsv` first.
+
+The site stays 100% free, offline-capable and browser-local. No upload server, payment, paid AI, account or database migration is involved. [Read Blueprint 4.10](docs/BLUEPRINT_4_10_FREE.md).
 
 ## Blueprint 4.9 — Your lecture questions, written your way
 

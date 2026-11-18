@@ -258,7 +258,7 @@ test('static integration includes modules in a correct load order and offline ca
  assert.ok(html.indexOf('review-packets.js')<html.indexOf('core.js'));
  assert.ok(html.indexOf('review-packets-ui.js')<html.indexOf('app.js'));
  assert.match(core,/R\.validate\(input\)/);
- assert.match(sw,/active-recall-web-v4-9/);
+ assert.match(sw,/active-recall-web-v4-10/);
  assert.match(sw,/reviewer-offline\.html/);
  assert.match(app,/case 'export-offline-review-request'/);
  assert.match(app,/R\.importSubmission\(db,payload\)/);
