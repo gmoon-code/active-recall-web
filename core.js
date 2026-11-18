@@ -836,6 +836,34 @@
   function addManualQuestionBatch(db,{courseId,sourceId=null,lectureTitle='',text,kind='recall'}){
     return importManualQuestionList(db,{courseId,sourceId,lectureTitle,text,kind,format:'qa'});
   }
+  function archiveRequirements(db,requirementIds){
+    if(!Array.isArray(requirementIds)||!requirementIds.length)throw Error('Select at least one question to delete.');
+    const ids=new Set(requirementIds);
+    if(ids.size!==requirementIds.length||[...ids].some(id=>typeof id!=='string'))throw Error('Invalid question selection. Nothing was deleted.');
+    // Validate the whole selection before making any changes. Retain the records,
+    // dated review attempts, and target memory so deletion is safely reversible.
+    const rows=[...ids].map(id=>db.requirements.find(r=>r.id===id&&r.active!==false));
+    if(rows.some(r=>!r))throw Error('One or more questions are already deleted or unavailable. Nothing was deleted.');
+    const at=new Date().toISOString();
+    for(const r of rows){
+      r.active=false;r.archivedAt=at;r.updatedAt=at;
+      db.events.push({type:'requirement.archived',entityId:r.id,at});
+    }
+    return rows;
+  }
+  function restoreRequirement(db,requirementId){
+    const r=db.requirements.find(r=>r.id===requirementId&&r.active===false);
+    if(!r)throw Error('Deleted question not found.');
+    if(!db.courses.some(c=>c.id===r.courseId))throw Error('The original course is unavailable.');
+    if(db.requirements.some(other=>other.id!==r.id&&other.active!==false&&other.courseId===r.courseId&&
+      (other.sourceId||null)===(r.sourceId||null)&&(!r.sourceId?(other.lectureTitle||'').toLocaleLowerCase()===(r.lectureTitle||'').toLocaleLowerCase():true)&&
+      other.question.toLocaleLowerCase()===r.question.toLocaleLowerCase()))
+      throw Error('A question with this wording already exists in the lecture. Edit or delete it before restoring.');
+    r.active=true;delete r.archivedAt;
+    r.updatedAt=new Date().toISOString();
+    db.events.push({type:'requirement.restored',entityId:r.id,at:r.updatedAt});
+    return r;
+  }
   function editRequirement(db,reqId,{question,answer,kind,objective,lectureTitle,changeType='substantive'}){
     const r=db.requirements.find(r=>r.id===reqId);if(!r)throw Error('Requirement not found.');
     question=cleanString(question,500);answer=cleanString(answer,4000);
@@ -1484,5 +1512,5 @@
   }
   function validateImport(x){return migrateDb(x);}
 
-  return {DAY,id,today,addDays,daysUntil,initialDb,migrateDb,validateImport,getTarget,getTargets,getMemory,getActivities,getCriteria,addCriterion,proposeCriteria,rubricQualityReview,addRubricEvidenceDraft,reviseCriterion,setCriterionAlternatives,rubricSyllabusAlignment,setCriterionSyllabusGoals,verifyCriterion,archiveCriterion,criterionStatus,rubricProgress,chooseActivity,addRetrievalTarget,verifyRetrievalTarget,addActivityVariant,deactivateActivity,reviseSource,addCourse,addSyllabusObjectives,updateSyllabusObjective,archiveSyllabusObjective,setSyllabusLink,setSyllabusMaterialsReady,setSyllabusLearningGuide,guidedLearningInfo,syllabusCoverage,draftRequirements,addSource,addImportedDocument,addRequirement,previewManualQuestionImport,importManualQuestionList,addManualQuestionBatch,editRequirement,verifyRequirement,questionQualityAudit,confirmQuestionQuality,integrity:I.integrity,questionCoverage:I.questionCoverage,questionWarnings:I.questionWarnings,learningObjectiveMap,variationStudio,questionStudio,adoptQuestionProposal,coverageReviewQueue,addAssessment,linkedAssessments,estimatedSeconds,durationEstimate,evidenceType,inputModeFor,evidenceSummary,delayedRetrievalAudit,schedulingPolicyAudit,eligibleCandidates,planActivities,buildReviewAgenda,forecastSchedule,setExactAnswerKey,exactKeyReady,previewLiteralCheck,literalDelayedAudit,recordAttempt,latestCorrectiveFeedback,assessmentCoverage,stats,demoDb};
+  return {DAY,id,today,addDays,daysUntil,initialDb,migrateDb,validateImport,getTarget,getTargets,getMemory,getActivities,getCriteria,addCriterion,proposeCriteria,rubricQualityReview,addRubricEvidenceDraft,reviseCriterion,setCriterionAlternatives,rubricSyllabusAlignment,setCriterionSyllabusGoals,verifyCriterion,archiveCriterion,criterionStatus,rubricProgress,chooseActivity,addRetrievalTarget,verifyRetrievalTarget,addActivityVariant,deactivateActivity,reviseSource,addCourse,addSyllabusObjectives,updateSyllabusObjective,archiveSyllabusObjective,setSyllabusLink,setSyllabusMaterialsReady,setSyllabusLearningGuide,guidedLearningInfo,syllabusCoverage,draftRequirements,addSource,addImportedDocument,addRequirement,previewManualQuestionImport,importManualQuestionList,addManualQuestionBatch,archiveRequirements,restoreRequirement,editRequirement,verifyRequirement,questionQualityAudit,confirmQuestionQuality,integrity:I.integrity,questionCoverage:I.questionCoverage,questionWarnings:I.questionWarnings,learningObjectiveMap,variationStudio,questionStudio,adoptQuestionProposal,coverageReviewQueue,addAssessment,linkedAssessments,estimatedSeconds,durationEstimate,evidenceType,inputModeFor,evidenceSummary,delayedRetrievalAudit,schedulingPolicyAudit,eligibleCandidates,planActivities,buildReviewAgenda,forecastSchedule,setExactAnswerKey,exactKeyReady,previewLiteralCheck,literalDelayedAudit,recordAttempt,latestCorrectiveFeedback,assessmentCoverage,stats,demoDb};
 });
