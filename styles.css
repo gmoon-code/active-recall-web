@@ -174,6 +174,20 @@
 .qa-two{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
 .qa-list-head{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:9px;margin:23px 0 9px}
 .qa-list-head h2{font-size:17px}
+.qa-list-actions{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:10px}
+.qa-delete-bar{border:1px solid #e5b5b5;background:#fff9f8;border-radius:12px;padding:12px;margin:12px 0}
+.qa-delete-bar .btnrow{margin:9px 0}
+.qa-delete-bar p{margin:0}
+.qa-select{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);cursor:pointer;flex-shrink:0;padding:6px 0}
+.qa-select input{width:18px;height:18px;accent-color:var(--teal)}
+.qa-deleted{margin-top:24px;border-top:1px solid var(--line);padding:15px 0}
+.qa-deleted summary{cursor:pointer;color:#9b4441;font-size:13px}
+.qa-deleted>p{margin:10px 0}
+.qa-deleted-row{display:flex;align-items:start;justify-content:space-between;gap:14px;border:1px solid var(--line);border-radius:11px;padding:12px;margin:10px 0;background:#fff}
+.qa-deleted-row>div{min-width:0;overflow-wrap:anywhere}
+.qa-deleted-row .qa-answer{margin:5px 0;font-size:12px}
+.qa-deleted-row small{color:var(--muted)}
+.qa-deleted-row button{flex-shrink:0}
 .qa-group{margin-top:22px;min-width:0}
 .qa-group>h3{display:flex;align-items:center;gap:8px;margin-bottom:10px;overflow-wrap:anywhere}
 .qa-item{border:1px solid var(--line);border-radius:13px;padding:14px;margin-bottom:10px;background:#fcfefc;min-width:0}
@@ -187,7 +201,7 @@
 .qa-edit .textarea,.qa-composer .textarea{min-height:70px}
 .qa-composer .card-title{margin-bottom:18px}
 @media(max-width:1000px){.qa-workspace{grid-template-columns:1fr}.qa-composer{grid-row:1}}
-@media(max-width:620px){.qa-two{grid-template-columns:1fr}.qa-item-head{flex-direction:column}.qa-item-head .btnrow{flex-wrap:wrap}.navbtn{flex:1;min-width:0;width:auto;font-size:9px;padding:6px 1px}.navicon{font-size:18px}}
+@media(max-width:620px){.qa-two{grid-template-columns:1fr}.qa-item-head{flex-direction:column}.qa-item-head .btnrow{flex-wrap:wrap}.qa-list-actions{justify-content:flex-start}.qa-deleted-row{flex-direction:column}.navbtn{flex:1;min-width:0;width:auto;font-size:9px;padding:6px 1px}.navicon{font-size:18px}}
 
 /* v4.10: inspect every uploaded question locally before importing. */
 .qa-bulk{border-top:1px solid var(--line);margin-top:21px;padding-top:15px}

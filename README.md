@@ -1,8 +1,14 @@
-# Active Recall Web — Free Edition v4.10
+# Active Recall Web — Free Edition v4.11
 
 A local-first active-recall system with a **single multi-course automatic review agenda**, source-linked learning objectives, reviewed question drafts, and sessions that adjust to time budgets and assessments.
 
 **Public website:** https://gmoon-code.github.io/active-recall-web/
+
+## Blueprint 4.11 — Easily delete or restore lecture Q&A
+
+In **My Q&A**, press **Delete** beside any question and confirm. To delete several questions at once, choose **Select multiple**, check the relevant items (or **Select all shown** for the selected lecture), and press **Delete selected**. Nothing is removed if you cancel confirmation. A **Deleted questions · restore** section lets you bring individual Q&A pairs back.
+
+Deletion takes the question and its answer out of My Q&A, future study sessions and the calendar. It is deliberately **reversible**: original question/answer records, previous study attempts and review dates are retained locally, and restoring the question reinstates its existing schedule. It does not silently reset progress, remove other lectures, or change scheduling algorithms. All deletion and restoration work happens in the same local storage as before; schema-v5 JSON backups remain compatible. [Read Blueprint 4.11](docs/BLUEPRINT_4_11_FREE.md).
 
 ## Blueprint 4.10 — Paste or upload complete Q&A lists
 
