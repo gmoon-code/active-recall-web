@@ -31,7 +31,7 @@ async function main(){
       await S.save(db,null);await S.ready();return before;
     });
     await page.reload();
-    await page.locator('[data-page=forecast]').click();
+    await page.locator('.navbtn[data-page=forecast]').click();
     const simulator=page.locator('form[data-form=simulate-schedule]');
     await simulator.locator('[name=weekdayMinutes]').fill('35');
     await simulator.locator('[name=weekendMinutes]').fill('25');
@@ -68,7 +68,7 @@ async function main(){
     assert.equal(after.memory,baseline.memory,'Applying time availability never alters spaced intervals');
     assert.equal(after.attempts,baseline.attempts);
     assert.equal(after.valid,5);
-    await page.reload();await page.locator('[data-page=forecast]').click();
+    await page.reload();await page.locator('.navbtn[data-page=forecast]').click();
     assert.equal(await page.locator('#outlook-weekday').inputValue(),'36');
     assert.equal(await page.locator('.schedule-comparison').count(),0,'Preview itself remains ephemeral');
     assert.deepEqual(errors,[],'No browser runtime errors');
