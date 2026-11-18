@@ -16,6 +16,22 @@
   const kindLabel=k=>({recall:'Recall',explain:'Explain',apply:'Apply'})[k]||'Explain';
   const rateLabel=r=>({again:'Again',hard:'Hard',good:'Good',easy:'Easy'})[r]||'New';
   const rClass=r=>({again:'warn',hard:'warn',good:'good',easy:'good'})[r]||'';
+  const QA_FORMAT_RULES=[
+    'Create study questions and reference answers from the lecture notes I provide.',
+    'Use only claims supported by those notes; preserve important conditions, exceptions and distinctions.',
+    'Output ONLY plain-text question-and-answer pairs. Do not add a heading, introduction, bullets before the labels, commentary, or Markdown code fences.',
+    'Start every question on its own line with exactly Q: and every answer on its own line with exactly A:.',
+    'Write one complete, self-contained question and one nonempty reference answer per pair.',
+    'Leave one empty line between pairs. Answers can have multiple lines or numbered steps.',
+    'Do not start an answer continuation line with Q: or A:; those labels mark a new question or answer.',
+    'Avoid duplicate or ambiguous questions. Keep each question under 500 characters and each answer under 4,000 characters.',
+    'Use this exact output shape, replacing the examples with questions from my notes:',
+    'Q: What does ATP synthase produce?',
+    'A: ATP.',
+    '',
+    'Q: What powers ATP synthase?',
+    'A: A proton electrochemical gradient.'
+  ].join('\n');
   function save(){Store.save(db,currentSessionId).catch(e=>notify('Saving failed: '+(e.message||'Check browser storage. Export a backup.'),true));}
   function downloadJsonFile(value,filename){
     const blob=new Blob([JSON.stringify(value,null,2)],{type:'application/json'});
@@ -29,13 +45,26 @@
     link.href=url;link.download=filename;document.body.appendChild(link);link.click();link.remove();
     setTimeout(()=>URL.revokeObjectURL(url),1000);
   }
+  async function copyQuestionFormatRules(){
+    const field=$('#qa-format-rules');
+    try{
+      if(!navigator.clipboard?.writeText)throw Error('Clipboard API unavailable');
+      await navigator.clipboard.writeText(QA_FORMAT_RULES);
+      notify('Formatting instructions copied. Paste them into ChatGPT with your lecture notes; import only the resulting Q:/A: list.');
+    }catch{
+      if(!field){notify('Open the Q&A formatting instructions to copy them.',true);return;}
+      field.focus();field.select();
+      try{if(document.execCommand?.('copy')){notify('Formatting instructions copied.');return;}}catch{ /* Some browsers require manual copying. */ }
+      notify('Clipboard access was blocked. The instructions are selected; copy them manually.',true);
+    }
+  }
   function notify(message,error=false){let old=$('.toast');if(old)old.remove();const el=document.createElement('div');el.className='toast'+(error?' error':'');el.textContent=message;document.body.appendChild(el);if(toastTimer)clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.remove(),3800);}
   function transact(fn){try{const ret=fn();save();render();return ret;}catch(e){notify(e.message||'Something went wrong.',true);}}
   function courseOptions(selected='',placeholder='Select a course'){return `<option value="">${esc(placeholder)}</option>`+db.courses.map(c=>`<option value="${esc(c.id)}" ${c.id===selected?'selected':''}>${esc(c.name)}</option>`).join('');}
   function empty(title,desc,cta='',action=''){return `<div class="empty"><div class="bigemoji">✧</div><h2>${esc(title)}</h2><p>${esc(desc)}</p>${cta?`<button class="btn primary" data-action="${action}">${esc(cta)}</button>`:''}</div>`;}
   const nav=[['home','◫','Overview'],['capture','✎','Capture'],['questions','?','My Q&A'],['study','◉','Study Now'],['courses','▤','Knowledge'],['assessments','▦','Assessments'],['forecast','◴','Calendar'],['insights','◷','Progress']];
   function sidebar(){return `<aside class="sidebar"><div class="brand"><span class="mark">✳</span><span>active<span style="color:#176d5e">recall</span></span></div><nav class="nav" aria-label="Main navigation">${nav.map(([key,icon,label])=>`<button class="navbtn ${page===key?'active':''}" data-action="navigate" data-page="${key}" ${page===key?'aria-current="page"':''}><span class="navicon">${icon}</span>${label}</button>`).join('')}</nav><div class="sidefoot"><strong><span class="statusdot"></span>100% free · Browser-local</strong><p>Hosted as a static site. No payments, API keys, accounts, or cloud sync. Export backups regularly.</p></div></aside>`;}
-  function header(){return `<div class="topline"><div class="path">ACTIVE RECALL WEB <span style="color:#b7c4bd">/</span> ${esc(nav.find(x=>x[0]===page)?.[2]||(page==='guided'?'Guided learning':''))}</div><div class="topright"><span class="tag">Blueprint 4.11 · Free</span><span class="avatar" aria-label="Local learner profile">A</span></div></div>`;}
+  function header(){return `<div class="topline"><div class="path">ACTIVE RECALL WEB <span style="color:#b7c4bd">/</span> ${esc(nav.find(x=>x[0]===page)?.[2]||(page==='guided'?'Guided learning':''))}</div><div class="topright"><span class="tag">Blueprint 4.12 · Free</span><span class="avatar" aria-label="Local learner profile">A</span></div></div>`;}
   function shell(content){return `<div class="app">${sidebar()}<main class="main">${header()}${content}<div class="footer">Free &amp; static · Notes stay in this browser · Export backups · Review generated drafts before relying on them · <a href="./health.html">Site diagnostics</a></div></main></div>${modalReqId?editModal():''}${qualityReqId?questionQualityModal():''}${modalSourceId?editSourceModal():''}${studioSourceId?studioModal():''}${modalReviewId?humanReviewModal():''}${modalPairId?PU.modal({db,esc,courseName,attemptId:modalPairId}):''}`;}
   function dashboard(){const integrity=C.integrity(db);const s=C.stats(db),preview=C.planActivities(db,15).items.slice(0,4),topUpcoming=s.upcoming.slice(0,3);
     return `<div class="hero"><div><div class="eyebrow">Your learning, organised</div><h1>One place to learn.<br>One queue to remember.</h1><p>Add knowledge as you encounter it. Study across your courses without organising separate decks or planning every review.</p><div class="btnrow" style="margin-top:22px"><button class="btn primary" data-action="navigate" data-page="study">Start studying ↗</button><button class="btn secondary" data-action="navigate" data-page="questions">+ Write my questions</button><button class="btn secondary" data-action="navigate" data-page="capture">+ Add lecture notes</button></div></div><span class="orb"></span><span class="orb2"></span></div>
@@ -101,6 +130,12 @@
       <button class="btn primary block" type="submit">Save question + add another</button><p class="small muted">Manually entered questions go into the unified study queue. Answers are self-checked after attempting recall. Linking lecture notes is organisational, not an automatic scientific accuracy check.</p>
     </form><details class="qa-bulk" ${pendingQuestionImport?'open':''}><summary><strong>Paste or upload a list of questions &amp; answers</strong></summary>
       <p class="small muted">Use the course and lecture selected above. The file stays on your device. Review the list before adding anything to your study queue.</p>
+      <div class="qa-format-guide"><div class="qa-format-head"><strong>Copyable Q&amp;A formatting rules</strong><button type="button" class="btn secondary small" data-action="qa-copy-format-rules">Copy formatting rules</button></div>
+        <p class="small muted">Paste these instructions into ChatGPT <strong>with your lecture notes</strong> to request a compatible question list. Paste only the resulting Q:/A: pairs into the importer below, not the instructions themselves.</p>
+        <label for="qa-format-rules" class="small">Instructions to copy</label><textarea id="qa-format-rules" class="textarea qa-format-text" rows="8" readonly spellcheck="false">${esc(QA_FORMAT_RULES)}</textarea>
+        <p class="small muted"><strong>Exact input example:</strong> Each question starts with <code>Q:</code>, followed by its <code>A:</code> answer; leave one blank line between pairs. Multiline answers are allowed. No extra introductory text.</p>
+        <pre class="qa-format-example" aria-label="Example of correctly labelled Q&A pairs">Q: What is ATP synthase?\nA: An enzyme that synthesises ATP.\n\nQ: What does NADH carry?\nA: High-energy electrons.</pre>
+      </div>
       <div class="field"><label for="qa-import-file">Upload a Q&amp;A list</label><input class="input" type="file" id="qa-import-file" accept=".txt,.md,.csv,.tsv,.json,text/plain,text/csv,text/tab-separated-values,application/json"/><small>TXT/Markdown with Q: and A: lines; CSV/TSV from Excel or Sheets with Question and Answer columns; or a JSON array of question/answer objects. Optional columns: Lecture, Type, Course. Max 200 questions, 400 KB.</small><button type="button" class="btn secondary small" data-action="qa-download-template">↓ Example CSV template</button></div>
       <div class="qa-import-or">or paste your list below</div>
       <form data-form="quick-bulk-questions" class="stack"><div class="field"><label for="qa-bulk-text">Paste Q&amp;A, CSV or tab-separated rows</label><textarea id="qa-bulk-text" class="textarea" name="text" maxlength="400000" rows="8" required placeholder="Q: What powers ATP synthase?&#10;A: A proton electrochemical gradient.&#10;&#10;Q: What does ATP synthase produce?&#10;A: ATP."></textarea></div><button class="btn secondary block" type="submit">Preview pasted questions</button></form>
@@ -490,6 +525,7 @@ A">${esc((a.exactAnswerKey?.answers||[]).join('\n'))}</textarea><label class="ch
     case 'qa-restore':{const r=db.requirements.find(r=>r.id===btn.dataset.id&&r.courseId===focusedCourse&&r.active===false);if(!r){notify('Deleted question is unavailable.',true);break;}transact(()=>{C.restoreRequirement(db,r.id);focusedLecture=lectureKey(r);notify('Question restored to My Q&A and its original review schedule.');});break;}
     case 'qa-confirm-import':{const pending=pendingQuestionImport;if(!pending){notify('Preview the list again before importing.',true);break;}const saved=transact(()=>{const rows=C.importManualQuestionList(db,pending.options);pendingQuestionImport=null;focusedCourse=pending.options.courseId;focusedLecture=new Set(rows.map(lectureKey)).size===1?lectureKey(rows[0]):'';lastWrittenSourceId=pending.options.sourceId||'';lastWrittenLecture=pending.options.lectureTitle||'';notify(`Saved ${rows.length} questions to your study queue. Earlier attempts and review dates are unchanged.`);return rows;});if(saved)document.querySelector('#qa-question')?.focus();break;}
     case 'qa-cancel-import':pendingQuestionImport=null;render();break;
+    case 'qa-copy-format-rules':copyQuestionFormatRules();break;
     case 'qa-download-template':downloadTextFile('Question,Answer,Lecture,Type\n"What powers ATP synthase?","A proton electrochemical gradient.","Lecture 8 — Enzymes",Recall\n"How does it make ATP?","Proton flow drives conformational changes that support ATP formation.","Lecture 8 — Enzymes",Explain\n','active-recall-qa-template.csv','text/csv;charset=utf-8');notify('Example CSV template downloaded. Edit it and upload your own question list.');break;
     case 'add-focus':modalReqId='focus:'+btn.dataset.id;modalSourceId=null;render();break;
     case 'verify-focus':transact(()=>{C.verifyRetrievalTarget(db,btn.dataset.id);notify('Recall focus verified.');});break;

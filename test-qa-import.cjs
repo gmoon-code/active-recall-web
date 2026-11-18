@@ -2,10 +2,22 @@
 'use strict';
 const test=require('node:test');
 const assert=require('node:assert/strict');
+const fs=require('node:fs');
 const Q=require('./qa-import.js');
 const C=require('./core.js');
 
 const fixture=()=>{const db=C.initialDb(),course=C.addCourse(db,'AP Biology');return {db,course};};
+
+test('bulk import shows copyable Q:/A: formatting rules separately from the pasted question field',()=>{
+  const ui=fs.readFileSync('app.js','utf8');
+  assert.match(ui,/Copyable Q&amp;A formatting rules/);
+  assert.match(ui,/id="qa-format-rules"[^>]*readonly/);
+  assert.match(ui,/data-action="qa-copy-format-rules"/);
+  assert.match(ui,/Paste only the resulting Q:\/A: pairs into the importer/);
+  assert.match(ui,/each question under 500 characters and each answer under 4,000 characters/);
+  assert.match(ui,/Q: What is ATP synthase\?/);
+  assert.match(ui,/id="qa-bulk-text"/);
+});
 
 test('numbered Q/A text with multiline answer imports without rewriting the answer',()=>{
   const parsed=Q.parse('1. Q: What powers ATP synthase?\nA: The proton gradient.\nIt provides free energy.\n\n2) Question: What does it produce?\nAnswer: ATP.');
