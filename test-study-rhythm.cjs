@@ -118,3 +118,43 @@ test('permanent Q&A purge removes plan days that still reference its target',()=
   assert.equal(db.studyPlanHistory.length,0);
   assert.equal(C.validateImport(db).schemaVersion,5);
 });
+
+test('outside study is separately recorded without changing retrieval memory or attempts',()=>{
+  const {db}=fixture(2);
+  Rh.recordDailyPlan(db,C,{now:morning});
+  const before=JSON.stringify({memory:db.memory,attempts:db.attempts,targets:db.retrievalTargets});
+  const log=Rh.logOutsideStudy(db,{date:'2026-11-18',minutes:45,kind:'reading',note:'Photosynthesis',now:morning});
+  const h=Rh.history(db,C,morning),today=h.rows[6];
+  assert.equal(today.outsideMinutes,45);
+  assert.equal(today.attempts,0);
+  assert.equal(h.daysWithAttempts,0);
+  assert.equal(h.daysWithAnyRecord,1);
+  assert.equal(today.status,'practice_recorded');
+  assert.equal(JSON.stringify({memory:db.memory,attempts:db.attempts,targets:db.retrievalTargets}),before);
+  assert.equal(C.validateImport(JSON.parse(JSON.stringify(db))).outsideStudyLogs[0].id,log.id);
+  Rh.deleteOutsideStudy(db,log.id);
+  assert.equal(Rh.history(db,C,morning).rows[6].outsideMinutes,0);
+});
+
+test('unobserved or rest-day outside study does not imply scheduled adherence',()=>{
+  const {db}=fixture(1);
+  db.agendaPreferences.missedDates=['2026-11-18'];
+  Rh.recordDailyPlan(db,C,{now:morning});
+  Rh.logOutsideStudy(db,{date:'2026-11-18',minutes:10,now:morning});
+  Rh.logOutsideStudy(db,{date:'2026-11-17',minutes:20,now:morning});
+  const h=Rh.history(db,C,morning);
+  assert.equal(h.observedStudyDays,0);
+  assert.equal(h.rows[6].status,'planned_rest');
+  assert.equal(h.rows[5].status,'no_plan_record');
+  assert.equal(h.outsideMinutes,30);
+});
+
+test('outside-study log validates dates, sizes and backup tampering',()=>{
+  const {db}=fixture(1);
+  assert.throws(()=>Rh.logOutsideStudy(db,{date:'2026-11-19',minutes:10,now:morning}),/date/);
+  assert.throws(()=>Rh.logOutsideStudy(db,{date:'2026-02-30',minutes:10,now:morning}),/date/);
+  assert.throws(()=>Rh.logOutsideStudy(db,{date:'2026-11-18',minutes:721,now:morning}),/minutes/);
+  Rh.logOutsideStudy(db,{date:'2026-11-18',minutes:15,now:morning});
+  const corrupt=JSON.parse(JSON.stringify(db));corrupt.outsideStudyLogs[0].minutes=-1;
+  assert.throws(()=>C.validateImport(corrupt),/outside-study entry/);
+});
