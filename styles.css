@@ -167,3 +167,24 @@
   .modal[aria-label="Compare independent reviewer judgments"] .grid.cols3{grid-template-columns:minmax(0,1fr)}
   .modal[aria-label="Compare independent reviewer judgments"] .note{overflow-wrap:anywhere}
 }
+
+/* v4.9: writing and editing lecture Q&A is the primary learner workflow. */
+.qa-workspace{display:grid;grid-template-columns:minmax(0,1fr) minmax(290px,355px);gap:18px;align-items:start}
+.qa-main,.qa-composer{min-width:0}
+.qa-two{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.qa-list-head{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:9px;margin:23px 0 9px}
+.qa-list-head h2{font-size:17px}
+.qa-group{margin-top:22px;min-width:0}
+.qa-group>h3{display:flex;align-items:center;gap:8px;margin-bottom:10px;overflow-wrap:anywhere}
+.qa-item{border:1px solid var(--line);border-radius:13px;padding:14px;margin-bottom:10px;background:#fcfefc;min-width:0}
+.qa-item-head{display:flex;align-items:start;justify-content:space-between;gap:12px}
+.qa-item-head .btnrow{flex-shrink:0}
+.qa-question{min-width:0;overflow-wrap:anywhere}
+.qa-question strong{font-size:14px;line-height:1.5}
+.qa-answer{white-space:pre-wrap;overflow-wrap:anywhere;margin-top:12px;color:#50675b}
+.qa-answer-label{display:block;color:var(--teal);font-size:10px;letter-spacing:.08em;text-transform:uppercase;font-weight:800;margin-bottom:3px}
+.qa-edit{margin-top:14px;padding-top:14px;border-top:1px solid var(--line)}
+.qa-edit .textarea,.qa-composer .textarea{min-height:70px}
+.qa-composer .card-title{margin-bottom:18px}
+@media(max-width:1000px){.qa-workspace{grid-template-columns:1fr}.qa-composer{grid-row:1}}
+@media(max-width:620px){.qa-two{grid-template-columns:1fr}.qa-item-head{flex-direction:column}.qa-item-head .btnrow{flex-wrap:wrap}.navbtn{flex:1;min-width:0;width:auto;font-size:9px;padding:6px 1px}.navicon{font-size:18px}}

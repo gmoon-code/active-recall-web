@@ -1,8 +1,20 @@
-# Active Recall Web — Free Edition v4.8
+# Active Recall Web — Free Edition v4.9
 
 A local-first active-recall system with a **single multi-course automatic review agenda**, source-linked learning objectives, reviewed question drafts, and sessions that adjust to time budgets and assessments.
 
 **Public website:** https://gmoon-code.github.io/active-recall-web/
+
+## Blueprint 4.9 — Your lecture questions, written your way
+
+**My Q&A** is now a dedicated navigation page for creating, organising and editing the questions you actually want to practise. Choose a course, optionally link saved lecture notes, or simply type a lecture name without uploading any notes. Write a question and reference answer and choose Recall / Explain / Apply. **Save question + add another** keeps the lecture context selected for rapid successive entry. You can also paste up to **50 clearly labelled `Q:` / `A:` pairs** at once, including multiline answers; any malformed or repeated pair rejects the entire batch rather than saving some silently.
+
+Every saved question appears by lecture with an **Edit Q&A** action. Revisions preserve earlier study attempts. Explicitly choose between a *wording-only* edit (retains existing review timing) and a *substantive* edit (restarts that question's current interval). Existing unverified rule-generated drafts remain unverified even after being rewritten; the **human Q&A check** is still required before scheduling them. The manual question's association with a lecture is for organisation, **not proof** that the reference answer was scientifically verified against the notes.
+
+**Capture and PDF/TXT/Markdown import now default to saving notes without generating any questions.** You can opt in to older deterministic source-grounded draft proposals when they are useful, but they remain drafts until reviewed. After saving notes, the app opens My Q&A with that lecture selected. This change responds to the current rule generator's limited ability to make specific, useful questions from arbitrary notes; no AI quality or understanding is claimed.
+
+No account, payment, paid API, cloud service, schema upgrade or scheduling-policy change. Existing learning records and schema-v5 JSON backups remain compatible. The evidence-based alternative spacing-policy comparison planned previously remains next **after this learner-controlled question-writing usability correction**.
+
+[Read Blueprint 4.9](docs/BLUEPRINT_4_9_FREE.md) · [Read the underlying question-design and scheduling research](docs/RESEARCH_2026_QUESTION_DESIGN_AND_AUTO_SCHEDULING.md)
 
 ## Blueprint 4.8 — Question and answer quality, before schedule changes
 

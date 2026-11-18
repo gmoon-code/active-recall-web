@@ -298,7 +298,7 @@ test('all offline modules load before core/app and are in v4.4 offline cache',()
  assert.ok(index.indexOf('review-packets.js')<index.indexOf('reference-first.js'));
  assert.ok(index.indexOf('reference-first.js')<index.indexOf('core.js'));
  assert.ok(index.indexOf('reference-first-ui.js')<index.indexOf('app.js'));
- assert.match(sw,/active-recall-web-v4-8/);
+ assert.match(sw,/active-recall-web-v4-9/);
  assert.match(sw,/reference-reviewer-offline\.html/);
  assert.match(core,/F\.validate\(input\)/);
 });
