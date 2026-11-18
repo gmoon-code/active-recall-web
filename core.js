@@ -1501,6 +1501,102 @@
       byLag:Object.entries(cohorts).map(([lag,g])=>({lag,...summarise(g.attempts,g.matches,g.targets.size)})),exclusions,
       warning:'Strict agreement with learner-approved answer strings—not independent validation of factual truth or semantic correctness. Minor equivalent phrasing may be marked different. Delayed results require a real earlier attempt at least 24 hours before this one. The algorithm does NOT alter review intervals or claim that either scheduling policy is superior.'};
   }
+  // v4.18: audit whether *future* predictive evaluation has defensible labels.
+  // This does not reconstruct predictions, fit FSRS or treat self-ratings as
+  // objectively verified recall. It deliberately separates answer modalities.
+  function memoryModelReadinessAudit(db,{minDelayHours=24}={}){
+    if(!Number.isFinite(minDelayHours)||minDelayHours<1||minDelayHours>720)
+      throw Error('Delayed-evidence threshold must be between 1 and 720 hours.');
+    const raw=Array.isArray(db.attempts)?db.attempts:[],source=raw.slice(-50000);
+    const ordered=source.map((a,index)=>({a:a||{},index,t:Date.parse(a?.createdAt||'')}))
+      .sort((x,y)=>(Number.isFinite(x.t)?x.t:Infinity)-(Number.isFinite(y.t)?y.t:Infinity)||x.index-y.index);
+    const identity=a=>{
+      if(typeof a.requirementId!=='string'||!a.requirementId||
+         typeof a.retrievalTargetId!=='string'||!a.retrievalTargetId||
+         !Number.isSafeInteger(a.requirementVersion)||a.requirementVersion<1||
+         !Number.isSafeInteger(a.retrievalTargetVersion)||a.retrievalTargetVersion<1)return null;
+      return JSON.stringify([a.requirementId,a.requirementVersion,a.retrievalTargetId,a.retrievalTargetVersion]);
+    };
+    // A later practice invalidates a retrospective review recorded afterward.
+    const nextTime=new Map(),nextByIndex=new Map();
+    for(let i=ordered.length-1;i>=0;i--){
+      const item=ordered[i],key=identity(item.a);
+      if(!key||!Number.isFinite(item.t))continue;
+      nextByIndex.set(i,nextTime.get(key)??null);
+      nextTime.set(key,item.t);
+    }
+    const excluded={invalidTimestampOrVersion:0,firstOrChangedVersion:0,tooSoon:0,
+      assistedOrImmediate:0,noWrittenAnswer:0,unverifiedRequirement:0,withoutUsableLabel:0,
+      humanReviewAfterPractice:0,inconclusiveHumanReview:0};
+    const kinds={recall:0,explain:0,apply:0,other:0};
+    const eligibleTargets=new Set(),prior=new Map();
+    const literal=[],humanSelf=[],humanOther=[];
+    let comparable=0,reportedPositive=0,reportedGap=0,withPriorDueDate=0;
+    for(let i=0;i<ordered.length;i++){
+      const {a,t}=ordered[i],key=identity(a);
+      if(!Number.isFinite(t)||!key){excluded.invalidTimestampOrVersion++;continue;}
+      const previous=prior.get(key);
+      prior.set(key,t); // Includes assisted/intermediate practice; no invented delay.
+      if(previous===undefined||t<=previous){excluded.firstOrChangedVersion++;continue;}
+      if((t-previous)/3600000<minDelayHours){excluded.tooSoon++;continue;}
+      if(a.assisted||a.practiceStage==='immediate_post_study'){excluded.assistedOrImmediate++;continue;}
+      if(inputModeFor(a)!=='written'||typeof a.response!=='string'||!a.response.trim()){
+        excluded.noWrittenAnswer++;continue;
+      }
+      if(a.requirementVerified===false){excluded.unverifiedRequirement++;continue;}
+      comparable++;eligibleTargets.add(a.retrievalTargetId);
+      const kind=['recall','explain','apply'].includes(a.activityKind)?a.activityKind:'other';
+      kinds[kind]++;
+      const effective=a.scheduleRating||a.rating;
+      const gaps=(a.criterionChecks||[]).some(c=>c.status==='missed'||c.status==='unsure');
+      if(['good','easy'].includes(effective)&&!gaps)reportedPositive++;else reportedGap++;
+      if(Number.isFinite(Date.parse(a.priorDueAt||'')))withPriorDueDate++;
+      // Literal agreement is narrow and potentially rejects valid synonyms.
+      if(kind==='recall'&&a.literalCheck?.version===1&&
+         a.literalCheck.method==='literal-match-v1'&&typeof a.literalCheck.matched==='boolean'&&
+         Array.isArray(a.literalCheck.acceptedSnapshot)&&a.literalCheck.acceptedSnapshot.length){
+        literal.push({t,target:a.retrievalTargetId});continue;
+      }
+      // Manual rubric judgments are human interpretations, not a verified exam
+      // mark. Neither self-review nor claimed other-person review is blinded.
+      if((kind==='explain'||kind==='apply')&&H.eligibility(a).ok){
+        const review=a.humanReviews?.[a.humanReviews.length-1];
+        if(review?.schema===1&&review.method==='manual-criterion-review-v1'&&
+           review.responseFingerprint===H.fingerprint(a.response)&&
+           review.requirementVersion===a.requirementVersion&&
+           review.targetVersion===a.retrievalTargetVersion&&
+           ['self','other_person'].includes(review.reviewerRole)&&
+           ['all_supported','gap_identified','inconclusive'].includes(review.finding)){
+          const when=Date.parse(review.reviewedAt);
+          if(!Number.isFinite(when)||when<t||
+             (nextByIndex.get(i)!==null&&when>nextByIndex.get(i))){
+            excluded.humanReviewAfterPractice++;continue;
+          }
+          if(review.finding==='inconclusive'){
+            excluded.inconclusiveHumanReview++;continue;
+          }
+          (review.reviewerRole==='self'?humanSelf:humanOther).push({t,target:a.retrievalTargetId});
+          continue;
+        }
+      }
+      excluded.withoutUsableLabel++;
+    }
+    const split=rows=>{
+      const byTime=rows.slice().sort((a,b)=>a.t-b.t);
+      // Illustrative chronology-only split, not trained/tested models. Target
+      // overlap can remain, so independence is not claimed.
+      const cut=Math.floor(byTime.length*.8),late=byTime.slice(cut);
+      return {attempts:rows.length,distinctTargets:new Set(rows.map(r=>r.target)).size,
+        early:cut,later:late.length,laterDistinctTargets:new Set(late.map(r=>r.target)).size};
+    };
+    const groups={literal:split(literal),humanSelf:split(humanSelf),humanOther:split(humanOther)};
+    return {version:1,thresholdHours:minDelayHours,processed:source.length,
+      olderAttemptsNotAudited:raw.length-source.length,comparableDelayedWritten:comparable,
+      comparableDistinctTargets:eligibleTargets.size,reportedPositive,reportedGap,
+      withPriorDueDate,kinds,groups,excluded,
+      prospectiveProbabilityForecasts:0,modelComparisonAvailable:false,
+      warning:'Only observed learner self-ratings, strict literal agreement, and unblinded manual criterion judgments are available. Their meanings differ, so they must not be pooled as verified recall. The existing due-date and shadow interval snapshots are NOT predicted recall probabilities. A future model would need prospective, versioned probability forecasts evaluated against time-separated outcomes with suitable safeguards for selection bias, question changes and human-review quality. This read-only audit does not train or compare FSRS, prove a superior policy, or modify scheduling.'};
+  }
   function recordAttempt(db,{requirementId,targetId=null,activityId=null,response='',rating,assisted=false,sessionId=null,questionUsed=null,inputMode=null,durationSeconds=null,criterionChecks=[],correctionNote='',practiceStage=null,now=new Date()}){
     const r=db.requirements.find(x=>x.id===requirementId);if(!r)throw Error('Requirement does not exist.');
     if(!['again','hard','good','easy'].includes(rating))throw Error('Invalid rating.');
@@ -1629,5 +1725,5 @@
   }
   function validateImport(x){return migrateDb(x);}
 
-  return {DAY,id,today,addDays,daysUntil,initialDb,migrateDb,validateImport,getTarget,getTargets,getMemory,getActivities,getCriteria,addCriterion,proposeCriteria,rubricQualityReview,addRubricEvidenceDraft,reviseCriterion,setCriterionAlternatives,rubricSyllabusAlignment,setCriterionSyllabusGoals,verifyCriterion,archiveCriterion,criterionStatus,rubricProgress,chooseActivity,addRetrievalTarget,verifyRetrievalTarget,addActivityVariant,deactivateActivity,reviseSource,addCourse,addSyllabusObjectives,updateSyllabusObjective,archiveSyllabusObjective,setSyllabusLink,setSyllabusMaterialsReady,setSyllabusLearningGuide,guidedLearningInfo,syllabusCoverage,draftRequirements,addSource,addImportedDocument,addRequirement,previewManualQuestionImport,importManualQuestionList,addManualQuestionBatch,archiveRequirements,restoreRequirement,purgeArchivedRequirements,editRequirement,verifyRequirement,questionQualityAudit,confirmQuestionQuality,integrity:I.integrity,questionCoverage:I.questionCoverage,questionWarnings:I.questionWarnings,learningObjectiveMap,variationStudio,questionStudio,adoptQuestionProposal,coverageReviewQueue,addAssessment,linkedAssessments,estimatedSeconds,durationEstimate,evidenceType,inputModeFor,evidenceSummary,delayedRetrievalAudit,schedulingPolicyAudit,eligibleCandidates,planActivities,inspectStudyPriorities,buildReviewAgenda,forecastSchedule,setExactAnswerKey,exactKeyReady,previewLiteralCheck,literalDelayedAudit,recordAttempt,latestCorrectiveFeedback,assessmentCoverage,stats,demoDb};
+  return {DAY,id,today,addDays,daysUntil,initialDb,migrateDb,validateImport,getTarget,getTargets,getMemory,getActivities,getCriteria,addCriterion,proposeCriteria,rubricQualityReview,addRubricEvidenceDraft,reviseCriterion,setCriterionAlternatives,rubricSyllabusAlignment,setCriterionSyllabusGoals,verifyCriterion,archiveCriterion,criterionStatus,rubricProgress,chooseActivity,addRetrievalTarget,verifyRetrievalTarget,addActivityVariant,deactivateActivity,reviseSource,addCourse,addSyllabusObjectives,updateSyllabusObjective,archiveSyllabusObjective,setSyllabusLink,setSyllabusMaterialsReady,setSyllabusLearningGuide,guidedLearningInfo,syllabusCoverage,draftRequirements,addSource,addImportedDocument,addRequirement,previewManualQuestionImport,importManualQuestionList,addManualQuestionBatch,archiveRequirements,restoreRequirement,purgeArchivedRequirements,editRequirement,verifyRequirement,questionQualityAudit,confirmQuestionQuality,integrity:I.integrity,questionCoverage:I.questionCoverage,questionWarnings:I.questionWarnings,learningObjectiveMap,variationStudio,questionStudio,adoptQuestionProposal,coverageReviewQueue,addAssessment,linkedAssessments,estimatedSeconds,durationEstimate,evidenceType,inputModeFor,evidenceSummary,delayedRetrievalAudit,memoryModelReadinessAudit,schedulingPolicyAudit,eligibleCandidates,planActivities,inspectStudyPriorities,buildReviewAgenda,forecastSchedule,setExactAnswerKey,exactKeyReady,previewLiteralCheck,literalDelayedAudit,recordAttempt,latestCorrectiveFeedback,assessmentCoverage,stats,demoDb};
 });
