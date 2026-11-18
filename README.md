@@ -1,8 +1,12 @@
-# Active Recall Web — Free Edition v4.11
+# Active Recall Web — Free Edition v4.12
 
 A local-first active-recall system with a **single multi-course automatic review agenda**, source-linked learning objectives, reviewed question drafts, and sessions that adjust to time budgets and assessments.
 
 **Public website:** https://gmoon-code.github.io/active-recall-web/
+
+## Blueprint 4.12 — Copyable bulk Q&A formatting instructions
+
+In **My Q&A → Paste or upload a list of questions & answers**, the new **Copyable Q&A formatting rules** section shows a compatible two-question example and a fully selectable, read-only set of instructions. Press **Copy formatting rules** and paste the instructions into ChatGPT along with your lecture notes to request precisely labelled `Q:` / `A:` pairs, one blank line between pairs, no unrelated headings, and no unsupported factual additions. Paste **only the generated question-and-answer blocks** back into the app, then use its read-only preview before confirming import. Copying the rules does not add anything to the study queue. The source text remains local, and no paid or remote generation is built into the application. [Read Blueprint 4.12](docs/BLUEPRINT_4_12_FREE.md).
 
 ## Blueprint 4.11 — Easily delete or restore lecture Q&A
 

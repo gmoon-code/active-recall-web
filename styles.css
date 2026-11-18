@@ -208,6 +208,12 @@
 .qa-bulk>summary{cursor:pointer;color:var(--teal);font-size:13px;margin-bottom:11px}
 .qa-bulk>.field{margin:14px 0}
 .qa-bulk .field small{overflow-wrap:anywhere}
+.qa-format-guide{margin:14px 0 18px;padding:13px;border:1px solid #b7d5c8;border-radius:12px;background:#f6fbf8;min-width:0}
+.qa-format-head{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:9px}
+.qa-format-guide>p{margin:9px 0}
+.qa-format-guide>label{display:block;margin:10px 0 5px;font-weight:700}
+.qa-format-text{width:100%;min-height:138px;max-height:280px;resize:vertical;font-size:12px;line-height:1.5;background:#fff}
+.qa-format-example{white-space:pre-wrap;overflow-wrap:anywhere;margin:8px 0 0;padding:10px 12px;background:#fff;border:1px solid var(--line);border-radius:9px;font:12px/1.55 ui-monospace,SFMono-Regular,Consolas,monospace}
 .qa-import-or{text-align:center;color:var(--muted);font-size:12px;font-weight:750;margin:13px 0}
 .qa-import-preview{border:1px solid #afcfbe;background:#f6fcf7;border-radius:14px;padding:14px;margin-top:18px;overflow-wrap:anywhere}
 .qa-import-preview .card-title{align-items:start;flex-wrap:wrap}

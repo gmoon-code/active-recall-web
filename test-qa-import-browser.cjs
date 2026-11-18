@@ -26,6 +26,18 @@ async function main(){
     await page.waitForFunction(async()=>{const x=await window.ActiveRecallStorage.load();return x?.db?.courses.length===1;});
     await page.locator('.navbtn[data-page=questions]').click();
     await page.locator('.qa-bulk summary').click();
+    const rules=await page.locator('#qa-format-rules').inputValue();
+    assert.match(rules,/Start every question on its own line with exactly Q:/);
+    assert.match(rules,/Do not add a heading, introduction/);
+    assert.equal(await page.locator('#qa-format-rules').getAttribute('readonly'),'');
+    const example=await page.locator('.qa-format-example').innerText();
+    const parsedExample=await page.evaluate(text=>window.ActiveRecallQAImport.parse(text),example);
+    assert.equal(parsedExample.rows.length,2,'The displayed format example must be directly importable.');
+    await page.context().grantPermissions(['clipboard-read','clipboard-write'],{origin:'http://127.0.0.1:'+server.address().port});
+    await page.locator('[data-action=qa-copy-format-rules]').click();
+    const copied=await page.evaluate(()=>navigator.clipboard.readText());
+    assert.equal(copied,rules,'The copy button must copy the complete instructions, not a placeholder.');
+    assert.equal(await page.locator('.qa-item').count(),0,'Copying instructions must not create or import questions.');
     const csv='Question,Answer,Lecture,Type,Course\n"How do proton gradients store energy?","An electrochemical difference, across the membrane.",Lecture 8,Explain,AP Biology\n"What is ATP synthase?","An enzyme that makes ATP.",Lecture 8,Recall,AP Biology';
     await page.locator('#qa-import-file').setInputFiles({name:'lecture-8.csv',mimeType:'text/csv',buffer:Buffer.from(csv)});
     const preview=page.locator('.qa-import-preview');await preview.waitFor();
