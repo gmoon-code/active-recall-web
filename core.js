@@ -1213,6 +1213,56 @@
     }
     return {items:plan,budgetSeconds,reserveSeconds:reserve,unusedSeconds:remaining};
   }
+  // Read-only priority inspector: the active policy is NEVER changed by this
+  // comparison. The alternative is a queue-order thought experiment, not FSRS.
+  function inspectStudyPriorities(db,{minutes=25,now=new Date(),prefs=null}={}){
+    if(!Number.isInteger(minutes)||minutes<5||minutes>720)throw Error('Preview duration must be 5–720 minutes.');
+    const plan=planActivities(db,minutes,[],{},now);
+    const candidates=eligibleCandidates(db,now);
+    const isDueReview=c=>c.due&&!c.isNew;
+    const category=c=>isDueReview(c)?'Due review':c.isNew?'New first attempt':'Not yet due';
+    const baseline=plan.items.slice();
+    // Study Now starts with the first current-calendar target if one fits the
+    // prepared session. Subsequent choices are recalculated after real ratings.
+    let calendarFirst=null;
+    try{
+      const options=prefs||db.agendaPreferences||{days:21,weekdayMinutes:25,weekendMinutes:60,missedDates:[]};
+      const assigned=buildReviewAgenda(db,{...options,start:now}).days[0].activities.filter(a=>!a.conditional);
+      const order=new Map(assigned.map((a,i)=>[a.targetId,i]));
+      calendarFirst=baseline.filter(c=>order.has(c.target.id))
+        .sort((a,b)=>order.get(a.target.id)-order.get(b.target.id))[0]||null;
+    }catch{ /* Calendar preferences should not prevent an ordinary session. */ }
+    const first=calendarFirst||baseline[0]||null;
+    const current=first?[first,...baseline.filter(c=>c.target.id!==first.target.id)]:[];
+    const budget=plan.budgetSeconds-plan.reserveSeconds;
+    const pending=candidates.slice();
+    let remaining=budget;
+    const reviewFirst=[];
+    while(pending.length){
+      const fitting=pending.filter(c=>c.seconds<=remaining);
+      if(!fitting.length)break;
+      fitting.sort((a,b)=>{
+        const group=x=>isDueReview(x)?0:x.isNew?1:2;
+        return group(a)-group(b)||b.score-a.score||a.seconds-b.seconds||a.target.id.localeCompare(b.target.id);
+      });
+      const chosen=fitting[0];reviewFirst.push(chosen);remaining-=chosen.seconds;
+      pending.splice(pending.indexOf(chosen),1);
+    }
+    const allCurrent=new Set(current.map(c=>c.target.id)),allAlternative=new Set(reviewFirst.map(c=>c.target.id));
+    const summarise=items=>({total:items.length,due:items.filter(isDueReview).length,
+      new:items.filter(c=>c.isNew).length,early:items.filter(c=>!c.due&&!c.isNew).length});
+    const item=c=>({targetId:c.target.id,requirementId:c.req.id,courseId:c.req.courseId,
+      question:c.activity.question,kind:c.activity.kind,category:category(c),
+      estimatedMinutes:Math.max(1,Math.ceil(c.seconds/60)),
+      reasons:c.reasons.filter(r=>!r.startsWith('Estimated ')),
+      priorityScore:c.score,daysToExam:c.daysToExam});
+    return {minutes,eligible:{total:candidates.length,due:candidates.filter(isDueReview).length,
+      new:candidates.filter(c=>c.isNew).length,early:candidates.filter(c=>!c.due&&!c.isNew).length},
+      current:{...summarise(current),items:current.slice(0,6).map(item)},
+      reviewFirst:{...summarise(reviewFirst),items:reviewFirst.slice(0,6).map(item)},
+      changedTargets:[...allCurrent].filter(id=>!allAlternative.has(id)).length+ [...allAlternative].filter(id=>!allCurrent.has(id)).length,
+      warning:'Current shows the session candidates chosen by the existing score and calendar preferences. Only the first candidate is a snapshot of the actual next-question choice; later order changes after each response. Review-first is a read-only hypothetical that places due attempted questions before new questions, then not-yet-due practice, subject to the same time estimates and reserve. Neither uses FSRS probabilities, proves the order is optimal, or changes any memory or due date.'};
+  }
   // A rolling, capacity-aware calendar; future spaced follow-ups are explicitly
   // CONDITIONAL on actually studying and are NOT simulated successful answers.
   // Read-only: no attempts, memory intervals or timestamps are modified.
@@ -1579,5 +1629,5 @@
   }
   function validateImport(x){return migrateDb(x);}
 
-  return {DAY,id,today,addDays,daysUntil,initialDb,migrateDb,validateImport,getTarget,getTargets,getMemory,getActivities,getCriteria,addCriterion,proposeCriteria,rubricQualityReview,addRubricEvidenceDraft,reviseCriterion,setCriterionAlternatives,rubricSyllabusAlignment,setCriterionSyllabusGoals,verifyCriterion,archiveCriterion,criterionStatus,rubricProgress,chooseActivity,addRetrievalTarget,verifyRetrievalTarget,addActivityVariant,deactivateActivity,reviseSource,addCourse,addSyllabusObjectives,updateSyllabusObjective,archiveSyllabusObjective,setSyllabusLink,setSyllabusMaterialsReady,setSyllabusLearningGuide,guidedLearningInfo,syllabusCoverage,draftRequirements,addSource,addImportedDocument,addRequirement,previewManualQuestionImport,importManualQuestionList,addManualQuestionBatch,archiveRequirements,restoreRequirement,purgeArchivedRequirements,editRequirement,verifyRequirement,questionQualityAudit,confirmQuestionQuality,integrity:I.integrity,questionCoverage:I.questionCoverage,questionWarnings:I.questionWarnings,learningObjectiveMap,variationStudio,questionStudio,adoptQuestionProposal,coverageReviewQueue,addAssessment,linkedAssessments,estimatedSeconds,durationEstimate,evidenceType,inputModeFor,evidenceSummary,delayedRetrievalAudit,schedulingPolicyAudit,eligibleCandidates,planActivities,buildReviewAgenda,forecastSchedule,setExactAnswerKey,exactKeyReady,previewLiteralCheck,literalDelayedAudit,recordAttempt,latestCorrectiveFeedback,assessmentCoverage,stats,demoDb};
+  return {DAY,id,today,addDays,daysUntil,initialDb,migrateDb,validateImport,getTarget,getTargets,getMemory,getActivities,getCriteria,addCriterion,proposeCriteria,rubricQualityReview,addRubricEvidenceDraft,reviseCriterion,setCriterionAlternatives,rubricSyllabusAlignment,setCriterionSyllabusGoals,verifyCriterion,archiveCriterion,criterionStatus,rubricProgress,chooseActivity,addRetrievalTarget,verifyRetrievalTarget,addActivityVariant,deactivateActivity,reviseSource,addCourse,addSyllabusObjectives,updateSyllabusObjective,archiveSyllabusObjective,setSyllabusLink,setSyllabusMaterialsReady,setSyllabusLearningGuide,guidedLearningInfo,syllabusCoverage,draftRequirements,addSource,addImportedDocument,addRequirement,previewManualQuestionImport,importManualQuestionList,addManualQuestionBatch,archiveRequirements,restoreRequirement,purgeArchivedRequirements,editRequirement,verifyRequirement,questionQualityAudit,confirmQuestionQuality,integrity:I.integrity,questionCoverage:I.questionCoverage,questionWarnings:I.questionWarnings,learningObjectiveMap,variationStudio,questionStudio,adoptQuestionProposal,coverageReviewQueue,addAssessment,linkedAssessments,estimatedSeconds,durationEstimate,evidenceType,inputModeFor,evidenceSummary,delayedRetrievalAudit,schedulingPolicyAudit,eligibleCandidates,planActivities,inspectStudyPriorities,buildReviewAgenda,forecastSchedule,setExactAnswerKey,exactKeyReady,previewLiteralCheck,literalDelayedAudit,recordAttempt,latestCorrectiveFeedback,assessmentCoverage,stats,demoDb};
 });

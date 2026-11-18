@@ -1,4 +1,8 @@
-# Active Recall Web — Free Edition v4.16
+# Active Recall Web — Free Edition v4.17
+
+## Blueprint 4.17 — Why does the app select these study questions?
+
+Open **Study Now** and inspect **Why are these questions prioritised?**. The new read-only comparison shows the current priority shortlist alongside a hypothetical **review-first** shortlist for the chosen session length, with question-specific reasons (due vs new, assessment deadlines, earlier difficulty, explanation-checklist gaps) and explicit estimated durations. It respects question eligibility and available time. The current queue, its active interval policy and all saved data remain unchanged; review-first is **not** Anki FSRS or a calibrated recall prediction. The first item in the current shortlist reflects the app's present next-question choice, while later choices may change after each actual response. [Read Blueprint 4.17](docs/BLUEPRINT_4_17_FREE.md).
 
 ## Blueprint 4.16 — Compare study schedules before applying changes
 
