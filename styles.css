@@ -226,3 +226,21 @@
 .qa-import-row small{color:var(--muted)}
 .qa-import-row .qa-answer{font-size:12px;margin:5px 0}
 @media(max-width:620px){.qa-import-preview{padding:10px}.qa-import-list{max-height:300px}}
+/* v4.14: transparent workload fit and non-punitive practice history. */
+.rhythm-card{border-color:#cddfd6}
+.rhythm-card .card-title{flex-wrap:wrap;gap:10px}
+.rhythm-numbers{margin:16px 0}
+.rhythm-numbers .card.slim{background:#f8fbf9;box-shadow:none;min-width:0}
+.rhythm-advice{margin:14px 0 12px;line-height:1.65}
+.rhythm-subtitle{margin:20px 0 12px}
+.fit-week{display:grid;gap:11px;margin-bottom:13px}
+.fit-day{display:grid;gap:6px}
+.fit-day-top{display:flex;align-items:baseline;justify-content:space-between;gap:12px;font-size:12px;flex-wrap:wrap}
+.fit-day-top>span{color:var(--muted)}
+.fit-bar{height:8px;border-radius:10px;background:#e8efea;overflow:hidden}
+.fit-bar span{display:block;height:100%;border-radius:10px;background:#65a993}
+.rhythm-history{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin-top:16px}
+.rhythm-history-day{padding:13px;border:1px solid var(--line);border-radius:12px;background:#fcfdfb;display:grid;align-content:start;gap:7px}
+.rhythm-history-day>div{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.rhythm-history-day .pill{font-size:10px}
+@media(max-width:700px){.rhythm-numbers{grid-template-columns:1fr!important}.rhythm-history{grid-template-columns:1fr}}

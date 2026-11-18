@@ -1,8 +1,14 @@
-# Active Recall Web — Free Edition v4.13
+# Active Recall Web — Free Edition v4.14
 
 A local-first active-recall system with a **single multi-course automatic review agenda**, source-linked learning objectives, reviewed question drafts, and sessions that adjust to time budgets and assessments.
 
 **Public website:** https://gmoon-code.github.io/active-recall-web/
+
+## Blueprint 4.14 — Study Rhythm & Schedule Fit
+
+**Overview** now shows a compact schedule-fit check; **Calendar** shows known due review demand *including due work left unassigned* under current capacity and priorities, plus a seven-day assigned-work outlook; **Progress** now presents seven days of recorded study rhythm. The new read-only fit model distinguishes the user's available study minutes, estimated work and actual recorded attempts, while treating rest days and unobserved days as different states. A priority/assignment gap is distinguished from a true capacity shortfall.
+
+The app takes a dated snapshot of the current plan when opened with active learning material, and creates a separate revision when the user saves different availability. This preserves the distinction between the earlier observed plan and the current recalculation. The records live in the existing local schema-v5 JSON backups. **Old history is not fabricated** and absence of activity in this app is not proof the learner did not study. No automatic due-date changes, punitive streaks, mastery scores, paid services or cloud tracking were added. [Read Blueprint 4.14](docs/BLUEPRINT_4_14_FREE.md).
 
 ## Blueprint 4.13 — Permanently erase deleted Q&A
 

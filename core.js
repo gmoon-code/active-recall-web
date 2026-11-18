@@ -10,6 +10,8 @@
   if(!D)throw Error('Missing local document-import module.');
   const QA=(typeof module !== 'undefined' && module.exports)?require('./qa-import.js'):globalThis.ActiveRecallQAImport;
   if(!QA)throw Error('Missing local question-list import module.');
+  const Rhythm=(typeof module !== 'undefined' && module.exports)?require('./study-rhythm.js'):globalThis.ActiveRecallStudyRhythm;
+  if(!Rhythm)throw Error('Missing local study-rhythm module.');
   const H=(typeof module!=='undefined'&&module.exports)?require('./human-review.js'):globalThis.ActiveRecallHumanReview;
   if(!H)throw Error('Missing local human-review module.');
   const P=(typeof module!=='undefined'&&module.exports)?require('./paired-review.js'):globalThis.ActiveRecallPairedReview;
@@ -168,6 +170,7 @@
         Pilot.validate(input); // Optional v4.5 prospective screening protocol; no schema migration.
         Training.validate(input); // Optional v4.6 independent synthetic reviewer practice; no schema migration.
         Usability.validate(input); // Optional v4.7 voluntary fictional reviewer usability, unchanged schema.
+        Rhythm.validate(input); // Optional append-only daily plan snapshots, schema v5 compatible.
         return input;
       }
       const upgraded=JSON.parse(JSON.stringify(input));
@@ -881,6 +884,8 @@
     const criterionIds=new Set(db.rubricCriteria.filter(c=>ids.has(c.requirementId)||targetIds.has(c.targetId)).map(c=>c.id));
     const attemptIds=new Set(attempts.map(a=>a.id));
     const removedIds=new Set([...ids,...targetIds,...activityIds,...criterionIds,...attemptIds]);
+    const affectedPlanDates=new Set((db.studyPlanHistory||[]).filter(s=>
+      s.scheduledTargetIds.some(id=>targetIds.has(id))).map(s=>s.date));
     const activeQuestions=db.requirements.filter(r=>!ids.has(r.id)).map(r=>{
       if(!ids.has(r.possibleDuplicateOf)&&!ids.has(r.possibleConflictWith))return r;
       return {...r,possibleDuplicateOf:ids.has(r.possibleDuplicateOf)?null:r.possibleDuplicateOf,
@@ -912,6 +917,9 @@
           currentReqId:null,currentTargetId:null,currentActivityId:null,draftAnswer:'',correctionDraft:'',criterionDraft:{},showHint:false,showReference:false,assistedForCurrent:false
         }:{})};
       }),
+      // Do not leave deleted question IDs or misleading aggregate estimates in
+      // plan snapshots. Erase entire affected dates, including revisions.
+      studyPlanHistory:(db.studyPlanHistory||[]).filter(s=>!affectedPlanDates.has(s.date)),
       events:db.events.filter(e=>e&&!removedIds.has(e.entityId)&&!ids.has(e.requirementId)&&
         !targetIds.has(e.targetId)&&!activityIds.has(e.activityId)&&!criterionIds.has(e.criterionId))
         .map(e=>Array.isArray(e.affectedRequirements)?{...e,affectedRequirements:e.affectedRequirements.filter(id=>!ids.has(id))}:e)
