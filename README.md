@@ -1,4 +1,8 @@
-# Active Recall Web — Free Edition v4.14
+# Active Recall Web — Free Edition v4.15
+
+## Blueprint 4.15 — Log study outside the app
+
+**Progress** includes a quick self-report form for studying elsewhere: choose a date within the last 30 days, minutes (1–720), activity and an optional short note. Each entry appears in its date's study history and can be deleted. Entries are saved with local JSON backups. The weekly reflection flags repeated days when reported outside study exceeds declared availability, or observed available days with no activity recorded. These are prompts to inspect the plan, **not conclusions about discipline, success or memory**. Outside minutes and timed in-app question attempts remain separate, may overlap, and are never added into a misleading total. Outside-study logs do not create recall attempts, satisfy assigned questions, change spaced-review dates or silently revise the calendar. [Read Blueprint 4.15](docs/BLUEPRINT_4_15_FREE.md).
 
 A local-first active-recall system with a **single multi-course automatic review agenda**, source-linked learning objectives, reviewed question drafts, and sessions that adjust to time budgets and assessments.
 

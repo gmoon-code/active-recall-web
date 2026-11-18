@@ -13,6 +13,27 @@
   function localDate(date) {
     return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
   }
+  function logOutsideStudy(db,{date,minutes,kind='other',note='',now=new Date()}={}) {
+    const today=localDate(now);
+    if(typeof date!=='string'||!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(date)||
+      !Number.isFinite(Date.parse(date+'T12:00:00'))||localDate(new Date(date+'T12:00:00'))!==date||
+      date>today||Math.round((new Date(today+'T12:00:00')-new Date(date+'T12:00:00'))/86400000)>30)
+      throw Error('Choose a valid study date within the past 30 days.');
+    if(!Number.isSafeInteger(minutes)||minutes<1||minutes>720)throw Error('Enter 1–720 minutes of actual outside study.');
+    if(!['reading','questions','class','other'].includes(kind))throw Error('Choose a study activity.');
+    if(typeof note!=='string'||note.length>240)throw Error('Notes must be 240 characters or fewer.');
+    if(!Array.isArray(db.outsideStudyLogs))db.outsideStudyLogs=[];
+    if(db.outsideStudyLogs.length>=10000)throw Error('Outside-study log limit reached.');
+    const log={version:1,id:'outside_'+Math.random().toString(36).slice(2,12)+Date.now().toString(36),date,minutes,kind,note:note.trim(),recordedAt:now.toISOString(),basis:'self_report'};
+    db.outsideStudyLogs.push(log);
+    return log;
+  }
+  function deleteOutsideStudy(db,id){
+    const entries=db.outsideStudyLogs||[];
+    const index=entries.findIndex(x=>x.id===id);
+    if(index<0)throw Error('Outside-study entry not found.');
+    entries.splice(index,1);
+  }
   function capacityOn(date, prefs) {
     if ((prefs.missedDates || []).includes(localDate(date))) return 0;
     return [0,6].includes(date.getDay()) ? prefs.weekendMinutes : prefs.weekdayMinutes;
@@ -81,6 +102,11 @@
       if(!prior||s.revision>prior.revision)latest.set(s.date,s);
     }
     const attemptsByDay=new Map();
+    const logsByDay=new Map();
+    for(const log of db.outsideStudyLogs||[]){
+      if(!logsByDay.has(log.date))logsByDay.set(log.date,[]);
+      logsByDay.get(log.date).push(log);
+    }
     for(const a of db.attempts) {
       const date=new Date(a.createdAt);
       if (!Number.isFinite(date.getTime())) continue;
@@ -92,27 +118,43 @@
     for(let i=days-1;i>=0;i--) {
       const when=new Date(now.getFullYear(),now.getMonth(),now.getDate()-i,12);
       const date=localDate(when),plan=latest.get(date)||null;
-      const attempts=attemptsByDay.get(date)||[];
+      const attempts=attemptsByDay.get(date)||[],outsideLogs=logsByDay.get(date)||[];
       const attempted=new Set(attempts.map(a=>a.retrievalTargetId));
       const plannedIds=plan?.scheduledTargetIds||[];
       const timed=attempts.filter(a=>Number.isFinite(a.durationSeconds)&&a.durationSeconds>=10&&a.durationSeconds<=1800);
       rows.push({date,plan,attempts:attempts.length,uniqueTargets:attempted.size,
+        outsideLogs,outsideMinutes:outsideLogs.reduce((n,x)=>n+x.minutes,0),
         matchedPlanTargets:plannedIds.filter(id=>attempted.has(id)).length,
         plannedTargets:plannedIds.length,
         timedAttempts:timed.length,timedSeconds:timed.reduce((n,a)=>n+a.durationSeconds,0),
         revised:plan?plan.revision>1:false,
         // A blank day is unknown: opening the app is not the same as
         // confirming that the learner had an opportunity to study.
-        status:!plan?'no_plan_record':plan.availabilityMinutes===0?'planned_rest':attempts.length?'practice_recorded':'no_practice_recorded'});
+        status:!plan?'no_plan_record':plan.availabilityMinutes===0?'planned_rest':attempts.length||outsideLogs.length?'practice_recorded':'no_practice_recorded'});
     }
     const observed=rows.filter(r=>r.plan&&r.plan.availabilityMinutes>0);
     return {rows,observedStudyDays:observed.length,daysWithAttempts:observed.filter(r=>r.attempts>0).length,
+      daysWithAnyRecord:observed.filter(r=>r.attempts>0||r.outsideLogs.length>0).length,
+      outsideMinutes:rows.reduce((n,r)=>n+r.outsideMinutes,0),
       unobservedDays:rows.filter(r=>!r.plan).length,
       recordedAttempts:rows.reduce((n,r)=>n+r.attempts,0),
       timedSeconds:rows.reduce((n,r)=>n+r.timedSeconds,0),
       warning:'A snapshot captures the plan when the app was first opened that day or when availability was revised. It is not evidence of what was promised the day before. Unrecorded activity, elapsed session time and actual learning are unknown; timed attempts and self-ratings are not verified mastery.'};
   }
   function validate(db) {
+    if(db.outsideStudyLogs!==undefined){
+      if(!Array.isArray(db.outsideStudyLogs)||db.outsideStudyLogs.length>10000)throw Error('Invalid outside-study logs in backup.');
+      const ids=new Set();
+      for(const l of db.outsideStudyLogs){
+        if(!l||l.version!==1||typeof l.id!=='string'||!/^outside_[a-z0-9]{8,40}$/.test(l.id)||ids.has(l.id)||
+          typeof l.date!=='string'||!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(l.date)||
+          !Number.isFinite(Date.parse(l.date+'T12:00:00'))||localDate(new Date(l.date+'T12:00:00'))!==l.date||
+          !Number.isSafeInteger(l.minutes)||l.minutes<1||l.minutes>720||
+          !['reading','questions','class','other'].includes(l.kind)||typeof l.note!=='string'||l.note.length>240||
+          typeof l.recordedAt!=='string'||!Number.isFinite(Date.parse(l.recordedAt))||l.basis!=='self_report')throw Error('Invalid outside-study entry in backup.');
+        ids.add(l.id);
+      }
+    }
     if(db.studyPlanHistory===undefined)return true;
     if(!Array.isArray(db.studyPlanHistory)||db.studyPlanHistory.length>25000)throw Error('Invalid study-plan history in backup.');
     const byDate=new Map();
@@ -134,5 +176,5 @@
     }
     return true;
   }
-  return {preferences,capacityOn,studyFit,recordDailyPlan,history,validate,localDate};
+  return {preferences,capacityOn,studyFit,recordDailyPlan,history,logOutsideStudy,deleteOutsideStudy,validate,localDate};
 });

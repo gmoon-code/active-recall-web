@@ -243,4 +243,7 @@
 .rhythm-history-day{padding:13px;border:1px solid var(--line);border-radius:12px;background:#fcfdfb;display:grid;align-content:start;gap:7px}
 .rhythm-history-day>div{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
 .rhythm-history-day .pill{font-size:10px}
+.outside-study-form{margin:18px 0;padding:16px;border:1px solid #d3e3d8;border-radius:12px;background:#f8fbf9}
+.outside-log{display:flex;align-items:center;justify-content:space-between;gap:8px;border-top:1px solid var(--line);padding-top:7px;font-size:12px;overflow-wrap:anywhere}
+.outside-log .btn{flex-shrink:0}
 @media(max-width:700px){.rhythm-numbers{grid-template-columns:1fr!important}.rhythm-history{grid-template-columns:1fr}}
