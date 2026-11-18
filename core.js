@@ -864,6 +864,65 @@
     db.events.push({type:'requirement.restored',entityId:r.id,at:r.updatedAt});
     return r;
   }
+  function purgeArchivedRequirements(db,requirementIds){
+    if(!Array.isArray(requirementIds)||!requirementIds.length)throw Error('Select at least one deleted question to erase permanently.');
+    const ids=new Set(requirementIds);
+    if(ids.size!==requirementIds.length||[...ids].some(id=>typeof id!=='string'))throw Error('Invalid permanent-deletion selection. Nothing was erased.');
+    const rows=[...ids].map(id=>db.requirements.find(r=>r.id===id&&r.active===false));
+    if(rows.some(r=>!r))throw Error('Only already-deleted questions can be permanently erased. Nothing was erased.');
+    const attempts=db.attempts.filter(a=>ids.has(a.requirementId));
+    // The prospective reviewer pilot fixes an immutable attempt sequence and
+    // denominator. Removing one of its original attempts would invalidate the
+    // protocol; that requires separate, explicit pilot disposal authority.
+    if(attempts.length&&db.reviewerPilot!==undefined)
+      throw Error('This question has attempts in a locked reviewer-pilot database. Permanent deletion would corrupt its fixed study record. Nothing was erased.');
+    const targetIds=new Set(db.retrievalTargets.filter(t=>ids.has(t.requirementId)).map(t=>t.id));
+    const activityIds=new Set(db.activities.filter(a=>ids.has(a.requirementId)||targetIds.has(a.retrievalTargetId)).map(a=>a.id));
+    const criterionIds=new Set(db.rubricCriteria.filter(c=>ids.has(c.requirementId)||targetIds.has(c.targetId)).map(c=>c.id));
+    const attemptIds=new Set(attempts.map(a=>a.id));
+    const removedIds=new Set([...ids,...targetIds,...activityIds,...criterionIds,...attemptIds]);
+    const activeQuestions=db.requirements.filter(r=>!ids.has(r.id)).map(r=>{
+      if(!ids.has(r.possibleDuplicateOf)&&!ids.has(r.possibleConflictWith))return r;
+      return {...r,possibleDuplicateOf:ids.has(r.possibleDuplicateOf)?null:r.possibleDuplicateOf,
+        possibleConflictWith:ids.has(r.possibleConflictWith)?null:r.possibleConflictWith};
+    });
+    const next={
+      requirements:activeQuestions,
+      requirementVersions:db.requirementVersions.filter(v=>!ids.has(v.requirementId)),
+      retrievalTargets:db.retrievalTargets.filter(t=>!targetIds.has(t.id)),
+      activities:db.activities.filter(a=>!activityIds.has(a.id)),
+      rubricCriteria:db.rubricCriteria.filter(c=>!criterionIds.has(c.id)),
+      criterionVersions:db.criterionVersions.filter(v=>!criterionIds.has(v.criterionId)),
+      attempts:db.attempts.filter(a=>!attemptIds.has(a.id)),
+      memory:Object.fromEntries(Object.entries(db.memory).filter(([id])=>!targetIds.has(id)&&!ids.has(id))),
+      sources:db.sources.map(s=>({...s,duplicateLinks:(s.duplicateLinks||[]).filter(id=>!ids.has(id)),
+        conflictLinks:(s.conflictLinks||[]).filter(id=>!ids.has(id))})),
+      syllabusObjectives:(db.syllabusObjectives||[]).map(g=>({...g,requirementIds:(g.requirementIds||[]).filter(id=>!ids.has(id))})),
+      assessments:db.assessments.map(a=>({...a,requirementIds:(a.requirementIds||[]).filter(id=>!ids.has(id))})),
+      sessions:db.sessions.map(s=>{
+        const completed=Array.isArray(s.completedIds)?s.completedIds:[];
+        const keep=completed.filter(id=>!removedIds.has(id));
+        const counts={...(s.courseCounts||{})};
+        for(const r of rows){
+          const removed=completed.filter(id=>id===r.id||db.retrievalTargets.some(t=>t.requirementId===r.id&&t.id===id)).length;
+          if(removed&&counts[r.courseId])counts[r.courseId]=Math.max(0,counts[r.courseId]-removed);
+        }
+        const current=removedIds.has(s.currentReqId)||removedIds.has(s.currentTargetId)||removedIds.has(s.currentActivityId);
+        return {...s,completedIds:keep,courseCounts:counts,...(current?{
+          currentReqId:null,currentTargetId:null,currentActivityId:null,draftAnswer:'',correctionDraft:'',criterionDraft:{},showHint:false,showReference:false,assistedForCurrent:false
+        }:{})};
+      }),
+      events:db.events.filter(e=>e&&!removedIds.has(e.entityId)&&!ids.has(e.requirementId)&&
+        !targetIds.has(e.targetId)&&!activityIds.has(e.activityId)&&!criterionIds.has(e.criterionId))
+        .map(e=>Array.isArray(e.affectedRequirements)?{...e,affectedRequirements:e.affectedRequirements.filter(id=>!ids.has(id))}:e)
+    };
+    next.timeModels=buildTimeModels(next.attempts);
+    next.events.push({type:'requirements.purged',count:rows.length,attemptCount:attempts.length,at:new Date().toISOString()});
+    // Everything is checked and computed before changing the database: there
+    // is no partial purge when an invalid ID or locked protocol is encountered.
+    Object.assign(db,next);
+    return {count:rows.length,attemptCount:attempts.length};
+  }
   function editRequirement(db,reqId,{question,answer,kind,objective,lectureTitle,changeType='substantive'}){
     const r=db.requirements.find(r=>r.id===reqId);if(!r)throw Error('Requirement not found.');
     question=cleanString(question,500);answer=cleanString(answer,4000);
@@ -1512,5 +1571,5 @@
   }
   function validateImport(x){return migrateDb(x);}
 
-  return {DAY,id,today,addDays,daysUntil,initialDb,migrateDb,validateImport,getTarget,getTargets,getMemory,getActivities,getCriteria,addCriterion,proposeCriteria,rubricQualityReview,addRubricEvidenceDraft,reviseCriterion,setCriterionAlternatives,rubricSyllabusAlignment,setCriterionSyllabusGoals,verifyCriterion,archiveCriterion,criterionStatus,rubricProgress,chooseActivity,addRetrievalTarget,verifyRetrievalTarget,addActivityVariant,deactivateActivity,reviseSource,addCourse,addSyllabusObjectives,updateSyllabusObjective,archiveSyllabusObjective,setSyllabusLink,setSyllabusMaterialsReady,setSyllabusLearningGuide,guidedLearningInfo,syllabusCoverage,draftRequirements,addSource,addImportedDocument,addRequirement,previewManualQuestionImport,importManualQuestionList,addManualQuestionBatch,archiveRequirements,restoreRequirement,editRequirement,verifyRequirement,questionQualityAudit,confirmQuestionQuality,integrity:I.integrity,questionCoverage:I.questionCoverage,questionWarnings:I.questionWarnings,learningObjectiveMap,variationStudio,questionStudio,adoptQuestionProposal,coverageReviewQueue,addAssessment,linkedAssessments,estimatedSeconds,durationEstimate,evidenceType,inputModeFor,evidenceSummary,delayedRetrievalAudit,schedulingPolicyAudit,eligibleCandidates,planActivities,buildReviewAgenda,forecastSchedule,setExactAnswerKey,exactKeyReady,previewLiteralCheck,literalDelayedAudit,recordAttempt,latestCorrectiveFeedback,assessmentCoverage,stats,demoDb};
+  return {DAY,id,today,addDays,daysUntil,initialDb,migrateDb,validateImport,getTarget,getTargets,getMemory,getActivities,getCriteria,addCriterion,proposeCriteria,rubricQualityReview,addRubricEvidenceDraft,reviseCriterion,setCriterionAlternatives,rubricSyllabusAlignment,setCriterionSyllabusGoals,verifyCriterion,archiveCriterion,criterionStatus,rubricProgress,chooseActivity,addRetrievalTarget,verifyRetrievalTarget,addActivityVariant,deactivateActivity,reviseSource,addCourse,addSyllabusObjectives,updateSyllabusObjective,archiveSyllabusObjective,setSyllabusLink,setSyllabusMaterialsReady,setSyllabusLearningGuide,guidedLearningInfo,syllabusCoverage,draftRequirements,addSource,addImportedDocument,addRequirement,previewManualQuestionImport,importManualQuestionList,addManualQuestionBatch,archiveRequirements,restoreRequirement,purgeArchivedRequirements,editRequirement,verifyRequirement,questionQualityAudit,confirmQuestionQuality,integrity:I.integrity,questionCoverage:I.questionCoverage,questionWarnings:I.questionWarnings,learningObjectiveMap,variationStudio,questionStudio,adoptQuestionProposal,coverageReviewQueue,addAssessment,linkedAssessments,estimatedSeconds,durationEstimate,evidenceType,inputModeFor,evidenceSummary,delayedRetrievalAudit,schedulingPolicyAudit,eligibleCandidates,planActivities,buildReviewAgenda,forecastSchedule,setExactAnswerKey,exactKeyReady,previewLiteralCheck,literalDelayedAudit,recordAttempt,latestCorrectiveFeedback,assessmentCoverage,stats,demoDb};
 });
