@@ -4,7 +4,7 @@
   let db, page='home', focusedCourse=null, duration=25, currentSessionId=null, modalReqId=null, modalSourceId=null, modalReviewId=null, modalPairId=null, qualityReqId=null, toastTimer=null;
   let pendingDocument=null, documentImportBusy=false, studioSourceId=null, syllabusEditingId=null, syllabusFocusedId=null;
   let focusedLecture='', editingQuestionId=null, lastWrittenLecture='', lastWrittenSourceId='', pendingQuestionImport=null;
-  let selectingQuestions=false, selectedQuestionIds=new Set();
+  let selectingQuestions=false, selectedQuestionIds=new Set(),permanentDeleteBusy=false;
   let guidedGoalId=null, guidedStep='source', guidedAnswer='', guidedRevealed=false, guidedStartedAt=0;
   let outlookSettings={days:21,weekdayMinutes:25,weekendMinutes:60,missedDates:[]};
   const $=s=>document.querySelector(s);
@@ -64,7 +64,7 @@
   function empty(title,desc,cta='',action=''){return `<div class="empty"><div class="bigemoji">✧</div><h2>${esc(title)}</h2><p>${esc(desc)}</p>${cta?`<button class="btn primary" data-action="${action}">${esc(cta)}</button>`:''}</div>`;}
   const nav=[['home','◫','Overview'],['capture','✎','Capture'],['questions','?','My Q&A'],['study','◉','Study Now'],['courses','▤','Knowledge'],['assessments','▦','Assessments'],['forecast','◴','Calendar'],['insights','◷','Progress']];
   function sidebar(){return `<aside class="sidebar"><div class="brand"><span class="mark">✳</span><span>active<span style="color:#176d5e">recall</span></span></div><nav class="nav" aria-label="Main navigation">${nav.map(([key,icon,label])=>`<button class="navbtn ${page===key?'active':''}" data-action="navigate" data-page="${key}" ${page===key?'aria-current="page"':''}><span class="navicon">${icon}</span>${label}</button>`).join('')}</nav><div class="sidefoot"><strong><span class="statusdot"></span>100% free · Browser-local</strong><p>Hosted as a static site. No payments, API keys, accounts, or cloud sync. Export backups regularly.</p></div></aside>`;}
-  function header(){return `<div class="topline"><div class="path">ACTIVE RECALL WEB <span style="color:#b7c4bd">/</span> ${esc(nav.find(x=>x[0]===page)?.[2]||(page==='guided'?'Guided learning':''))}</div><div class="topright"><span class="tag">Blueprint 4.12 · Free</span><span class="avatar" aria-label="Local learner profile">A</span></div></div>`;}
+  function header(){return `<div class="topline"><div class="path">ACTIVE RECALL WEB <span style="color:#b7c4bd">/</span> ${esc(nav.find(x=>x[0]===page)?.[2]||(page==='guided'?'Guided learning':''))}</div><div class="topright"><span class="tag">Blueprint 4.13 · Free</span><span class="avatar" aria-label="Local learner profile">A</span></div></div>`;}
   function shell(content){return `<div class="app">${sidebar()}<main class="main">${header()}${content}<div class="footer">Free &amp; static · Notes stay in this browser · Export backups · Review generated drafts before relying on them · <a href="./health.html">Site diagnostics</a></div></main></div>${modalReqId?editModal():''}${qualityReqId?questionQualityModal():''}${modalSourceId?editSourceModal():''}${studioSourceId?studioModal():''}${modalReviewId?humanReviewModal():''}${modalPairId?PU.modal({db,esc,courseName,attemptId:modalPairId}):''}`;}
   function dashboard(){const integrity=C.integrity(db);const s=C.stats(db),preview=C.planActivities(db,15).items.slice(0,4),topUpcoming=s.upcoming.slice(0,3);
     return `<div class="hero"><div><div class="eyebrow">Your learning, organised</div><h1>One place to learn.<br>One queue to remember.</h1><p>Add knowledge as you encounter it. Study across your courses without organising separate decks or planning every review.</p><div class="btnrow" style="margin-top:22px"><button class="btn primary" data-action="navigate" data-page="study">Start studying ↗</button><button class="btn secondary" data-action="navigate" data-page="questions">+ Write my questions</button><button class="btn secondary" data-action="navigate" data-page="capture">+ Add lecture notes</button></div></div><span class="orb"></span><span class="orb2"></span></div>
@@ -119,7 +119,7 @@
       <div class="qa-list-head"><h2>Saved questions (${rows.length})</h2><div class="qa-list-actions"><span class="small muted">${all.filter(r=>r.origin==='rule_draft'&&r.verificationStatus!=='verified').length} generated draft(s) await review</span>${rows.length?`<button class="btn secondary small" type="button" data-action="qa-toggle-select">${selectingQuestions?'Cancel selection':'Select multiple'}</button>`:''}</div></div>
       ${selectingQuestions&&rows.length?`<div class="qa-delete-bar" role="group" aria-label="Delete multiple questions"><strong>${selectedCount} selected</strong><div class="btnrow"><button class="btn secondary small" data-action="qa-select-all" type="button">Select all shown</button><button class="btn danger small" data-action="qa-delete-selected" type="button" ${selectedCount?'':'disabled'}>Delete selected (${selectedCount})</button></div><p class="small muted">Only questions shown by this lecture filter can be selected. Past review history is retained, and deleted questions can be restored.</p></div>`:''}
       ${groups.size?Array.from(groups.entries()).map(([key,g])=>`<section class="qa-group"><h3>${esc(g.name)} <span class="pill">${g.rows.length}</span></h3>${g.rows.map(questionRow).join('')}</section>`).join(''):`<div class="empty"><h2>No questions ${focusedLecture?'in this lecture':'yet'}</h2><p>Use the simple form to write your first question and its answer.</p></div>`}
-      ${deleted.length?`<details class="qa-deleted"><summary><strong>Deleted questions (${deleted.length}) · restore</strong></summary><p class="small muted">Deleted Q&amp;A is removed from new study sessions and the calendar; earlier review attempts and due dates are preserved. Restore brings back the original question and its existing schedule.</p>${deleted.slice(0,50).map(r=>`<div class="qa-deleted-row"><div><strong>${esc(r.question)}</strong><p class="qa-answer">${esc(r.answer)}</p><small>${esc(lectureName(r))} · ${esc(r.archivedAt?new Date(r.archivedAt).toLocaleDateString():'Previously deleted')}</small></div><button type="button" class="btn secondary small" data-action="qa-restore" data-id="${esc(r.id)}">Restore</button></div>`).join('')}${deleted.length>50?`<p class="small muted">Showing the 50 most recently deleted questions in this course.</p>`:''}</details>`:''}
+      ${deleted.length?`<details class="qa-deleted"><summary><strong>Deleted questions (${deleted.length}) · restore</strong></summary><p class="small muted">Deleted Q&amp;A is removed from new study sessions and the calendar; earlier review attempts and due dates are preserved. Restore brings back the original question and its existing schedule.</p><p class="small warningtext"><strong>Permanent deletion cannot be undone:</strong> it also removes saved practice responses, review history, rubrics and related study links. Export a backup first if you may need them.</p><div class="btnrow qa-permanent-actions"><button type="button" class="btn secondary small" data-action="export">↓ Export backup</button><button type="button" class="btn danger small" data-action="qa-purge-all">Delete all ${deleted.length} permanently</button></div>${deleted.slice(0,50).map(r=>`<div class="qa-deleted-row"><div><strong>${esc(r.question)}</strong><p class="qa-answer">${esc(r.answer)}</p><small>${esc(lectureName(r))} · ${esc(r.archivedAt?new Date(r.archivedAt).toLocaleDateString():'Previously deleted')}</small></div><div class="btnrow qa-deleted-row-actions"><button type="button" class="btn secondary small" data-action="qa-restore" data-id="${esc(r.id)}">Restore</button><button type="button" class="btn danger small" data-action="qa-purge" data-id="${esc(r.id)}">Delete permanently</button></div></div>`).join('')}${deleted.length>50?`<p class="small muted">Showing the 50 most recently deleted questions in this course.</p>`:''}</details>`:''}
     </div><div class="card qa-composer"><div class="card-title"><h2>+ Write a question</h2><span class="pill good">Your words</span></div><form data-form="quick-add-question" class="stack">
       <input type="hidden" name="courseId" value="${esc(course.id)}"/>
       <div class="field"><label for="qa-source">Link saved lecture notes (optional)</label><select id="qa-source" name="sourceId" class="select">${lectureOptions}</select></div>
@@ -162,6 +162,28 @@
       notify(`Deleted ${rows.length} question${rows.length===1?'':'s'} from future study. Restore anytime under Deleted questions; prior review history is intact.`);
       return rows;
     });
+  }
+  async function permanentlyDeleteQuestions(ids){
+    if(permanentDeleteBusy)return;
+    const rows=db.requirements.filter(r=>ids.includes(r.id)&&r.courseId===focusedCourse&&r.active===false);
+    if(!ids.length||rows.length!==ids.length){notify('The deleted-question list changed. Reopen it and try again.',true);return;}
+    const attempts=db.attempts.filter(a=>ids.includes(a.requirementId)).length;
+    const detail=ids.length===1?'\n\n'+rows[0].question.slice(0,150):'';
+    const message=`PERMANENTLY erase ${ids.length} deleted Q&A pair${ids.length===1?'':'s'} from this browser?${detail}${ids.length>50?'\n\nThis includes archived items not displayed in the 50-item list.':''}\n\nThis also erases ${attempts} linked practice attempt${attempts===1?'':'s'}, saved responses, review dates, rubrics and study links. This cannot be undone. Existing exported backups are not affected.\n\nType DELETE to proceed:`;
+    if(window.prompt(message)!=='DELETE')return;
+    permanentDeleteBusy=true;
+    const before=JSON.stringify(db),se=activeSession();
+    const wasCurrent=se?.status==='active'&&ids.includes(se.currentReqId);
+    try{
+      const result=C.purgeArchivedRequirements(db,ids);
+      if(wasCurrent)selectNext(se);
+      await Store.save(db,currentSessionId);
+      render();
+      notify(`Permanently erased ${result.count} Q&A pair${result.count===1?'':'s'} and ${result.attemptCount} linked practice attempt${result.attemptCount===1?'':'s'} from this browser.`);
+    }catch(error){
+      db=JSON.parse(before);render();
+      notify(error.message||'Permanent deletion failed. Nothing was intentionally erased.',true);
+    }finally{permanentDeleteBusy=false;}
   }
   function qualityPanel(report){
     if(!report)return '';
@@ -523,6 +545,8 @@ A">${esc((a.exactAnswerKey?.answers||[]).join('\n'))}</textarea><label class="ch
     case 'qa-delete':{const r=db.requirements.find(r=>r.id===btn.dataset.id&&r.courseId===focusedCourse&&r.active!==false);if(!r){notify('Question no longer available.',true);break;}if(window.confirm(`Delete this Q&A from your study queue?\n\n${r.question.slice(0,150)}\n\nYou can restore it. Past review attempts are kept.`))deleteQuestions([r.id]);break;}
     case 'qa-delete-selected':{const visible=db.requirements.filter(r=>r.active!==false&&r.courseId===focusedCourse&&(!focusedLecture||lectureKey(r)===focusedLecture)&&selectedQuestionIds.has(r.id));if(!visible.length||visible.length!==selectedQuestionIds.size){notify('Select the questions to delete again.',true);break;}if(window.confirm(`Delete ${visible.length} selected Q&A pairs from future study?\n\nYou can restore them. Previous review history is kept.`))deleteQuestions(visible.map(r=>r.id));break;}
     case 'qa-restore':{const r=db.requirements.find(r=>r.id===btn.dataset.id&&r.courseId===focusedCourse&&r.active===false);if(!r){notify('Deleted question is unavailable.',true);break;}transact(()=>{C.restoreRequirement(db,r.id);focusedLecture=lectureKey(r);notify('Question restored to My Q&A and its original review schedule.');});break;}
+    case 'qa-purge':{const r=db.requirements.find(r=>r.id===btn.dataset.id&&r.courseId===focusedCourse&&r.active===false);if(!r){notify('This question is no longer in Deleted questions.',true);break;}permanentlyDeleteQuestions([r.id]);break;}
+    case 'qa-purge-all':{const ids=db.requirements.filter(r=>r.courseId===focusedCourse&&r.active===false).map(r=>r.id);permanentlyDeleteQuestions(ids);break;}
     case 'qa-confirm-import':{const pending=pendingQuestionImport;if(!pending){notify('Preview the list again before importing.',true);break;}const saved=transact(()=>{const rows=C.importManualQuestionList(db,pending.options);pendingQuestionImport=null;focusedCourse=pending.options.courseId;focusedLecture=new Set(rows.map(lectureKey)).size===1?lectureKey(rows[0]):'';lastWrittenSourceId=pending.options.sourceId||'';lastWrittenLecture=pending.options.lectureTitle||'';notify(`Saved ${rows.length} questions to your study queue. Earlier attempts and review dates are unchanged.`);return rows;});if(saved)document.querySelector('#qa-question')?.focus();break;}
     case 'qa-cancel-import':pendingQuestionImport=null;render();break;
     case 'qa-copy-format-rules':copyQuestionFormatRules();break;

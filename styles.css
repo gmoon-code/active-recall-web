@@ -188,6 +188,8 @@
 .qa-deleted-row .qa-answer{margin:5px 0;font-size:12px}
 .qa-deleted-row small{color:var(--muted)}
 .qa-deleted-row button{flex-shrink:0}
+.qa-deleted-row-actions{flex-shrink:0;flex-wrap:wrap;justify-content:flex-end}
+.qa-permanent-actions{flex-wrap:wrap;gap:8px;margin:12px 0}
 .qa-group{margin-top:22px;min-width:0}
 .qa-group>h3{display:flex;align-items:center;gap:8px;margin-bottom:10px;overflow-wrap:anywhere}
 .qa-item{border:1px solid var(--line);border-radius:13px;padding:14px;margin-bottom:10px;background:#fcfefc;min-width:0}

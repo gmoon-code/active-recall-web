@@ -1,8 +1,14 @@
-# Active Recall Web — Free Edition v4.12
+# Active Recall Web — Free Edition v4.13
 
 A local-first active-recall system with a **single multi-course automatic review agenda**, source-linked learning objectives, reviewed question drafts, and sessions that adjust to time budgets and assessments.
 
 **Public website:** https://gmoon-code.github.io/active-recall-web/
+
+## Blueprint 4.13 — Permanently erase deleted Q&A
+
+**My Q&A → Deleted questions · restore** now offers **Delete permanently** for each previously archived question and **Delete all permanently** for every archived question in the selected course. The operation is separate from ordinary reversible Delete/Restore and requires typing the exact confirmation word `DELETE`.
+
+Permanent erasure removes the question and answer from the current browser database, including stored earlier versions, all its recall targets, variations, rubrics, linked practice attempts and response snapshots, personal timing/memory data and local audit records. It also removes stale references from syllabus goals, selected assessments and source overlap links. Original lecture notes, other questions and courses are kept. A locked reviewer pilot prevents erasing attempted questions when that would invalidate its fixed evidence record. **This cannot be undone through Restore**: export a JSON backup before proceeding if you may want the material later. Existing backups or copies on other devices are **not** erased. No server or billing is involved, and schema v5 and the existing scheduler remain. [Read Blueprint 4.13](docs/BLUEPRINT_4_13_FREE.md).
 
 ## Blueprint 4.12 — Copyable bulk Q&A formatting instructions
 

@@ -233,5 +233,5 @@ test('static code exposes new UI bindings, cache and preflight version',()=>{
   assert.match(app,/PU\.panel\(\{db,esc,courseName\}\)/);
   assert.ok(html.indexOf('paired-review.js')<html.indexOf('core.js'));
   assert.ok(html.indexOf('paired-review-ui.js')<html.indexOf('app.js'));
-  assert.match(sw,/active-recall-web-v4-12/); // v4.2 behavior remains supported in later releases
+  assert.match(sw,/active-recall-web-v4-13/); // v4.2 behavior remains supported in later releases
 });

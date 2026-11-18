@@ -68,8 +68,35 @@ async function main(){
     await page.locator('.qa-deleted summary').click();
     await page.locator('[data-action=qa-restore]').first().click();
     await page.waitForFunction(async()=>{const {db}=await window.ActiveRecallStorage.load();return db.requirements.filter(r=>r.active).length===2;});
+    // Permanent deletion is a separate archived-only action and requires the
+    // user to type DELETE. Cancelling must preserve the archived question.
+    await page.locator('.qa-deleted summary').click();
+    assert.match(await page.locator('.qa-deleted').innerText(),/Permanent deletion cannot be undone/);
+    page.once('dialog',dialog=>dialog.dismiss());
+    await page.locator('[data-action=qa-purge]').click();
+    assert.equal((await page.evaluate(async()=>{const {db}=await window.ActiveRecallStorage.load();return db.requirements.length;})),3);
+    page.once('dialog',dialog=>dialog.accept('DELETE'));
+    await page.locator('[data-action=qa-purge]').click();
+    await page.waitForFunction(async()=>{const {db}=await window.ActiveRecallStorage.load();return db.requirements.length===2;});
+    await page.locator('.qa-deleted').waitFor({state:'detached'});
+    assert.equal(await page.locator('.qa-deleted').count(),0);
+
+    // Two-step flow: archive the remaining questions, then explicitly erase
+    // everything in Deleted questions for this course.
+    await page.locator('#qa-filter').selectOption('');
+    await page.locator('[data-action=qa-toggle-select]').click();
+    await page.locator('[data-action=qa-select-all]').click();
+    page.once('dialog',dialog=>dialog.accept());
+    await page.locator('[data-action=qa-delete-selected]').click();
+    await page.waitForFunction(async()=>{const {db}=await window.ActiveRecallStorage.load();return db.requirements.filter(r=>!r.active).length===2;});
+    await page.locator('.qa-deleted summary').click();
+    page.once('dialog',dialog=>dialog.accept('DELETE'));
+    await page.locator('[data-action=qa-purge-all]').click();
+    await page.waitForFunction(async()=>{const {db}=await window.ActiveRecallStorage.load();return db.requirements.length===0;});
+    const cleared=await page.evaluate(async()=>{const {db}=await window.ActiveRecallStorage.load();return {courseCount:db.courses.length,requirements:db.requirements.length,targets:db.retrievalTargets.length,candidates:window.ActiveRecallCore.eligibleCandidates(db).length};});
+    assert.deepEqual(cleared,{courseCount:1,requirements:0,targets:0,candidates:0});
     assert.deepEqual(errors,[]);
-    process.stdout.write('PASS: individual and bulk delete, cancellation, lecture filter boundaries, restoration, queue removal and mobile layout.\n');
+    process.stdout.write('PASS: archive and restore; typed-confirmation single and bulk permanent deletion; cancellation; course boundaries; mobile layout.\n');
   }finally{if(browser)await browser.close();await new Promise(resolve=>server.close(resolve));}
 }
 main().catch(e=>{console.error(e);process.exitCode=1;});
