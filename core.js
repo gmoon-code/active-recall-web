@@ -803,9 +803,12 @@
     const r=db.requirements.find(r=>r.id===reqId);if(!r)throw Error('Requirement not found.');
     question=cleanString(question,500);answer=cleanString(answer,4000);
     if(!question||!answer)throw Error('Question and reference answer cannot be empty.');
+    // Editing an unverified generated draft is NOT a substitute for reviewing
+    // the source and answer. Keep it out of study until explicit confirmation.
+    const keepPending=r.origin==='rule_draft'&&(r.verificationStatus!=='verified'||r.sourceRevisionPending);
     db.events.push({type:'requirement.revised',entityId:r.id,at:new Date().toISOString(),priorVersion:r.version,old:{question:r.question,answer:r.answer,kind:r.kind}});
     const previousObjective=r.objective||r.question;
-    r.question=question;r.answer=answer;r.kind=['recall','explain','apply'].includes(kind)?kind:r.kind;r.objective=cleanString(objective===undefined?previousObjective:objective,300)||question;r.version++;r.reviewedAt=new Date().toISOString();r.updatedAt=new Date().toISOString();r.verifiedAt=r.updatedAt;r.verificationStatus='verified';r.confidence='user_verified';r.possibleDuplicateOf=null;r.possibleConflictWith=null;r.sourceRevisionPending=false;
+    r.question=question;r.answer=answer;r.kind=['recall','explain','apply'].includes(kind)?kind:r.kind;r.objective=cleanString(objective===undefined?previousObjective:objective,300)||question;r.version++;r.updatedAt=new Date().toISOString();r.reviewedAt=keepPending?null:r.updatedAt;r.verifiedAt=keepPending?null:r.updatedAt;r.verificationStatus=keepPending?'draft':'verified';r.confidence=keepPending?'review':'user_verified';r.possibleDuplicateOf=null;r.possibleConflictWith=null;r.sourceRevisionPending=false;
     db.requirementVersions.push({requirementId:r.id,version:r.version,objective:r.objective,question,answer,kind:r.kind,createdAt:r.updatedAt});
     const primary=getActivities(db,r.id).find(a=>a.isPrimary);
     if(primary){primary.question=question;primary.answer=answer;primary.kind=r.kind;if(r.kind!=='recall')delete primary.exactAnswerKey;primary.version++;primary.updatedAt=r.updatedAt;}
@@ -844,6 +847,11 @@
     if(!audit.sourceCurrent)throw Error('The linked source excerpt is missing or changed. Review and repair the source link before approving.');
     const req=db.requirements.find(r=>r.id===reqId),wasVerified=req.verificationStatus==='verified'&&!req.sourceRevisionPending;
     if(!wasVerified)verifyRequirement(db,reqId);
+    const currentSource=db.sources.find(s=>s.id===req.sourceId);
+    if(currentSource&&req.sourceQuote&&currentSource.content.includes(req.sourceQuote)){
+      req.sourceVersion=currentSource.version;
+      req.sourceCurrentVersion=currentSource.version;
+    }
     const at=new Date().toISOString();
     db.events.push({type:'question_quality.reviewed',entityId:req.id,requirementVersion:req.version,
       sourceVersion:audit.sourceVersion,checklistVersion:1,confirmed:true,at});

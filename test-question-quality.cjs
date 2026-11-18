@@ -58,6 +58,16 @@ test('explicit four-step confirmation is mandatory',()=>{
   assert.throws(()=>C.confirmQuestionQuality(f.db,f.req.id,[]),/all four/);
   assert.equal(f.req.verificationStatus,'draft');
 });
+test('editing an unverified generated question cannot silently bypass quality review',()=>{
+  const f=fixture(),target=C.getTarget(f.db,f.req.id);
+  C.editRequirement(f.db,f.req.id,{question:'What must be present for ATP synthase to produce ATP?',
+    answer:f.req.answer,kind:'explain',objective:'Explain necessary condition',changeType:'wording'});
+  assert.equal(f.req.verificationStatus,'draft');
+  assert.equal(f.req.verifiedAt,null);
+  assert.ok(!C.eligibleCandidates(f.db).some(x=>x.target.id===target.id));
+  C.confirmQuestionQuality(f.db,f.req.id,confirmed);
+  assert.equal(f.req.verificationStatus,'verified');
+});
 test('confirmation approves a source-backed draft and records a human decision',()=>{
   const f=fixture(),before=JSON.stringify(f.db.memory),attempts=f.db.attempts.length;
   const result=C.confirmQuestionQuality(f.db,f.req.id,confirmed);
@@ -92,6 +102,17 @@ test('revised source without matching excerpt cannot be quality-approved',()=>{
     content:'A revised account that no longer includes the original necessary condition.'});
   assert.equal(C.questionQualityAudit(f.db,f.req.id).sourceCurrent,false);
   assert.throws(()=>C.confirmQuestionQuality(f.db,f.req.id,confirmed),/source excerpt is missing or changed/);
+});
+test('a preserved excerpt can be rechecked against a newer source version',()=>{
+  const f=fixture();C.confirmQuestionQuality(f.db,f.req.id,confirmed);
+  const previous=f.req.sourceVersion;
+  C.reviseSource(f.db,f.source.id,{title:f.source.title,
+    content:f.source.content+'\nA second unrelated statement appears in the revised source.'});
+  assert.equal(C.questionQualityAudit(f.db,f.req.id).currentReview,false);
+  assert.equal(C.questionQualityAudit(f.db,f.req.id).sourceCurrent,true);
+  C.confirmQuestionQuality(f.db,f.req.id,confirmed);
+  assert.ok(f.req.sourceVersion>previous);
+  assert.equal(C.questionQualityAudit(f.db,f.req.id).currentReview,true);
 });
 test('schema-v5 JSON backup remains importable after quality reviews',()=>{
   const f=fixture();C.confirmQuestionQuality(f.db,f.req.id,confirmed);

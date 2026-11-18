@@ -47,12 +47,12 @@ The event is locally editable and **not** cryptographic proof of review, compete
 - No account, upload, paid API, cloud inference, external service or data collection.
 - Source notes, historical answers, literal keys, manual review history, prototype pilot records, memory intervals and scheduled due dates are not rewritten.
 - Backup validation accepts older schema-v5 data and checks the structure of new quality-review events; malformed or nonexisting requirement versions are rejected. The event validation prevents accidental malformed imports, **not determined tampering**.
-- Rewriting a requirement through the existing editor remains a separate existing human-verified action; v4.8 does not retroactively impose a quality checklist on pre-existing manual records.
+- Editing an **unverified or source-stale rule-generated draft** retains draft status, even after its wording improves. It cannot enter study merely because the editor saved it. Already verified questions and manually authored questions retain their pre-existing editing workflow; a new quality review is optional for them.
 - Source-backed draft suggestions and typed answer alternatives remain editable. No automated correctness, semantic similarity grading, mastery percentages or retention forecasts are produced.
 
 ## Evaluation before further changes
 
-The 13 new Node tests cover necessary conditions and exceptions, original quote offsets, qualifier and paraphrase warnings, mandatory human checks, current/versioned review indicators, source-revision refusal, preserved due dates and attempts, schema-v5 compatibility and malformed review-event rejection.
+The 15 new Node tests cover necessary conditions and exceptions, original quote offsets, qualifier and paraphrase warnings, mandatory human checks, editing a pending draft without bypassing verification, current/versioned review indicators, source-revision refusal and source-preserving reapproval, preserved due dates and attempts, schema-v5 compatibility and malformed review-event rejection.
 
 The new browser workflow covers the Knowledge tab’s real four-checkbox confirmation, persistence and restored review status, unchanged scheduled dates and a mobile-width dialog. The existing seven browser workflows remain part of CI; do not report them as passed until that workflow actually succeeds on the feature branch and deployed main.
 
