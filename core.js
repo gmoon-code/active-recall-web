@@ -149,6 +149,16 @@
         // Syllabus objectives are an OPTIONAL extension of schema v5; older local
         // histories remain valid and are never rewritten by import validation.
         if(input.syllabusObjectives!==undefined)validateSyllabusObjectives(input);
+        for(const e of input.events.filter(e=>e?.type==='question_quality.reviewed')){
+          const req=input.requirements.find(r=>r.id===e.entityId);
+          if(!req||e.confirmed!==true||e.checklistVersion!==1||
+            !Number.isSafeInteger(e.requirementVersion)||e.requirementVersion<1||
+            !input.requirementVersions.some(v=>v.requirementId===e.entityId&&v.version===e.requirementVersion)||
+            !(e.sourceVersion===null||(Number.isSafeInteger(e.sourceVersion)&&e.sourceVersion>0))||
+            (e.sourceVersion!==null&&!input.sourceVersions.some(v=>v.sourceId===req.sourceId&&v.version===e.sourceVersion))||
+            typeof e.at!=='string'||!Number.isFinite(Date.parse(e.at)))
+            throw Error('Invalid historical human question-quality review in backup.');
+        }
         H.validate(input); // Optional, append-only v4.1 annotations; schema v5 stays compatible.
         P.validate(input); // Optional v4.2 independent assessments/adjudication; no migration.
         R.validate(input); // Optional v4.3 request provenance and completed file history.
@@ -793,9 +803,12 @@
     const r=db.requirements.find(r=>r.id===reqId);if(!r)throw Error('Requirement not found.');
     question=cleanString(question,500);answer=cleanString(answer,4000);
     if(!question||!answer)throw Error('Question and reference answer cannot be empty.');
+    // Editing an unverified generated draft is NOT a substitute for reviewing
+    // the source and answer. Keep it out of study until explicit confirmation.
+    const keepPending=r.origin==='rule_draft'&&(r.verificationStatus!=='verified'||r.sourceRevisionPending);
     db.events.push({type:'requirement.revised',entityId:r.id,at:new Date().toISOString(),priorVersion:r.version,old:{question:r.question,answer:r.answer,kind:r.kind}});
     const previousObjective=r.objective||r.question;
-    r.question=question;r.answer=answer;r.kind=['recall','explain','apply'].includes(kind)?kind:r.kind;r.objective=cleanString(objective===undefined?previousObjective:objective,300)||question;r.version++;r.reviewedAt=new Date().toISOString();r.updatedAt=new Date().toISOString();r.verifiedAt=r.updatedAt;r.verificationStatus='verified';r.confidence='user_verified';r.possibleDuplicateOf=null;r.possibleConflictWith=null;r.sourceRevisionPending=false;
+    r.question=question;r.answer=answer;r.kind=['recall','explain','apply'].includes(kind)?kind:r.kind;r.objective=cleanString(objective===undefined?previousObjective:objective,300)||question;r.version++;r.updatedAt=new Date().toISOString();r.reviewedAt=keepPending?null:r.updatedAt;r.verifiedAt=keepPending?null:r.updatedAt;r.verificationStatus=keepPending?'draft':'verified';r.confidence=keepPending?'review':'user_verified';r.possibleDuplicateOf=null;r.possibleConflictWith=null;r.sourceRevisionPending=false;
     db.requirementVersions.push({requirementId:r.id,version:r.version,objective:r.objective,question,answer,kind:r.kind,createdAt:r.updatedAt});
     const primary=getActivities(db,r.id).find(a=>a.isPrimary);
     if(primary){primary.question=question;primary.answer=answer;primary.kind=r.kind;if(r.kind!=='recall')delete primary.exactAnswerKey;primary.version++;primary.updatedAt=r.updatedAt;}
@@ -815,6 +828,35 @@
     r.verifiedAt=now;r.reviewedAt=now;r.verificationStatus='verified';r.confidence='user_verified';r.updatedAt=now;r.sourceRevisionPending=false;
     db.events.push({type:'requirement.verified',entityId:r.id,version:r.version,at:now});
     return r;
+  }
+  function questionQualityAudit(db,reqId){
+    const req=db.requirements.find(r=>r.id===reqId&&r.active!==false);
+    if(!req)throw Error('Question not found.');
+    const source=(db.sources||[]).find(s=>s.id===req.sourceId)||null;
+    const target=getTarget(db,req.id);
+    const criteria=target?getCriteria(db,target.id,{includePending:true}):[];
+    const result=I.questionQualityAudit(req,source,criteria);
+    const latest=(db.events||[]).slice().reverse().find(e=>e.type==='question_quality.reviewed'&&e.entityId===req.id);
+    const currentReview=!!(latest&&!req.sourceRevisionPending&&latest.requirementVersion===req.version&&latest.sourceVersion===(source?.version??null));
+    return {...result,requirementId:req.id,requirementVersion:req.version,sourceVersion:source?.version??null,currentReview};
+  }
+  function confirmQuestionQuality(db,reqId,checks){
+    const audit=questionQualityAudit(db,reqId);
+    if(!Array.isArray(checks)||checks.length!==audit.checklist.length||checks.some(x=>x!==true))
+      throw Error('Review and confirm all four question and answer checks.');
+    if(!audit.sourceCurrent)throw Error('The linked source excerpt is missing or changed. Review and repair the source link before approving.');
+    const req=db.requirements.find(r=>r.id===reqId),wasVerified=req.verificationStatus==='verified'&&!req.sourceRevisionPending;
+    if(!wasVerified)verifyRequirement(db,reqId);
+    const currentSource=db.sources.find(s=>s.id===req.sourceId);
+    if(currentSource&&req.sourceQuote&&currentSource.content.includes(req.sourceQuote)){
+      req.sourceVersion=currentSource.version;
+      req.sourceCurrentVersion=currentSource.version;
+    }
+    const at=new Date().toISOString();
+    db.events.push({type:'question_quality.reviewed',entityId:req.id,requirementVersion:req.version,
+      sourceVersion:audit.sourceVersion,checklistVersion:1,confirmed:true,at});
+    // A quality review never itself modifies a memory interval or study attempt.
+    return {requirement:req,verifiedNow:!wasVerified,at};
   }
   function addAssessment(db,{courseId,title,date,scope='all',requirementIds=[]}){
     if(!db.courses.some(c=>c.id===courseId))throw Error('Choose an existing course.');
@@ -1405,5 +1447,5 @@
   }
   function validateImport(x){return migrateDb(x);}
 
-  return {DAY,id,today,addDays,daysUntil,initialDb,migrateDb,validateImport,getTarget,getTargets,getMemory,getActivities,getCriteria,addCriterion,proposeCriteria,rubricQualityReview,addRubricEvidenceDraft,reviseCriterion,setCriterionAlternatives,rubricSyllabusAlignment,setCriterionSyllabusGoals,verifyCriterion,archiveCriterion,criterionStatus,rubricProgress,chooseActivity,addRetrievalTarget,verifyRetrievalTarget,addActivityVariant,deactivateActivity,reviseSource,addCourse,addSyllabusObjectives,updateSyllabusObjective,setSyllabusLink,setSyllabusMaterialsReady,setSyllabusLearningGuide,guidedLearningInfo,archiveSyllabusObjective,syllabusCoverage,draftRequirements,addSource,addImportedDocument,addRequirement,editRequirement,verifyRequirement,integrity:I.integrity,questionCoverage:I.questionCoverage,questionWarnings:I.questionWarnings,learningObjectiveMap,variationStudio,questionStudio,adoptQuestionProposal,coverageReviewQueue,addAssessment,linkedAssessments,estimatedSeconds,durationEstimate,evidenceType,inputModeFor,evidenceSummary,delayedRetrievalAudit,schedulingPolicyAudit,eligibleCandidates,planActivities,buildReviewAgenda,forecastSchedule,setExactAnswerKey,exactKeyReady,previewLiteralCheck,literalDelayedAudit,recordAttempt,latestCorrectiveFeedback,assessmentCoverage,stats,demoDb};
+  return {DAY,id,today,addDays,daysUntil,initialDb,migrateDb,validateImport,getTarget,getTargets,getMemory,getActivities,getCriteria,addCriterion,proposeCriteria,rubricQualityReview,addRubricEvidenceDraft,reviseCriterion,setCriterionAlternatives,rubricSyllabusAlignment,setCriterionSyllabusGoals,verifyCriterion,archiveCriterion,criterionStatus,rubricProgress,chooseActivity,addRetrievalTarget,verifyRetrievalTarget,addActivityVariant,deactivateActivity,reviseSource,addCourse,addSyllabusObjectives,updateSyllabusObjective,setSyllabusLink,setSyllabusMaterialsReady,setSyllabusLearningGuide,guidedLearningInfo,archiveSyllabusObjective,syllabusCoverage,draftRequirements,addSource,addImportedDocument,addRequirement,editRequirement,verifyRequirement,questionQualityAudit,confirmQuestionQuality,integrity:I.integrity,questionCoverage:I.questionCoverage,questionWarnings:I.questionWarnings,learningObjectiveMap,variationStudio,questionStudio,adoptQuestionProposal,coverageReviewQueue,addAssessment,linkedAssessments,estimatedSeconds,durationEstimate,evidenceType,inputModeFor,evidenceSummary,delayedRetrievalAudit,schedulingPolicyAudit,eligibleCandidates,planActivities,buildReviewAgenda,forecastSchedule,setExactAnswerKey,exactKeyReady,previewLiteralCheck,literalDelayedAudit,recordAttempt,latestCorrectiveFeedback,assessmentCoverage,stats,demoDb};
 });

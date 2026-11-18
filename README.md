@@ -1,8 +1,20 @@
-# Active Recall Web — Free Edition v4.7
+# Active Recall Web — Free Edition v4.8
 
 A local-first active-recall system with a **single multi-course automatic review agenda**, source-linked learning objectives, reviewed question drafts, and sessions that adjust to time budgets and assessments.
 
 **Public website:** https://gmoon-code.github.io/active-recall-web/
+
+## Blueprint 4.8 — Question and answer quality, before schedule changes
+
+The **Knowledge → Q&A quality** action now opens a source-aware, **human-confirmed** inspection of any active question and its reference answer. It shows the saved source excerpt, question and answer, and non-semantic structural warnings for overly generic wording, missing standalone context, outdated source links, suspiciously long reference answers, omitted literal qualifier words in a paraphrase, and absent active explanation checkpoints. No automatic scientific correctness or answer grade is inferred.
+
+When verifying a generated draft from Knowledge, the owner now explicitly confirms **four separate checks**: standalone and coherent question, reference accuracy/support, retention of conditions/exceptions/units and causal links, and answer sufficiency/valid alternatives. **Editing an unverified generated question keeps it a draft** until those checks are acknowledged. Each affirmative review is recorded against the **current question version and source version**. A newer version is not silently presented as previously checked; an excerpt missing from the currently linked source blocks the approval workflow until repaired. This is a learner attestation, not independent scientific validation.
+
+Offline Question Studio also recognizes explicitly stated **necessary conditions** (`only if` / `only when`) and **exceptions** (`unless`) before broad effect patterns, preserving the original exact quote. It does not invent a causal explanation or treat a necessary condition as sufficient. Every suggestion remains an unverified draft until reviewed.
+
+**No scheduling policy or due date has changed.** v4.8 preserves schema v5, all prior study attempts, human reviews, reviewer exercises, memory states, backups, no-account operation and 100%-free GitHub Pages hosting. A human Q&A review does not count as a study attempt or prove retention. Quality flags are prompts for inspection, not a validation score. Next: evidence-based, read-only spacing-policy and calendar comparison before any active-policy change.
+
+[Read Blueprint 4.8 and its verification/limitations](docs/BLUEPRINT_4_8_FREE.md) · [Research baseline for question generation and scheduling](docs/RESEARCH_2026_QUESTION_DESIGN_AND_AUTO_SCHEDULING.md)
 
 
 ## Blueprint 4.7 — Small, voluntary reviewer-usability pilot
