@@ -73,6 +73,9 @@ async function main(){
     state=await page.evaluate(async()=>{const {db}=await window.ActiveRecallStorage.load();return {memory:db.memory,attempts:db.attempts.length};});
     assert.equal(Object.keys(state.memory).length,0,'Substantive edits must reset target interval.');
     assert.equal(state.attempts,1,'Earlier study evidence must survive.');
+    const originalSourceId=await page.evaluate(async()=>{const {db}=await window.ActiveRecallStorage.load();return db.sources[0].id;});
+    await page.locator('#qa-filter').selectOption('source:'+originalSourceId);
+    assert.equal(await page.locator('#qa-source').inputValue(),originalSourceId,'Selecting a lecture should also select its writing context.');
     await page.locator('.qa-bulk summary').click();
     await page.locator('#qa-bulk-text').fill('Q: Where does the citric acid cycle occur?\nA: In the mitochondrial matrix of eukaryotic cells.\n\nQ: What does NADH carry?\nA: High-energy electrons.');
     await page.locator('[data-form=quick-bulk-questions] [type=submit]').click();
