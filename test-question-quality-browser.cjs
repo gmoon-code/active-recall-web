@@ -36,7 +36,7 @@ async function main(){
       const due=db.memory[target.id].dueAt;
       await S.save(db,null);await S.ready();return {reqId:req.id,due};
     });
-    await page.reload();await page.locator('[data-page=courses]').click();
+    await page.reload();await page.locator('.navbtn[data-page=courses]').click();
     await page.locator('[data-action=verify-requirement][data-id="'+seed.reqId+'"]').click();
     const review=page.locator('[aria-label="Question and answer quality review"]');
     await review.waitFor();
