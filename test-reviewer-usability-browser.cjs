@@ -88,9 +88,21 @@ async function main(){
    const A=await volunteer(0,{rateOne:true,skipSurvey:false});
    const upload=(bytes,name)=>({name,mimeType:'application/json',buffer:bytes});
    await owner.locator('#reviewer-usability-import').setInputFiles(upload(B.original,'volunteer-B.json'));
-   await owner.locator('#reviewer-usability').getByText('Returned files').waitFor();
+   await owner.waitForFunction(async()=>{
+     try{
+       const saved=await window.ActiveRecallStorage.load();
+       return window.ActiveRecallReviewerUsability.audit(saved.db).received===1;
+     }catch{return false;}
+   },null,{timeout:10000});
    await owner.locator('#reviewer-usability-import').setInputFiles(upload(A.original,'volunteer-A.json'));
-   await owner.waitForTimeout(220);
+   // Import and IndexedDB persistence are asynchronous. Wait for the actual
+   // saved second response, not a fixed wall-clock delay (which flakes on CI).
+   await owner.waitForFunction(async()=>{
+     try{
+       const saved=await window.ActiveRecallStorage.load();
+       return window.ActiveRecallReviewerUsability.audit(saved.db).received===2;
+     }catch{return false;}
+   },null,{timeout:10000});
    const info=await owner.evaluate(async()=>{
      const Store=window.ActiveRecallStorage,U=window.ActiveRecallReviewerUsability,
        C=window.ActiveRecallCore,db=C.validateImport((await Store.load()).db),report=U.audit(db);
