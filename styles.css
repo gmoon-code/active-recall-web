@@ -246,4 +246,13 @@
 .outside-study-form{margin:18px 0;padding:16px;border:1px solid #d3e3d8;border-radius:12px;background:#f8fbf9}
 .outside-log{display:flex;align-items:center;justify-content:space-between;gap:8px;border-top:1px solid var(--line);padding-top:7px;font-size:12px;overflow-wrap:anywhere}
 .outside-log .btn{flex-shrink:0}
+.schedule-comparison{margin-top:18px;padding:16px;border:1px solid #b9d8ca;border-radius:12px;background:#f8fcfa;display:grid;gap:14px}
+.schedule-comparison-grid{display:grid;grid-template-columns:minmax(130px,2fr) repeat(2,minmax(65px,1fr));gap:0;align-items:stretch;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.schedule-comparison-grid>*{padding:9px 10px;border-bottom:1px solid var(--line);font-size:12px;min-width:0;overflow-wrap:anywhere;background:white}
+.schedule-comparison-grid>:nth-child(3n+2),.schedule-comparison-grid>:nth-child(3n+3){text-align:center}
+.schedule-comparison-grid>.schedule-compare-head{font-weight:700;background:#eaf4ee}
+.schedule-days{display:grid;gap:5px;margin-top:9px}
+.schedule-days>div{display:grid;grid-template-columns:1.3fr repeat(3,minmax(0,1fr));gap:8px;padding:9px;border-bottom:1px solid var(--line);font-size:12px}
+.schedule-exams{font-size:12px;display:grid;gap:7px}
+@media(max-width:700px){.schedule-comparison{padding:10px}.schedule-days>div{grid-template-columns:1fr 1fr}.schedule-comparison-grid>*{padding:7px 5px;font-size:11px}}
 @media(max-width:700px){.rhythm-numbers{grid-template-columns:1fr!important}.rhythm-history{grid-template-columns:1fr}}

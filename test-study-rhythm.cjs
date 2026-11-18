@@ -158,3 +158,38 @@ test('outside-study log validates dates, sizes and backup tampering',()=>{
   const corrupt=JSON.parse(JSON.stringify(db));corrupt.outsideStudyLogs[0].minutes=-1;
   assert.throws(()=>C.validateImport(corrupt),/outside-study entry/);
 });
+
+test('what-if comparison expands known study opportunities without changing any database data',()=>{
+  const {db}=fixture(35),before=JSON.stringify(db);
+  const original=Rh.preferences(db);
+  const proposal={...original,weekdayMinutes:30,weekendMinutes:30};
+  const result=Rh.compareSchedules(db,C,{now:morning,proposal});
+  assert.equal(result.changed,true);
+  assert.equal(result.baseline.availableMinutes,25);
+  assert.equal(result.alternative.availableMinutes,210);
+  assert.ok(result.alternative.firstPasses>=result.baseline.firstPasses);
+  assert.ok(result.alternative.unplacedKnown<=result.baseline.unplacedKnown);
+  assert.equal(result.movement.added-result.movement.removed,result.alternative.firstPasses-result.baseline.firstPasses);
+  assert.equal(result.days.length,7);
+  assert.equal(JSON.stringify(db),before,'No simulated outcome or saved availability changes');
+});
+
+test('a simulation of unavailable days can reduce capacity and is not treated as missed work',()=>{
+  const {db}=fixture(8),proposal={...Rh.preferences(db),missedDates:['2026-11-18']};
+  const result=Rh.compareSchedules(db,C,{now:morning,proposal});
+  assert.equal(result.days[0].beforeCapacity,5);
+  assert.equal(result.days[0].afterCapacity,0);
+  assert.equal(result.alternative.availableMinutes,result.baseline.availableMinutes-5);
+  assert.deepEqual(db.agendaPreferences.missedDates,[]);
+});
+
+test('what-if scenarios require valid availability and an unchanged horizon',()=>{
+  const {db}=fixture(1);
+  assert.throws(()=>Rh.compareSchedules(db,C,{now:morning,proposal:{...Rh.preferences(db),days:14}}),/same planning horizon/);
+  assert.throws(()=>Rh.compareSchedules(db,C,{now:morning,proposal:{...Rh.preferences(db),weekdayMinutes:-1}}),/Available daily time/);
+  assert.throws(()=>Rh.compareSchedules(db,C,{now:morning,proposal:{...Rh.preferences(db),missedDates:['2026-02-30']}}),/Invalid unavailable-day dates/);
+  const same=Rh.compareSchedules(db,C,{now:morning,proposal:Rh.preferences(db)});
+  assert.equal(same.changed,false);
+  assert.equal(same.movement.added,0);
+  assert.equal(same.movement.removed,0);
+});

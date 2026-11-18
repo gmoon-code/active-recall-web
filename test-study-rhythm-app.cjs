@@ -36,7 +36,7 @@ test('Overview, Calendar and Progress render schedule-fit and study-history cont
   const context={window,document,console,setTimeout,clearTimeout,setInterval:()=>{},navigator:{},Date};
   vm.runInNewContext(fs.readFileSync('app.js','utf8'),context,{filename:'app.js'});
   await new Promise(resolve=>setImmediate(resolve));
-  assert.match(app.innerHTML,/Blueprint 4\.15/);
+  assert.match(app.innerHTML,/Blueprint 4\.16/);
   assert.ok(inserted.some(html=>html.includes('Study Rhythm &amp; Schedule Fit')),
     'Overview displays a schedule-fit panel');
   const navigate=page=>listeners.click({target:{closest(){return {dataset:{action:'navigate',page}};}}});
@@ -44,6 +44,7 @@ test('Overview, Calendar and Progress render schedule-fit and study-history cont
   assert.match(app.innerHTML,/Known due \+ planned preparation/);
   assert.match(app.innerHTML,/Due work left unassigned/);
   assert.match(app.innerHTML,/Next seven days/);
+  assert.match(app.innerHTML,/What if I changed my study time/);
   navigate('insights');
   assert.ok(inserted.some(html=>html.includes('Your recorded study rhythm · past seven days')),
     'Progress shows dated snapshots');
