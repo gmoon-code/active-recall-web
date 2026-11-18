@@ -119,6 +119,8 @@
             throw Error('Invalid learner-approved literal answer key in backup.');
         }
         for(const a of input.attempts){
+          if(a.prospectiveForecast!==undefined&&!validProspectiveForecast(a.prospectiveForecast,a))
+            throw Error('Invalid prospective forecast receipt in backup.');
           if(a.literalCheck!==undefined&&a.literalCheck!==null){
             const k=a.literalCheck;
             if(!k||k.version!==1||k.method!=='literal-match-v1'||!Number.isSafeInteger(k.keyVersion)||k.keyVersion<1||
@@ -914,7 +916,7 @@
         }
         const current=removedIds.has(s.currentReqId)||removedIds.has(s.currentTargetId)||removedIds.has(s.currentActivityId);
         return {...s,completedIds:keep,courseCounts:counts,...(current?{
-          currentReqId:null,currentTargetId:null,currentActivityId:null,draftAnswer:'',correctionDraft:'',criterionDraft:{},showHint:false,showReference:false,assistedForCurrent:false
+          currentReqId:null,currentTargetId:null,currentActivityId:null,preAnswerForecast:null,draftAnswer:'',correctionDraft:'',criterionDraft:{},showHint:false,showReference:false,assistedForCurrent:false
         }:{})};
       }),
       // Do not leave deleted question IDs or misleading aggregate estimates in
@@ -1163,6 +1165,63 @@
       medianActiveDays:median(rows.map(d=>d.activeIntervalDays)),
       medianShadowDays:median(rows.map(d=>d.shadowIntervalDays)),
       warning:'Shadow dates are hypothetical proposals under a deliberately conservative rule, NOT observations or predicted successes. The active schedule alone determined actual practice opportunities. Differences in suggested intervals cannot establish which policy improves learning, retention, or efficiency. All outcomes remain learner self-reports.'};
+  }
+  // Two deliberately *unfitted* shape hypotheses anchored to an arbitrary
+  // 0.90 at the existing due interval. Neither is FSRS, and 0.90 is NOT an
+  // estimate of this learner's actual due-day retention. No model training.
+  const FORECAST_METHOD='interval-shapes-v1';
+  function forecastShapes(elapsedDays,intervalDays){
+    const x=elapsedDays/intervalDays,round=x=>Math.round(x*1000000)/1000000;
+    return {exponential:round(Math.pow(0.9,x)),hyperbolic:round(1/(1+x/9))};
+  }
+  // Called once when an existing target is selected, BEFORE the learner's
+  // response and reference reveal. Return null for new or revised targets:
+  // a due date alone must not be fabricated into a previous retrieval.
+  function previewProspectiveForecast(db,{requirementId,targetId,activityId,now=new Date()}={}){
+    if(!(now instanceof Date)||!Number.isFinite(now.getTime()))throw Error('Invalid forecast time.');
+    const req=db.requirements.find(r=>r.id===requirementId),
+      target=db.retrievalTargets.find(t=>t.id===targetId&&t.requirementId===requirementId),
+      activity=db.activities.find(a=>a.id===activityId&&a.retrievalTargetId===targetId&&a.requirementId===requirementId),
+      memory=db.memory[targetId];
+    if(!req||!target||!activity||!requirementEligible(req)||target.needsReview||activity.active===false||
+       !memory||memory.policyId!==ACTIVE_SCHEDULING_POLICY||
+       !Number.isFinite(memory.intervalDays)||memory.intervalDays<=0||memory.intervalDays>100000||
+       !Number.isFinite(Date.parse(memory.lastReviewedAt||''))||!Number.isFinite(Date.parse(memory.dueAt||'')))return null;
+    let previous;
+    for(let i=db.attempts.length-1;i>=0;i--){if(db.attempts[i]?.retrievalTargetId===targetId){previous=db.attempts[i];break;}}
+    if(!previous||previous.requirementId!==requirementId||previous.requirementVersion!==req.version||
+       previous.retrievalTargetVersion!==target.version||previous.createdAt!==memory.lastReviewedAt)return null;
+    const days=(now.getTime()-Date.parse(memory.lastReviewedAt))/DAY;
+    if(days<0||days>3650)return null;
+    return {version:1,method:FORECAST_METHOD,capturedAt:now.toISOString(),
+      requirementId,requirementVersion:req.version,targetId,targetVersion:target.version,
+      activityId,activityVersion:activity.version,priorReviewedAt:memory.lastReviewedAt,
+      priorDueAt:memory.dueAt,priorIntervalDays:memory.intervalDays,
+      elapsedDays:Math.round(days*1000000)/1000000,
+      ...forecastShapes(days,memory.intervalDays)};
+  }
+  // Recompute from frozen metadata; never replace an older prospective guess
+  // with today's parameters or a model selected after the answer was seen.
+  function validProspectiveForecast(f,a){
+    if(!f||f.version!==1||f.method!==FORECAST_METHOD||
+       !Number.isSafeInteger(f.requirementVersion)||f.requirementVersion<1||
+       !Number.isSafeInteger(f.targetVersion)||f.targetVersion<1||
+       !Number.isSafeInteger(f.activityVersion)||f.activityVersion<1||
+       !Number.isFinite(f.priorIntervalDays)||f.priorIntervalDays<=0||f.priorIntervalDays>100000||
+       typeof f.capturedAt!=='string'||typeof f.priorReviewedAt!=='string'||typeof f.priorDueAt!=='string')return false;
+    const at=Date.parse(f.capturedAt),last=Date.parse(f.priorReviewedAt),due=Date.parse(f.priorDueAt);
+    if(!Number.isFinite(at)||!Number.isFinite(last)||!Number.isFinite(due)||at<last||
+       at-last>3650*DAY||!Number.isFinite(f.elapsedDays)||f.elapsedDays<0||
+       f.elapsedDays!==Math.round((at-last)/DAY*1000000)/1000000)return false;
+    const model=forecastShapes((at-last)/DAY,f.priorIntervalDays);
+    if(f.exponential!==model.exponential||f.hyperbolic!==model.hyperbolic)return false;
+    if(a&&(f.requirementId!==a.requirementId||f.requirementVersion!==a.requirementVersion||
+       f.targetId!==a.retrievalTargetId||f.targetVersion!==a.retrievalTargetVersion||
+       f.activityId!==a.activityId||f.activityVersion!==a.activityVersion||
+       f.priorDueAt!==a.priorDueAt||f.priorIntervalDays!==a.priorIntervalDays||
+       !Number.isFinite(Date.parse(a.createdAt))||at>Date.parse(a.createdAt)||
+       Date.parse(a.createdAt)-at>6*3600000))return false;
+    return true;
   }
   function requirementEligible(r){return r.active&&!r.sourceRevisionPending&&(r.origin!=='rule_draft'||r.verificationStatus==='verified')&&!((r.possibleConflictWith||r.possibleDuplicateOf)&&r.origin==='rule_draft'&&!r.verifiedAt);}
   function schedulingReasons(item){
@@ -1531,7 +1590,8 @@
     const kinds={recall:0,explain:0,apply:0,other:0};
     const eligibleTargets=new Set(),prior=new Map();
     const literal=[],humanSelf=[],humanOther=[];
-    let comparable=0,reportedPositive=0,reportedGap=0,withPriorDueDate=0;
+    let comparable=0,reportedPositive=0,reportedGap=0,withPriorDueDate=0,forecastEligible=0;
+    const forecastsCaptured=source.filter(a=>a?.prospectiveForecast&&validProspectiveForecast(a.prospectiveForecast,a)).length;
     for(let i=0;i<ordered.length;i++){
       const {a,t}=ordered[i],key=identity(a);
       if(!Number.isFinite(t)||!key){excluded.invalidTimestampOrVersion++;continue;}
@@ -1545,6 +1605,8 @@
       }
       if(a.requirementVerified===false){excluded.unverifiedRequirement++;continue;}
       comparable++;eligibleTargets.add(a.retrievalTargetId);
+      const forecasted=!!a.prospectiveForecast&&validProspectiveForecast(a.prospectiveForecast,a);
+      if(forecasted)forecastEligible++;
       const kind=['recall','explain','apply'].includes(a.activityKind)?a.activityKind:'other';
       kinds[kind]++;
       const effective=a.scheduleRating||a.rating;
@@ -1555,7 +1617,7 @@
       if(kind==='recall'&&a.literalCheck?.version===1&&
          a.literalCheck.method==='literal-match-v1'&&typeof a.literalCheck.matched==='boolean'&&
          Array.isArray(a.literalCheck.acceptedSnapshot)&&a.literalCheck.acceptedSnapshot.length){
-        literal.push({t,target:a.retrievalTargetId});continue;
+        literal.push({t,target:a.retrievalTargetId,forecasted});continue;
       }
       // Manual rubric judgments are human interpretations, not a verified exam
       // mark. Neither self-review nor claimed other-person review is blinded.
@@ -1575,7 +1637,7 @@
           if(review.finding==='inconclusive'){
             excluded.inconclusiveHumanReview++;continue;
           }
-          (review.reviewerRole==='self'?humanSelf:humanOther).push({t,target:a.retrievalTargetId});
+          (review.reviewerRole==='self'?humanSelf:humanOther).push({t,target:a.retrievalTargetId,forecasted});
           continue;
         }
       }
@@ -1587,6 +1649,7 @@
       // overlap can remain, so independence is not claimed.
       const cut=Math.floor(byTime.length*.8),late=byTime.slice(cut);
       return {attempts:rows.length,distinctTargets:new Set(rows.map(r=>r.target)).size,
+        withProspectiveForecast:rows.filter(r=>r.forecasted).length,
         early:cut,later:late.length,laterDistinctTargets:new Set(late.map(r=>r.target)).size};
     };
     const groups={literal:split(literal),humanSelf:split(humanSelf),humanOther:split(humanOther)};
@@ -1594,10 +1657,11 @@
       olderAttemptsNotAudited:raw.length-source.length,comparableDelayedWritten:comparable,
       comparableDistinctTargets:eligibleTargets.size,reportedPositive,reportedGap,
       withPriorDueDate,kinds,groups,excluded,
-      prospectiveProbabilityForecasts:0,modelComparisonAvailable:false,
-      warning:'Only observed learner self-ratings, strict literal agreement, and unblinded manual criterion judgments are available. Their meanings differ, so they must not be pooled as verified recall. The existing due-date and shadow interval snapshots are NOT predicted recall probabilities. A future model would need prospective, versioned probability forecasts evaluated against time-separated outcomes with suitable safeguards for selection bias, question changes and human-review quality. This read-only audit does not train or compare FSRS, prove a superior policy, or modify scheduling.'};
+      prospectiveProbabilityForecasts:forecastsCaptured,forecastEligibleDelayedWritten:forecastEligible,
+      modelComparisonAvailable:false,
+      warning:'Only observed learner self-ratings, strict literal agreement, and unblinded manual criterion judgments are available. Their meanings differ, so they must not be pooled as verified recall. Due-date and shadow interval snapshots are NOT predictions. Prospective numeric forecasts, when present, are two UNFITTED interval-anchored mathematical hypotheses, not FSRS or calibrated probabilities; their chosen 90% due-day anchor is arbitrary. A future evaluation must reserve later records, assess label quality and selection bias, and avoid retrofitting older outcomes. This audit does not train or compare FSRS, prove a superior policy, or modify scheduling.'};
   }
-  function recordAttempt(db,{requirementId,targetId=null,activityId=null,response='',rating,assisted=false,sessionId=null,questionUsed=null,inputMode=null,durationSeconds=null,criterionChecks=[],correctionNote='',practiceStage=null,now=new Date()}){
+  function recordAttempt(db,{requirementId,targetId=null,activityId=null,response='',rating,assisted=false,sessionId=null,questionUsed=null,inputMode=null,durationSeconds=null,criterionChecks=[],correctionNote='',practiceStage=null,prospectiveForecast=null,now=new Date()}){
     const r=db.requirements.find(x=>x.id===requirementId);if(!r)throw Error('Requirement does not exist.');
     if(!['again','hard','good','easy'].includes(rating))throw Error('Invalid rating.');
     const activity=activityId?getActivities(db,r.id).find(a=>a.id===activityId):chooseActivity(db,r.id,targetId);
@@ -1634,8 +1698,18 @@
     const recordedResponse=cleanString(response,20000);
     const inferredMode=inputMode||(recordedResponse?'written':'mental');
     const literalCheck=previewLiteralCheck(db,activity.id,recordedResponse,{assisted,inputMode:inferredMode});
+    if(prospectiveForecast!==null){
+      const mock={requirementId:r.id,requirementVersion:r.version,retrievalTargetId:target.id,
+        retrievalTargetVersion:target.version,activityId:activity.id,activityVersion:activity.version,
+        priorDueAt:prev?.dueAt||null,priorIntervalDays:prev?.intervalDays??null,createdAt:now.toISOString()};
+      const expected=previewProspectiveForecast(db,{requirementId:r.id,targetId:target.id,
+        activityId:activity.id,now:new Date(prospectiveForecast?.capturedAt)});
+      if(!validProspectiveForecast(prospectiveForecast,mock)||!expected||
+         JSON.stringify(prospectiveForecast)!==JSON.stringify(expected))
+        throw Error('The pre-answer forecast is stale or inconsistent; record the attempt without it.');
+    }
     const rubricAtAttempt=(activity.kind==='explain'||activity.kind==='apply')?criteria.map(c=>({criterionId:c.id,version:c.version,textSnapshot:c.text})):undefined;
-    const attempt={id:id('attempt'),rubricAtAttempt,priorDueAt:prev?.dueAt||null,priorIntervalDays:prev?.intervalDays??null,schedulingDecision,literalCheck,inputMode:inferredMode,activityKind:activity.kind,durationSeconds:validDuration(durationSeconds)?Math.round(durationSeconds):null,evidenceVersion:1,requirementId:r.id,requirementVersion:r.version,retrievalTargetId:target.id,retrievalTargetVersion:target.version,activityId:activity.id,activityVersion:activity.version,questionSnapshot:cleanString(questionUsed||activity.question,500),referenceSnapshot:activity.answer,focusLabelSnapshot:target.label,requirementVerified:r.verificationStatus==='verified',courseId:r.courseId,sessionId,response:recordedResponse,rating,scheduleRating,criterionChecks:checks,criterionCounts:counts,correctionNote:correctionNote.trim(),assisted:!!assisted,gradedBy:'learner',practiceStage:practiceStage||'regular',createdAt:now.toISOString()};
+    const attempt={id:id('attempt'),rubricAtAttempt,priorDueAt:prev?.dueAt||null,priorIntervalDays:prev?.intervalDays??null,schedulingDecision,literalCheck,...(prospectiveForecast?{prospectiveForecast}:{}),inputMode:inferredMode,activityKind:activity.kind,durationSeconds:validDuration(durationSeconds)?Math.round(durationSeconds):null,evidenceVersion:1,requirementId:r.id,requirementVersion:r.version,retrievalTargetId:target.id,retrievalTargetVersion:target.version,activityId:activity.id,activityVersion:activity.version,questionSnapshot:cleanString(questionUsed||activity.question,500),referenceSnapshot:activity.answer,focusLabelSnapshot:target.label,requirementVerified:r.verificationStatus==='verified',courseId:r.courseId,sessionId,response:recordedResponse,rating,scheduleRating,criterionChecks:checks,criterionCounts:counts,correctionNote:correctionNote.trim(),assisted:!!assisted,gradedBy:'learner',practiceStage:practiceStage||'regular',createdAt:now.toISOString()};
     db.attempts.push(attempt);observeDuration(db,activity.kind,attempt.durationSeconds);
     db.memory[target.id]={dueAt,intervalDays:adjustedInterval,policyId:ACTIVE_SCHEDULING_POLICY,lastRating:scheduleRating,lastReviewedAt:now.toISOString(),reviewCount:(prev?.reviewCount||0)+1};
     db.events.push({type:'attempt.recorded',entityId:attempt.id,requirementId:r.id,targetId:target.id,at:attempt.createdAt});
@@ -1725,5 +1799,5 @@
   }
   function validateImport(x){return migrateDb(x);}
 
-  return {DAY,id,today,addDays,daysUntil,initialDb,migrateDb,validateImport,getTarget,getTargets,getMemory,getActivities,getCriteria,addCriterion,proposeCriteria,rubricQualityReview,addRubricEvidenceDraft,reviseCriterion,setCriterionAlternatives,rubricSyllabusAlignment,setCriterionSyllabusGoals,verifyCriterion,archiveCriterion,criterionStatus,rubricProgress,chooseActivity,addRetrievalTarget,verifyRetrievalTarget,addActivityVariant,deactivateActivity,reviseSource,addCourse,addSyllabusObjectives,updateSyllabusObjective,archiveSyllabusObjective,setSyllabusLink,setSyllabusMaterialsReady,setSyllabusLearningGuide,guidedLearningInfo,syllabusCoverage,draftRequirements,addSource,addImportedDocument,addRequirement,previewManualQuestionImport,importManualQuestionList,addManualQuestionBatch,archiveRequirements,restoreRequirement,purgeArchivedRequirements,editRequirement,verifyRequirement,questionQualityAudit,confirmQuestionQuality,integrity:I.integrity,questionCoverage:I.questionCoverage,questionWarnings:I.questionWarnings,learningObjectiveMap,variationStudio,questionStudio,adoptQuestionProposal,coverageReviewQueue,addAssessment,linkedAssessments,estimatedSeconds,durationEstimate,evidenceType,inputModeFor,evidenceSummary,delayedRetrievalAudit,memoryModelReadinessAudit,schedulingPolicyAudit,eligibleCandidates,planActivities,inspectStudyPriorities,buildReviewAgenda,forecastSchedule,setExactAnswerKey,exactKeyReady,previewLiteralCheck,literalDelayedAudit,recordAttempt,latestCorrectiveFeedback,assessmentCoverage,stats,demoDb};
+  return {DAY,id,today,addDays,daysUntil,initialDb,migrateDb,validateImport,getTarget,getTargets,getMemory,getActivities,getCriteria,addCriterion,proposeCriteria,rubricQualityReview,addRubricEvidenceDraft,reviseCriterion,setCriterionAlternatives,rubricSyllabusAlignment,setCriterionSyllabusGoals,verifyCriterion,archiveCriterion,criterionStatus,rubricProgress,chooseActivity,addRetrievalTarget,verifyRetrievalTarget,addActivityVariant,deactivateActivity,reviseSource,addCourse,addSyllabusObjectives,updateSyllabusObjective,archiveSyllabusObjective,setSyllabusLink,setSyllabusMaterialsReady,setSyllabusLearningGuide,guidedLearningInfo,syllabusCoverage,draftRequirements,addSource,addImportedDocument,addRequirement,previewManualQuestionImport,importManualQuestionList,addManualQuestionBatch,archiveRequirements,restoreRequirement,purgeArchivedRequirements,editRequirement,verifyRequirement,questionQualityAudit,confirmQuestionQuality,integrity:I.integrity,questionCoverage:I.questionCoverage,questionWarnings:I.questionWarnings,learningObjectiveMap,variationStudio,questionStudio,adoptQuestionProposal,coverageReviewQueue,addAssessment,linkedAssessments,estimatedSeconds,durationEstimate,evidenceType,inputModeFor,evidenceSummary,delayedRetrievalAudit,memoryModelReadinessAudit,previewProspectiveForecast,schedulingPolicyAudit,eligibleCandidates,planActivities,inspectStudyPriorities,buildReviewAgenda,forecastSchedule,setExactAnswerKey,exactKeyReady,previewLiteralCheck,literalDelayedAudit,recordAttempt,latestCorrectiveFeedback,assessmentCoverage,stats,demoDb};
 });

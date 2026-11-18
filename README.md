@@ -1,4 +1,8 @@
-# Active Recall Web — Free Edition v4.18
+# Active Recall Web — Free Edition v4.19
+
+## Blueprint 4.19 — Freeze experimental forecasts before studying
+
+For previously practised questions, **Study Now** silently freezes two versioned, **unfitted mathematical recall-curve hypotheses** before showing the reference or receiving a rating. Only a completed attempt saves its receipt. **Progress → Memory-model evaluation readiness** now reports actual pre-answer receipts and how many can be paired with eligible delayed written and separately labelled literal/manual outcomes. The formulas share an arbitrary 90% due-interval anchor; this is **not actual measured retention, FSRS, a calibrated prediction, or a new scheduling rule**. No predictions affect question order, due dates, grading, schema-v5 backups, or the free local-only operation. [Read Blueprint 4.19](docs/BLUEPRINT_4_19_FREE.md).
 
 ## Blueprint 4.18 — Is the evidence ready for a memory-model comparison?
 

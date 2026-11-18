@@ -40,7 +40,7 @@ async function main(){
     assert.match(words,/Read-only · FSRS not enabled/);
     assert.match(words,/Strict short-answer agreement/);
     assert.match(words,/1 delayed records/);
-    assert.match(words,/Prospective recall forecasts/);
+    assert.match(words,/Prospective forecast receipts/);
     assert.match(words,/Comparison is not possible yet/);
     await panel.locator('summary').click();
     assert.match(await panel.innerText(),/earliest 80% \/ latest 20%/);

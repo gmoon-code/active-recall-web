@@ -23,7 +23,7 @@ test('empty and invalid-threshold readiness audits are deterministic and read on
   assert.equal(a.groups.humanSelf.later,0);
   assert.equal(a.prospectiveProbabilityForecasts,0);
   assert.equal(a.modelComparisonAvailable,false);
-  assert.match(a.warning,/NOT predicted recall probabilities/);
+  assert.match(a.warning,/NOT predictions/);
   assert.equal(JSON.stringify(db),before);
   assert.throws(()=>C.memoryModelReadinessAudit(db,{minDelayHours:0}),/between 1 and 720/);
   assert.throws(()=>C.memoryModelReadinessAudit(db,{minDelayHours:721}),/between 1 and 720/);
