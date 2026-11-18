@@ -189,6 +189,14 @@
       if(result.length>=cap)break;
       const s=cleanLead(part.text);if(s.length>840||s.length<18)continue;
       let m;
+      // Handle exceptions and necessary conditions before causal/effect
+      // templates, which could otherwise drop an important qualifier.
+      if((m=s.match(/^(.{8,180}?)\s+only\s+(?:if|when)\s+(.{8,180})$/i))){
+        emit(part,'necessary_condition',`What condition does the source state is necessary for ${concise(m[1])}?`,'explain',`Identify the stated necessary condition for ${concise(m[1]).slice(0,85)}`);continue;
+      }
+      if((m=s.match(/^(.{8,180}?)\s+unless\s+(.{8,180})$/i))){
+        emit(part,'exception',`What stated exception limits this claim: ${concise(m[1])}?`,'explain',`Identify the stated exception for ${concise(m[1]).slice(0,85)}`);continue;
+      }
       if((m=s.match(/^([^:;?]{3,75}):\s*(.{10,})$/))){
         emit(part,'term',`What does ${concise(m[1])} mean?`,'recall',`Define ${concise(m[1])}`);continue;
       }
@@ -285,6 +293,42 @@
       issues.push({code:'quote_mismatch',label:'Linked excerpt no longer matches the current source'});
     return issues;
   }
+  // v4.8: A deliberately NON-SEMANTIC quality audit. Never present these
+  // pattern warnings as scientific correctness judgments or numeric grades.
+  // A learner must decide whether a question and its answer are adequate.
+  function questionQualityAudit(requirement, source=null, criteria=[]) {
+    if(!requirement||requirement.active===false)return {issues:[],checklist:[],currentReview:false};
+    const q=String(requirement.question||'').trim(),answer=String(requirement.answer||'').trim();
+    const evidence=String(requirement.sourceQuote||'');
+    const issues=questionWarnings(requirement,source).slice();
+    const add=(code,label)=>{if(!issues.some(i=>i.code===code))issues.push({code,label});};
+    if(answer.length>500)add('long_reference','Long reference answer: identify the essential claims or checkpoints');
+    if(/^(?:what|why|how)\s+(?:is|are|do|does|did|can|will)\s+(?:it|this|that|they)\b/i.test(q))
+      add('ambiguous_pronoun','Question may lack the subject needed for standalone recall');
+    if(evidence&&source&&source.content.includes(evidence)){
+      // Literal markers indicate a human check is important; their absence
+      // in a paraphrase is not proof of incorrectness.
+      const qualifiers=['not','never','only','unless','except','without','provided that'];
+      const missing=qualifiers.filter(w=>new RegExp('\\b'+w.replace(' ','\\s+')+'\\b','i').test(evidence)
+        && !new RegExp('\\b'+w.replace(' ','\\s+')+'\\b','i').test(answer));
+      if(missing.length)add('qualifier_check',`Check whether the reference preserves the source's qualification (${missing.join(', ')})`);
+      if(evidence!==answer&&!evidence.includes(answer)&&!answer.includes(evidence))
+        add('paraphrase_check','Reference is not a verbatim source excerpt; verify the paraphrase and omissions');
+    }
+    if(requirement.kind==='explain'&&!criteria.some(c=>c.active!==false&&!c.needsReview))
+      add('rubric_check','Explanation has no active verified checkpoints; consider adding a mechanism or reasoning checklist');
+    if(source?.importAudit?.missingPages?.length)
+      add('pdf_gap','Imported PDF has pages without extracted text; check the original document for missing content');
+    const checklist=[
+      'The question is understandable without seeing the note and tests one coherent target.',
+      'I checked that the reference is scientifically accurate and supported by the source or my own verified material.',
+      'The reference preserves necessary conditions, exceptions, units and causal links.',
+      'The answer is sufficient for self-checking; I considered valid alternatives and explanation criteria.'
+    ];
+    return {issues,checklist,sourceLinked:!!requirement.sourceId,
+      sourceCurrent:!requirement.sourceId||!!(source&&(!evidence||source.content.includes(evidence))),
+      warning:'Structural text checks only. No automatic semantic grading, scientific validation, or complete-coverage claim.'};
+  }
   // Count traceable prose statements, never infer concept-level or exam coverage.
   // A source segment is represented only when a linked active requirement actually
   // includes its literal excerpt. Duplicates linked from prior sources do not
@@ -326,5 +370,5 @@
     const sourceDuplicates=(db.sources || []).reduce((n,s)=>n+(s.duplicateLinks?.length||0),0);
     return {drafts:drafts.length,needsReview:weak.length,possibleDuplicates:similar.length,possibleConflicts:conflicts.length,brokenLinks:missing.length,linkedRepeats:sourceDuplicates};
   }
-  return {words, norm, similarity, segments, parseStatement, analyzeNotes, suggestCriteria, questionProposals, alternativeQuestionProposals, questionWarnings, questionCoverage, integrity};
+  return {words, norm, similarity, segments, parseStatement, analyzeNotes, suggestCriteria, questionProposals, alternativeQuestionProposals, questionWarnings, questionQualityAudit, questionCoverage, integrity};
 });
