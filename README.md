@@ -1,4 +1,8 @@
-# Active Recall Web — Free Edition v4.25
+# Active Recall Web — Free Edition v4.26
+
+## Blueprint 4.26 — Preview question revisions before changing your schedule
+
+For questions on a correction hold, **Edit Q&A** now shows a live, read-only description of which fields you changed and what the chosen revision type would do to existing review intervals and alternative question variations. The compact My Q&A editor shows the same preview. Saving an actual change asks for confirmation; canceling leaves the draft open without altering learning records. A **wording-only** change retains previous intervals but is the learner's judgment of equivalent knowledge, not an automatic semantic check; a **substantive** change resets affected intervals and archives additional variants under the established rules. Switching between recall/explain/apply cannot be disguised as wording-only. Most importantly, clicking Save without making any actual changes now does **nothing**—it does not reset a due date, create a new version, or remove variations. Renaming only a lecture label also never resets memory. Existing correction holds still require deliberate release; no change to the scheduler's priority policy, schema-v5 backups, offline privacy, or zero-cost hosting. [Read Blueprint 4.26](docs/BLUEPRINT_4_26_FREE.md).
 
 ## Blueprint 4.25 — Compare flagged questions with saved lecture notes
 

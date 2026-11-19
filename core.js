@@ -954,10 +954,42 @@
     Object.assign(db,next);
     return {count:rows.length,attemptCount:attempts.length};
   }
-  function editRequirement(db,reqId,{question,answer,kind,objective,lectureTitle,changeType='substantive'}){
+  function previewRequirementRevision(db,reqId,{question,answer,kind,objective,lectureTitle,changeType='substantive'}={}){
     const r=db.requirements.find(r=>r.id===reqId);if(!r)throw Error('Requirement not found.');
     question=cleanString(question,500);answer=cleanString(answer,4000);
     if(!question||!answer)throw Error('Question and reference answer cannot be empty.');
+    if(!['wording','substantive'].includes(changeType))throw Error('Choose a supported revision type.');
+    const nextKind=kind===undefined?r.kind:kind;
+    if(!['recall','explain','apply'].includes(nextKind))throw Error('Choose a supported practice type.');
+    // An older caller may request 'wording' while also changing practice type.
+    // Treat that combination as substantive, never preserve a mismatched interval.
+    const forcedSubstantive=changeType==='wording'&&nextKind!==r.kind;
+    const previousObjective=r.objective||r.question;
+    const nextObjective=cleanString(objective===undefined?previousObjective:objective,300)||question;
+    const nextLecture=r.sourceId?(r.lectureTitle||''):
+      lectureTitle===undefined?(r.lectureTitle||''):cleanString(lectureTitle,120);
+    const changes=[];
+    if(question!==r.question)changes.push('Question wording');
+    if(answer!==r.answer)changes.push('Reference answer');
+    if(nextKind!==r.kind)changes.push('Practice type');
+    if(nextObjective!==previousObjective)changes.push('Learning objective');
+    if(nextLecture!==(r.lectureTitle||''))changes.push('Lecture label');
+    const changed=changes.length>0,substantive=(changeType==='substantive'||forcedSubstantive)&&changes.some(x=>x!=='Lecture label');
+    const targets=getTargets(db,r.id,{includePending:true});
+    const existingIntervals=targets.filter(t=>!!db.memory[t.id]).length;
+    const activeVariations=getActivities(db,r.id).filter(a=>!a.isPrimary).length;
+    return {requirementId:r.id,changed,changes,changeType,substantive,forcedSubstantive,existingIntervals,activeVariations,
+      affectedIntervals:changed&&substantive?existingIntervals:0,
+      archivedVariations:changed&&substantive?activeVariations:0,
+      holdRetained:!!r.studyHold,previousVersion:r.version,
+      next:{question,answer,kind:nextKind,objective:nextObjective,lectureTitle:nextLecture}};
+  }
+  function editRequirement(db,reqId,{question,answer,kind,objective,lectureTitle,changeType='substantive'}){
+    const preview=previewRequirementRevision(db,reqId,{question,answer,kind,objective,lectureTitle,changeType});
+    const r=db.requirements.find(r=>r.id===reqId);
+    if(!preview.changed)return r;
+    changeType=preview.substantive?'substantive':'wording';
+    ({question,answer,kind}=preview.next);
     // Editing an unverified generated draft is NOT a substitute for reviewing
     // the source and answer. Keep it out of study until explicit confirmation.
     const keepPending=!!r.sourceRevisionPending||(r.origin==='rule_draft'&&r.verificationStatus!=='verified');
@@ -2048,5 +2080,5 @@
   }
   function validateImport(x){return migrateDb(x);}
 
-  return {DAY,id,today,addDays,daysUntil,initialDb,migrateDb,validateImport,getTarget,getTargets,getMemory,getActivities,getCriteria,addCriterion,proposeCriteria,rubricQualityReview,addRubricEvidenceDraft,reviseCriterion,setCriterionAlternatives,rubricSyllabusAlignment,setCriterionSyllabusGoals,verifyCriterion,archiveCriterion,criterionStatus,rubricProgress,chooseActivity,addRetrievalTarget,verifyRetrievalTarget,addActivityVariant,deactivateActivity,reviseSource,addCourse,addSyllabusObjectives,updateSyllabusObjective,archiveSyllabusObjective,setSyllabusLink,setSyllabusMaterialsReady,setSyllabusLearningGuide,guidedLearningInfo,syllabusCoverage,draftRequirements,addSource,addImportedDocument,addRequirement,previewManualQuestionImport,importManualQuestionList,addManualQuestionBatch,archiveRequirements,restoreRequirement,purgeArchivedRequirements,editRequirement,verifyRequirement,questionQualityAudit,confirmQuestionQuality,integrity:I.integrity,questionCoverage:I.questionCoverage,questionWarnings:I.questionWarnings,learningObjectiveMap,variationStudio,questionStudio,adoptQuestionProposal,coverageReviewQueue,addAssessment,linkedAssessments,estimatedSeconds,durationEstimate,evidenceType,inputModeFor,evidenceSummary,delayedRetrievalAudit,memoryModelReadinessAudit,prospectiveEvidenceAudit,previewProspectiveForecast,schedulingPolicyAudit,eligibleCandidates,planActivities,planDueReviews,skipUnratedTarget,holdSessionQuestionForCorrection,holdQuestionForCorrection,questionRepairSourceContext,updateQuestionCorrectionDetails,releaseQuestionCorrectionHold,catchUpPreview,inspectStudyPriorities,buildReviewAgenda,forecastSchedule,setExactAnswerKey,exactKeyReady,previewLiteralCheck,literalDelayedAudit,recordAttempt,latestCorrectiveFeedback,assessmentCoverage,stats,demoDb};
+  return {DAY,id,today,addDays,daysUntil,initialDb,migrateDb,validateImport,getTarget,getTargets,getMemory,getActivities,getCriteria,addCriterion,proposeCriteria,rubricQualityReview,addRubricEvidenceDraft,reviseCriterion,setCriterionAlternatives,rubricSyllabusAlignment,setCriterionSyllabusGoals,verifyCriterion,archiveCriterion,criterionStatus,rubricProgress,chooseActivity,addRetrievalTarget,verifyRetrievalTarget,addActivityVariant,deactivateActivity,reviseSource,addCourse,addSyllabusObjectives,updateSyllabusObjective,archiveSyllabusObjective,setSyllabusLink,setSyllabusMaterialsReady,setSyllabusLearningGuide,guidedLearningInfo,syllabusCoverage,draftRequirements,addSource,addImportedDocument,addRequirement,previewManualQuestionImport,importManualQuestionList,addManualQuestionBatch,archiveRequirements,restoreRequirement,purgeArchivedRequirements,previewRequirementRevision,editRequirement,verifyRequirement,questionQualityAudit,confirmQuestionQuality,integrity:I.integrity,questionCoverage:I.questionCoverage,questionWarnings:I.questionWarnings,learningObjectiveMap,variationStudio,questionStudio,adoptQuestionProposal,coverageReviewQueue,addAssessment,linkedAssessments,estimatedSeconds,durationEstimate,evidenceType,inputModeFor,evidenceSummary,delayedRetrievalAudit,memoryModelReadinessAudit,prospectiveEvidenceAudit,previewProspectiveForecast,schedulingPolicyAudit,eligibleCandidates,planActivities,planDueReviews,skipUnratedTarget,holdSessionQuestionForCorrection,holdQuestionForCorrection,questionRepairSourceContext,updateQuestionCorrectionDetails,releaseQuestionCorrectionHold,catchUpPreview,inspectStudyPriorities,buildReviewAgenda,forecastSchedule,setExactAnswerKey,exactKeyReady,previewLiteralCheck,literalDelayedAudit,recordAttempt,latestCorrectiveFeedback,assessmentCoverage,stats,demoDb};
 });

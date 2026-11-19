@@ -278,3 +278,6 @@
 .repair-source-excerpt mark{background:#fff0aa;color:#314a3f}
 .repair-source-text{white-space:pre-wrap;overflow-wrap:anywhere;max-height:230px;overflow-y:auto;margin-top:8px;padding:10px 12px;background:white;border:1px solid var(--line);border-radius:8px;font-size:12px}
 .repair-note{white-space:pre-wrap;overflow-wrap:anywhere;margin:7px 0}
+.revision-impact{border:1px solid #a7c7b7;background:#f2f8f3;border-radius:12px;padding:13px 15px;overflow-wrap:anywhere}
+.revision-impact strong{font-size:14px}
+.revision-impact p{margin:6px 0 0}
