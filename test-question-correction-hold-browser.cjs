@@ -72,7 +72,7 @@ async function main(){
     await page.getByRole('dialog').waitFor();
     await page.locator('[data-action=close-modal]').first().click();
     page.once('dialog',d=>d.accept());
-    await queue.locator('[data-action=release-question-hold]').first().click();
+    await queue.locator('.correction-item').filter({hasText:firstQuestion}).locator('[data-action=release-question-hold]').click();
     const restored=await state();
     assert.equal(restored.held.length,1);
     assert.equal(restored.memory,original.memory,'Releasing without substantive edit keeps the original due date');
