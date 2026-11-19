@@ -79,6 +79,7 @@ async function main(){
     assert.equal(restored.count,original.attemptCount);
     assert.equal(restored.schema,5);
     await page.locator('.navbtn[data-page=study]').click();
+    await page.locator('[data-action=new-session]').click();
     const preview=page.locator('.catchup-preview');await preview.waitFor();
     assert.equal(await preview.locator('.metric').first().innerText(),'1','Only released review returns to the due queue');
     await preview.locator('[data-action=start-due-session]').click();
