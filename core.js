@@ -86,6 +86,12 @@
         }
       }
       if(input.schemaVersion===5){
+        for(const r of input.requirements){
+          if(r.studyHold!==undefined&&(!r.studyHold||typeof r.studyHold!=='object'||Array.isArray(r.studyHold)||
+            r.studyHold.kind!=='correction_required'||typeof r.studyHold.heldAt!=='string'||
+            !Number.isFinite(Date.parse(r.studyHold.heldAt))))
+            throw Error('Invalid question correction hold in backup.');
+        }
         const sessionTargets=new Set(input.retrievalTargets.map(t=>t.id));
         for(const se of input.sessions){
           if(se.queueMode!==undefined&&!['mixed','due_only'].includes(se.queueMode))
@@ -1234,7 +1240,25 @@
        Date.parse(a.createdAt)-at>6*3600000))return false;
     return true;
   }
-  function requirementEligible(r){return r.active&&!r.sourceRevisionPending&&(r.origin!=='rule_draft'||r.verificationStatus==='verified')&&!((r.possibleConflictWith||r.possibleDuplicateOf)&&r.origin==='rule_draft'&&!r.verifiedAt);}
+  function requirementEligible(r){return r.active&&!r.studyHold&&!r.sourceRevisionPending&&(r.origin!=='rule_draft'||r.verificationStatus==='verified')&&!((r.possibleConflictWith||r.possibleDuplicateOf)&&r.origin==='rule_draft'&&!r.verifiedAt);}
+  function holdQuestionForCorrection(db,requirementId,now=new Date()){
+    const r=db.requirements.find(x=>x.id===requirementId&&x.active!==false);
+    if(!r)throw Error('Active question not found.');
+    if(!(now instanceof Date)||!Number.isFinite(now.getTime()))throw Error('Invalid correction hold date.');
+    if(r.studyHold)return r.studyHold;
+    const heldAt=now.toISOString();r.studyHold={kind:'correction_required',heldAt};
+    db.events.push({type:'question.correction_hold',entityId:r.id,at:heldAt});
+    return r.studyHold;
+  }
+  function releaseQuestionCorrectionHold(db,requirementId,{confirmed=false,now=new Date()}={}){
+    const r=db.requirements.find(x=>x.id===requirementId&&x.active!==false);
+    if(!r||!r.studyHold)throw Error('No held question found.');
+    if(confirmed!==true)throw Error('Review the question and answer before returning them to study.');
+    if(!(now instanceof Date)||!Number.isFinite(now.getTime()))throw Error('Invalid correction review date.');
+    delete r.studyHold;
+    db.events.push({type:'question.correction_released',entityId:r.id,at:now.toISOString()});
+    return r;
+  }
   function schedulingReasons(item){
     const reasons=[];
     if(item.isNew)reasons.push('No previous recall attempt');
@@ -1306,6 +1330,13 @@
     if(!Array.isArray(session.skippedIds))session.skippedIds=[];
     session.skippedIds.push(target.id);
     return target.id;
+  }
+  function holdSessionQuestionForCorrection(db,session){
+    const requirementId=session?.currentReqId;
+    const targetId=skipUnratedTarget(db,session);
+    try{holdQuestionForCorrection(db,requirementId);}
+    catch(error){session.skippedIds.pop();throw error;}
+    return targetId;
   }
   function catchUpPreview(db,{minutes=25,now=new Date(),prefs=db.agendaPreferences}={}){
     if(!Number.isInteger(minutes)||minutes<5||minutes>720)throw Error('Catch-up duration must be 5–720 minutes.');
@@ -1969,5 +2000,5 @@
   }
   function validateImport(x){return migrateDb(x);}
 
-  return {DAY,id,today,addDays,daysUntil,initialDb,migrateDb,validateImport,getTarget,getTargets,getMemory,getActivities,getCriteria,addCriterion,proposeCriteria,rubricQualityReview,addRubricEvidenceDraft,reviseCriterion,setCriterionAlternatives,rubricSyllabusAlignment,setCriterionSyllabusGoals,verifyCriterion,archiveCriterion,criterionStatus,rubricProgress,chooseActivity,addRetrievalTarget,verifyRetrievalTarget,addActivityVariant,deactivateActivity,reviseSource,addCourse,addSyllabusObjectives,updateSyllabusObjective,archiveSyllabusObjective,setSyllabusLink,setSyllabusMaterialsReady,setSyllabusLearningGuide,guidedLearningInfo,syllabusCoverage,draftRequirements,addSource,addImportedDocument,addRequirement,previewManualQuestionImport,importManualQuestionList,addManualQuestionBatch,archiveRequirements,restoreRequirement,purgeArchivedRequirements,editRequirement,verifyRequirement,questionQualityAudit,confirmQuestionQuality,integrity:I.integrity,questionCoverage:I.questionCoverage,questionWarnings:I.questionWarnings,learningObjectiveMap,variationStudio,questionStudio,adoptQuestionProposal,coverageReviewQueue,addAssessment,linkedAssessments,estimatedSeconds,durationEstimate,evidenceType,inputModeFor,evidenceSummary,delayedRetrievalAudit,memoryModelReadinessAudit,prospectiveEvidenceAudit,previewProspectiveForecast,schedulingPolicyAudit,eligibleCandidates,planActivities,planDueReviews,skipUnratedTarget,catchUpPreview,inspectStudyPriorities,buildReviewAgenda,forecastSchedule,setExactAnswerKey,exactKeyReady,previewLiteralCheck,literalDelayedAudit,recordAttempt,latestCorrectiveFeedback,assessmentCoverage,stats,demoDb};
+  return {DAY,id,today,addDays,daysUntil,initialDb,migrateDb,validateImport,getTarget,getTargets,getMemory,getActivities,getCriteria,addCriterion,proposeCriteria,rubricQualityReview,addRubricEvidenceDraft,reviseCriterion,setCriterionAlternatives,rubricSyllabusAlignment,setCriterionSyllabusGoals,verifyCriterion,archiveCriterion,criterionStatus,rubricProgress,chooseActivity,addRetrievalTarget,verifyRetrievalTarget,addActivityVariant,deactivateActivity,reviseSource,addCourse,addSyllabusObjectives,updateSyllabusObjective,archiveSyllabusObjective,setSyllabusLink,setSyllabusMaterialsReady,setSyllabusLearningGuide,guidedLearningInfo,syllabusCoverage,draftRequirements,addSource,addImportedDocument,addRequirement,previewManualQuestionImport,importManualQuestionList,addManualQuestionBatch,archiveRequirements,restoreRequirement,purgeArchivedRequirements,editRequirement,verifyRequirement,questionQualityAudit,confirmQuestionQuality,integrity:I.integrity,questionCoverage:I.questionCoverage,questionWarnings:I.questionWarnings,learningObjectiveMap,variationStudio,questionStudio,adoptQuestionProposal,coverageReviewQueue,addAssessment,linkedAssessments,estimatedSeconds,durationEstimate,evidenceType,inputModeFor,evidenceSummary,delayedRetrievalAudit,memoryModelReadinessAudit,prospectiveEvidenceAudit,previewProspectiveForecast,schedulingPolicyAudit,eligibleCandidates,planActivities,planDueReviews,skipUnratedTarget,holdSessionQuestionForCorrection,holdQuestionForCorrection,releaseQuestionCorrectionHold,catchUpPreview,inspectStudyPriorities,buildReviewAgenda,forecastSchedule,setExactAnswerKey,exactKeyReady,previewLiteralCheck,literalDelayedAudit,recordAttempt,latestCorrectiveFeedback,assessmentCoverage,stats,demoDb};
 });
