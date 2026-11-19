@@ -1,4 +1,8 @@
-# Active Recall Web — Free Edition v4.21
+# Active Recall Web — Free Edition v4.22
+
+## Blueprint 4.22 — Skip a question without inventing a recall result
+
+During a normal or due-only study session, use **Skip question · no rating** to set aside an unclear or unsuitable question without changing any learning record, rating, or next-review date. The skipped focus is excluded only from that session. The session summary shows skipped questions separately from actually rated attempts and provides a direct **Edit Q&A** button; the question stays eligible in later sessions under its original schedule. If the question itself is valid and you cannot remember its answer, reveal the reference and choose **Again** instead—skipping is not a difficulty rating. Optional schema-v5 session skip IDs are checked on backup import and removed on permanent question deletion. The original queue, intervals, offline storage, and 100% free GitHub Pages hosting are unchanged. [Read Blueprint 4.22](docs/BLUEPRINT_4_22_FREE.md).
 
 ## Blueprint 4.21 — Catch up on due reviews, when you choose
 

@@ -86,9 +86,15 @@
         }
       }
       if(input.schemaVersion===5){
+        const sessionTargets=new Set(input.retrievalTargets.map(t=>t.id));
         for(const se of input.sessions){
           if(se.queueMode!==undefined&&!['mixed','due_only'].includes(se.queueMode))
             throw Error('Invalid saved study-session queue mode.');
+          if(se.skippedIds!==undefined&&(!Array.isArray(se.skippedIds)||se.skippedIds.length>200000||
+            (se.completedIds!==undefined&&!Array.isArray(se.completedIds))||
+            new Set(se.skippedIds).size!==se.skippedIds.length||
+            se.skippedIds.some(id=>typeof id!=='string'||!sessionTargets.has(id)||(se.completedIds||[]).includes(id))))
+            throw Error('Invalid unrated session skips in backup.');
         }
         if(!Array.isArray(input.rubricCriteria)||!Array.isArray(input.criterionVersions))throw Error('Missing rubric history.');
         if(input.rubricCriteria.length>500000)throw Error('Too many criteria.');
@@ -913,13 +919,14 @@
       sessions:db.sessions.map(s=>{
         const completed=Array.isArray(s.completedIds)?s.completedIds:[];
         const keep=completed.filter(id=>!removedIds.has(id));
+        const skipped=Array.isArray(s.skippedIds)?s.skippedIds.filter(id=>!removedIds.has(id)):s.skippedIds;
         const counts={...(s.courseCounts||{})};
         for(const r of rows){
           const removed=completed.filter(id=>id===r.id||db.retrievalTargets.some(t=>t.requirementId===r.id&&t.id===id)).length;
           if(removed&&counts[r.courseId])counts[r.courseId]=Math.max(0,counts[r.courseId]-removed);
         }
         const current=removedIds.has(s.currentReqId)||removedIds.has(s.currentTargetId)||removedIds.has(s.currentActivityId);
-        return {...s,completedIds:keep,courseCounts:counts,...(current?{
+        return {...s,completedIds:keep,...(skipped===undefined?{}:{skippedIds:skipped}),courseCounts:counts,...(current?{
           currentReqId:null,currentTargetId:null,currentActivityId:null,preAnswerForecast:null,draftAnswer:'',correctionDraft:'',criterionDraft:{},showHint:false,showReference:false,assistedForCurrent:false
         }:{})};
       }),
@@ -1286,6 +1293,19 @@
   // attempted, never a new question or early maintenance task.
   function planDueReviews(db,minutes,completedIds=[],courseCounts={},now=new Date()){
     return packActivities(db,minutes,completedIds,courseCounts,now,true);
+  }
+  // Skipping is navigation, not evidence about recall. Only mark this target
+  // unavailable for the current session; never touch attempts or due dates.
+  function skipUnratedTarget(db,session){
+    if(!session||!db.sessions.includes(session)||session.status!=='active'||session.paused||
+      !session.currentTargetId||!session.currentReqId)throw Error('No active question can be skipped.');
+    const target=db.retrievalTargets.find(t=>t.id===session.currentTargetId&&
+      t.requirementId===session.currentReqId);
+    if(!target||session.completedIds?.includes(target.id)||session.skippedIds?.includes(target.id))
+      throw Error('Question is not eligible to skip.');
+    if(!Array.isArray(session.skippedIds))session.skippedIds=[];
+    session.skippedIds.push(target.id);
+    return target.id;
   }
   function catchUpPreview(db,{minutes=25,now=new Date(),prefs=db.agendaPreferences}={}){
     if(!Number.isInteger(minutes)||minutes<5||minutes>720)throw Error('Catch-up duration must be 5–720 minutes.');
@@ -1949,5 +1969,5 @@
   }
   function validateImport(x){return migrateDb(x);}
 
-  return {DAY,id,today,addDays,daysUntil,initialDb,migrateDb,validateImport,getTarget,getTargets,getMemory,getActivities,getCriteria,addCriterion,proposeCriteria,rubricQualityReview,addRubricEvidenceDraft,reviseCriterion,setCriterionAlternatives,rubricSyllabusAlignment,setCriterionSyllabusGoals,verifyCriterion,archiveCriterion,criterionStatus,rubricProgress,chooseActivity,addRetrievalTarget,verifyRetrievalTarget,addActivityVariant,deactivateActivity,reviseSource,addCourse,addSyllabusObjectives,updateSyllabusObjective,archiveSyllabusObjective,setSyllabusLink,setSyllabusMaterialsReady,setSyllabusLearningGuide,guidedLearningInfo,syllabusCoverage,draftRequirements,addSource,addImportedDocument,addRequirement,previewManualQuestionImport,importManualQuestionList,addManualQuestionBatch,archiveRequirements,restoreRequirement,purgeArchivedRequirements,editRequirement,verifyRequirement,questionQualityAudit,confirmQuestionQuality,integrity:I.integrity,questionCoverage:I.questionCoverage,questionWarnings:I.questionWarnings,learningObjectiveMap,variationStudio,questionStudio,adoptQuestionProposal,coverageReviewQueue,addAssessment,linkedAssessments,estimatedSeconds,durationEstimate,evidenceType,inputModeFor,evidenceSummary,delayedRetrievalAudit,memoryModelReadinessAudit,prospectiveEvidenceAudit,previewProspectiveForecast,schedulingPolicyAudit,eligibleCandidates,planActivities,planDueReviews,catchUpPreview,inspectStudyPriorities,buildReviewAgenda,forecastSchedule,setExactAnswerKey,exactKeyReady,previewLiteralCheck,literalDelayedAudit,recordAttempt,latestCorrectiveFeedback,assessmentCoverage,stats,demoDb};
+  return {DAY,id,today,addDays,daysUntil,initialDb,migrateDb,validateImport,getTarget,getTargets,getMemory,getActivities,getCriteria,addCriterion,proposeCriteria,rubricQualityReview,addRubricEvidenceDraft,reviseCriterion,setCriterionAlternatives,rubricSyllabusAlignment,setCriterionSyllabusGoals,verifyCriterion,archiveCriterion,criterionStatus,rubricProgress,chooseActivity,addRetrievalTarget,verifyRetrievalTarget,addActivityVariant,deactivateActivity,reviseSource,addCourse,addSyllabusObjectives,updateSyllabusObjective,archiveSyllabusObjective,setSyllabusLink,setSyllabusMaterialsReady,setSyllabusLearningGuide,guidedLearningInfo,syllabusCoverage,draftRequirements,addSource,addImportedDocument,addRequirement,previewManualQuestionImport,importManualQuestionList,addManualQuestionBatch,archiveRequirements,restoreRequirement,purgeArchivedRequirements,editRequirement,verifyRequirement,questionQualityAudit,confirmQuestionQuality,integrity:I.integrity,questionCoverage:I.questionCoverage,questionWarnings:I.questionWarnings,learningObjectiveMap,variationStudio,questionStudio,adoptQuestionProposal,coverageReviewQueue,addAssessment,linkedAssessments,estimatedSeconds,durationEstimate,evidenceType,inputModeFor,evidenceSummary,delayedRetrievalAudit,memoryModelReadinessAudit,prospectiveEvidenceAudit,previewProspectiveForecast,schedulingPolicyAudit,eligibleCandidates,planActivities,planDueReviews,skipUnratedTarget,catchUpPreview,inspectStudyPriorities,buildReviewAgenda,forecastSchedule,setExactAnswerKey,exactKeyReady,previewLiteralCheck,literalDelayedAudit,recordAttempt,latestCorrectiveFeedback,assessmentCoverage,stats,demoDb};
 });

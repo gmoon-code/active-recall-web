@@ -66,7 +66,7 @@
   function empty(title,desc,cta='',action=''){return `<div class="empty"><div class="bigemoji">✧</div><h2>${esc(title)}</h2><p>${esc(desc)}</p>${cta?`<button class="btn primary" data-action="${action}">${esc(cta)}</button>`:''}</div>`;}
   const nav=[['home','◫','Overview'],['capture','✎','Capture'],['questions','?','My Q&A'],['study','◉','Study Now'],['courses','▤','Knowledge'],['assessments','▦','Assessments'],['forecast','◴','Calendar'],['insights','◷','Progress']];
   function sidebar(){return `<aside class="sidebar"><div class="brand"><span class="mark">✳</span><span>active<span style="color:#176d5e">recall</span></span></div><nav class="nav" aria-label="Main navigation">${nav.map(([key,icon,label])=>`<button class="navbtn ${page===key?'active':''}" data-action="navigate" data-page="${key}" ${page===key?'aria-current="page"':''}><span class="navicon">${icon}</span>${label}</button>`).join('')}</nav><div class="sidefoot"><strong><span class="statusdot"></span>100% free · Browser-local</strong><p>Hosted as a static site. No payments, API keys, accounts, or cloud sync. Export backups regularly.</p></div></aside>`;}
-  function header(){return `<div class="topline"><div class="path">ACTIVE RECALL WEB <span style="color:#b7c4bd">/</span> ${esc(nav.find(x=>x[0]===page)?.[2]||(page==='guided'?'Guided learning':''))}</div><div class="topright"><span class="tag">Blueprint 4.21 · Free</span><span class="avatar" aria-label="Local learner profile">A</span></div></div>`;}
+  function header(){return `<div class="topline"><div class="path">ACTIVE RECALL WEB <span style="color:#b7c4bd">/</span> ${esc(nav.find(x=>x[0]===page)?.[2]||(page==='guided'?'Guided learning':''))}</div><div class="topright"><span class="tag">Blueprint 4.22 · Free</span><span class="avatar" aria-label="Local learner profile">A</span></div></div>`;}
   function shell(content){return `<div class="app">${sidebar()}<main class="main">${header()}${content}<div class="footer">Free &amp; static · Notes stay in this browser · Export backups · Review generated drafts before relying on them · <a href="./health.html">Site diagnostics</a></div></main></div>${modalReqId?editModal():''}${qualityReqId?questionQualityModal():''}${modalSourceId?editSourceModal():''}${studioSourceId?studioModal():''}${modalReviewId?humanReviewModal():''}${modalPairId?PU.modal({db,esc,courseName,attemptId:modalPairId}):''}`;}
   function dashboard(){const integrity=C.integrity(db);const s=C.stats(db),preview=C.planActivities(db,15).items.slice(0,4),topUpcoming=s.upcoming.slice(0,3);
     return `<div class="hero"><div><div class="eyebrow">Your learning, organised</div><h1>One place to learn.<br>One queue to remember.</h1><p>Add knowledge as you encounter it. Study across your courses without organising separate decks or planning every review.</p><div class="btnrow" style="margin-top:22px"><button class="btn primary" data-action="navigate" data-page="study">Start studying ↗</button><button class="btn secondary" data-action="navigate" data-page="questions">+ Write my questions</button><button class="btn secondary" data-action="navigate" data-page="capture">+ Add lecture notes</button></div></div><span class="orb"></span><span class="orb2"></span></div>
@@ -406,7 +406,17 @@ A">${esc((a.exactAnswerKey?.answers||[]).join('\n'))}</textarea><label class="ch
       ${!p.dueCount?'<p class="small muted" style="margin-top:10px">No previously attempted questions are due. Use the regular session for new material.</p>':!p.selectedCount?'<p class="small muted" style="margin-top:10px">No due question fits your selected duration. Choose a longer session if you have time.</p>':''}
     </div></section>`;
   }
-  function session(){let se=activeSession();if(se&&se.status==='active')return sessionActive(se);if(se&&se.status==='completed')return sessionCompleted(se);
+  function unratedSkippedPanel(se){
+    const ids=se.skippedIds||[];
+    if(!ids.length)return '';
+    const rows=ids.map(id=>{
+      const target=db.retrievalTargets.find(t=>t.id===id),req=target&&reqById(target.requirementId);
+      if(!req)return '';
+      return `<div class="listrow"><div class="rowbody"><strong>${esc(req.question)}</strong><small>${esc(courseName(req.courseId))} · Not rated · Original review eligibility unchanged</small></div><button class="btn secondary small" data-action="edit-requirement" data-id="${esc(req.id)}">Edit Q&A</button></div>`;
+    }).join('');
+    return `<section class="section skipped-summary"><div class="card"><h2 style="margin-bottom:10px">Skipped without rating · ${ids.length}</h2><p class="small muted">These questions were set aside during this session, not answered or self-rated. No new attempt, memory update or next-review date was created. They remain available in a later eligible session. You can edit a confusing question here; choose <strong>Again</strong> during recall when the question is valid but you cannot remember its answer.</p>${rows}</div></section>`;
+  }
+  function session(){let se=activeSession();if(se&&se.status==='active')return sessionActive(se);if(se&&se.status==='completed')return sessionCompleted(se)+unratedSkippedPanel(se);
     const s=C.stats(db),plan=C.planActivities(db,duration),counts={};plan.items.forEach(p=>counts[p.req.courseId]=(counts[p.req.courseId]||0)+1);
     return `<div class="pagehead"><div><div class="eyebrow">Unified adaptive queue</div><h1>Study what matters next.</h1><p>Choose the time you have. We'll assemble a feasible session from across your courses.</p></div></div><div class="sessionpanel"><div class="card"><h2 style="margin-bottom:8px">How long can you study?</h2><p class="muted small" style="margin-bottom:19px">Custom durations from 5 minutes to 12 hours are supported in this prototype.</p>${durationPicker()}<div class="sepline"></div><div class="card-title"><h2>Proposed session</h2><span class="pill good">${plan.items.length} activities</span></div>${plan.items.length?`<div class="list">${Object.entries(counts).map(([cid,n])=>`<div class="listrow"><span class="roundicon">${courseName(cid)[0]}</span><div class="rowbody"><strong>${esc(courseName(cid))}</strong><small>${n} ${n===1?'activity':'activities'} · selected automatically</small></div></div>`).join('')}</div>`:'<p class="muted">Add learning requirements or increase the time budget to begin.</p>'}<div class="note" style="margin:15px 0"><strong>Why these?</strong><br>${plan.items.slice(0,4).map(p=>`${esc(courseName(p.req.courseId))} · ${esc(p.target.label)} — ${esc(p.reasons.join('; '))}`).join('<br>')||'Add eligible learning requirements to see a schedule.'}</div><div class="note" style="margin:20px 0 15px">Reference answers are revealed after your attempt. You rate your own recall in this local version; no AI evaluation is performed.</div><button class="btn primary block" data-action="start-session" ${!plan.items.length||!s.requirements?'disabled':''}>Start ${duration}-minute session ↗</button></div></div>${catchUpPanel()}${priorityInspectorPanel()}`;
   }
@@ -633,6 +643,17 @@ A">${esc((a.exactAnswerKey?.answers||[]).join('\n'))}</textarea><label class="ch
     $('#app').innerHTML=shell(content);
     if(page==='study'){
       const se=activeSession();
+      if(se?.status==='active'){
+        const finish=$('#app [data-action="finish-session"]');
+        finish?.insertAdjacentHTML('beforebegin',`<button class="btn secondary small" data-action="skip-question" ${se.paused?'disabled':''}>Skip question · no rating</button>`);
+        finish?.closest('.btnrow')?.insertAdjacentHTML('afterend',`<p class="small muted" style="margin:-8px 0 15px">Skip only to set aside an unsuitable or unclear question; its schedule stays unchanged. If you tried to recall a valid question and could not, reveal the answer and choose Again.${se.skippedIds?.length?' '+se.skippedIds.length+' skipped this session.':''}</p>`);
+      }
+      if(se?.status==='completed'){
+        const subtitle=$('#app .sessionpanel .pagehead p');
+        if(subtitle)subtitle.textContent=db.attempts.some(a=>a.sessionId===se.id)
+          ?'Your rated answers were saved and their next review dates updated. Skipped questions, if any, keep their original schedule.'
+          :'No answers were rated, so no next review dates were changed. Skipped questions keep their original schedule.';
+      }
       if(se?.queueMode==='due_only'&&se.status==='active')$('#app .pagehead')?.insertAdjacentHTML('afterend',
         '<div class="note" style="margin:10px 0 18px"><strong>Due Reviews Only is active.</strong> New and not-yet-due questions are excluded from this session. Your ordinary interval rules, course balancing and feedback workflow are unchanged.</div>');
     }
@@ -642,7 +663,7 @@ A">${esc((a.exactAnswerKey?.answers||[]).join('\n'))}</textarea><label class="ch
     if(page==='home'&&db.courses.length)$('#app .hero')?.insertAdjacentHTML('afterend',scheduleFitPanel({compact:true}));
   }
   function selectNext(se){
-    const remain=Math.max(0,sessionRemainingMs(se)/60000),plan=(se.queueMode==='due_only'?C.planDueReviews:C.planActivities)(db,remain,se.completedIds,se.courseCounts);
+    const remain=Math.max(0,sessionRemainingMs(se)/60000),excluded=[...(se.completedIds||[]),...(se.skippedIds||[])],plan=(se.queueMode==='due_only'?C.planDueReviews:C.planActivities)(db,remain,excluded,se.courseCounts);
     let chosen=plan.items[0]||null;
     if(plan.items.length){
       // Both views use the same target IDs, saved review evidence and availability.
@@ -869,6 +890,7 @@ A">${esc((a.exactAnswerKey?.answers||[]).join('\n'))}</textarea><label class="ch
     case 'extend-session':transact(()=>{if(se&&se.status==='active')se.budgetMinutes+=Number(btn.dataset.minutes);});break;
     case 'remaining-five':transact(()=>{if(se&&se.status==='active')se.budgetMinutes=sessionElapsedMs(se)/60000+5;});break;
     case 'finish-session':transact(()=>{if(se)finishSession(se);});break;
+    case 'skip-question':transact(()=>{C.skipUnratedTarget(db,se);selectNext(se);});break;
     case 'hint':transact(()=>{if(se&&!se.paused){se.showHint=true;se.assistedForCurrent=true;}});break;
     case 'reveal':transact(()=>{if(se&&!se.paused){const field=$('#study-response');if(field)se.draftAnswer=field.value;se.showReference=true;}});break;
     case 'rate':{if(!se||se.paused||!se.showReference)return;transact(()=>{const rid=se.currentReqId,req=reqById(rid);const rating=btn.dataset.rating;const age=Date.now()-Date.parse(se.preAnswerForecast?.capturedAt||'');const forecast=age>=0&&age<=6*3600000?se.preAnswerForecast:null;C.recordAttempt(db,{requirementId:rid,activityId:se.currentActivityId,targetId:se.currentTargetId,response:se.draftAnswer,rating,assisted:se.assistedForCurrent,sessionId:se.id,inputMode:$('#response-mode')?.value==='oral'?'oral':$('#response-mode')?.value==='mental'?'mental':null,durationSeconds:Math.max(0,Math.round((sessionElapsedMs(se)-(se.activityStartedElapsedMs??sessionElapsedMs(se)))/1000)),criterionChecks:Object.entries(se.criterionDraft||{}).map(([criterionId,status])=>({criterionId,status})),correctionNote:se.correctionDraft||'',prospectiveForecast:forecast});se.completedIds.push(se.currentTargetId);se.courseCounts[req.courseId]=(se.courseCounts[req.courseId]||0)+1;selectNext(se);});break;}
