@@ -1,4 +1,8 @@
-# Active Recall Web — Free Edition v4.20
+# Active Recall Web — Free Edition v4.21
+
+## Blueprint 4.21 — Catch up on due reviews, when you choose
+
+Open **Study Now → Catch up on due reviews** to see previously attempted questions due now, those that can fit the selected time budget, and due work still waiting. New questions are counted separately. The card notes due dates falling on declared unavailable/rest days without labelling them missed study commitments. Press **Start due-only session** to explicitly practise *only* due reviews; the normal mixed session remains the default. No new or early-maintenance questions slip into the catch-up session, while course balancing, deadlines and the **original rating/interval policy** continue to operate. Previewing or starting a session does not invent attempts, change due dates or mark anything correct. The app stays free, offline-capable and browser-local with schema-v5 backup compatibility. [Read Blueprint 4.21](docs/BLUEPRINT_4_21_FREE.md).
 
 ## Blueprint 4.20 — Inspect prospective prediction evidence
 

@@ -86,6 +86,10 @@
         }
       }
       if(input.schemaVersion===5){
+        for(const se of input.sessions){
+          if(se.queueMode!==undefined&&!['mixed','due_only'].includes(se.queueMode))
+            throw Error('Invalid saved study-session queue mode.');
+        }
         if(!Array.isArray(input.rubricCriteria)||!Array.isArray(input.criterionVersions))throw Error('Missing rubric history.');
         if(input.rubricCriteria.length>500000)throw Error('Too many criteria.');
         const knownTargets=new Set(input.retrievalTargets.map(t=>t.id)),ids=new Set();
@@ -1252,11 +1256,13 @@
       item.reasons=schedulingReasons(item);item.reasons.push(`Estimated ${Math.max(1,Math.round(item.seconds/60))} min (${timeEstimate.personalized?'your earlier practice':'task-type starting estimate'})`);return item;
     }).filter(Boolean));
   }
-  function planActivities(db,minutes,completedIds=[],courseCounts={},now=new Date()){
+  function packActivities(db,minutes,completedIds=[],courseCounts={},now=new Date(),dueOnly=false){
     const budgetSeconds=Math.max(0,Math.round(minutes*60));
     const reserve=budgetSeconds<=300?40:Math.min(180,Math.round(budgetSeconds*0.08));
     let remaining=Math.max(0,budgetSeconds-reserve);const plan=[];
-    const eligible=eligibleCandidates(db,now).filter(c=>!completedIds.includes(c.target.id)&&!completedIds.includes(c.req.id));
+    const eligible=eligibleCandidates(db,now).filter(c=>
+      !completedIds.includes(c.target.id)&&!completedIds.includes(c.req.id)&&
+      (!dueOnly||(c.due&&!c.isNew)));
     const counts={...courseCounts};let previousCourse=null;const selectedReqCounts={};
     while(eligible.length){
       const fitting=eligible.filter(x=>x.seconds<=remaining);
@@ -1271,6 +1277,42 @@
       eligible.splice(eligible.indexOf(chosen),1);
     }
     return {items:plan,budgetSeconds,reserveSeconds:reserve,unusedSeconds:remaining};
+  }
+  function planActivities(db,minutes,completedIds=[],courseCounts={},now=new Date()){
+    return packActivities(db,minutes,completedIds,courseCounts,now,false);
+  }
+  // Opt-in due-only sessions keep the same time packing, score, course balance,
+  // activity estimate and actual rating policy. A due review is *previously*
+  // attempted, never a new question or early maintenance task.
+  function planDueReviews(db,minutes,completedIds=[],courseCounts={},now=new Date()){
+    return packActivities(db,minutes,completedIds,courseCounts,now,true);
+  }
+  function catchUpPreview(db,{minutes=25,now=new Date(),prefs=db.agendaPreferences}={}){
+    if(!Number.isInteger(minutes)||minutes<5||minutes>720)throw Error('Catch-up duration must be 5–720 minutes.');
+    if(!(now instanceof Date)||!Number.isFinite(now.getTime()))throw Error('Invalid catch-up preview date.');
+    const candidates=eligibleCandidates(db,now),due=candidates.filter(c=>c.due&&!c.isNew);
+    const planned=planDueReviews(db,minutes,[],{},now),selected=new Set(planned.items.map(c=>c.target.id));
+    const unplaced=due.filter(c=>!selected.has(c.target.id));
+    const declaredUnavailable=Array.isArray(prefs?.missedDates)?prefs.missedDates:[];
+    const dueOnUnavailable=due.filter(c=>{
+      const memory=db.memory[c.target.id],d=new Date(memory?.dueAt);
+      if(!Number.isFinite(d.getTime()))return false;
+      const date=today(d),weekend=[0,6].includes(d.getDay());
+      return declaredUnavailable.includes(date)||
+        (weekend?prefs?.weekendMinutes:prefs?.weekdayMinutes)===0;
+    }).length;
+    const elapsedDays=c=>Math.max(0,(now.getTime()-Date.parse(db.memory[c.target.id].dueAt))/DAY);
+    const item=c=>({targetId:c.target.id,courseId:c.req.courseId,requirementId:c.req.id,
+      question:c.activity.question,estimatedMinutes:Math.max(1,Math.ceil(c.seconds/60)),
+      overdueDays:Math.floor(elapsedDays(c)),priorityScore:c.score,daysToExam:c.daysToExam});
+    return {minutes,dueCount:due.length,newCount:candidates.filter(c=>c.isNew).length,
+      moreThanDayLate:due.filter(c=>elapsedDays(c)>=1).length,
+      dueOnUnavailable,selectedCount:planned.items.length,
+      remainingCount:unplaced.length,
+      totalEstimatedMinutes:Math.ceil(due.reduce((sum,c)=>sum+c.seconds,0)/60),
+      remainingEstimatedMinutes:Math.ceil(unplaced.reduce((sum,c)=>sum+c.seconds,0)/60),
+      selected:planned.items.slice(0,8).map(item),waiting:unplaced.slice(0,8).map(item),
+      warning:'A due review is an already-attempted target whose stored due time has arrived; it is NOT proof of a missed committed session or forgetting. Known unavailable dates are treated as capacity constraints, not failures. This single-session preview fits one pass using existing estimates, does not promise all work will be completed, does not invent responses, and never changes the existing review dates or the regular mixed queue. Actual results are recorded only when you complete and rate questions.'};
   }
   // Read-only priority inspector: the active policy is NEVER changed by this
   // comparison. The alternative is a queue-order thought experiment, not FSRS.
@@ -1907,5 +1949,5 @@
   }
   function validateImport(x){return migrateDb(x);}
 
-  return {DAY,id,today,addDays,daysUntil,initialDb,migrateDb,validateImport,getTarget,getTargets,getMemory,getActivities,getCriteria,addCriterion,proposeCriteria,rubricQualityReview,addRubricEvidenceDraft,reviseCriterion,setCriterionAlternatives,rubricSyllabusAlignment,setCriterionSyllabusGoals,verifyCriterion,archiveCriterion,criterionStatus,rubricProgress,chooseActivity,addRetrievalTarget,verifyRetrievalTarget,addActivityVariant,deactivateActivity,reviseSource,addCourse,addSyllabusObjectives,updateSyllabusObjective,archiveSyllabusObjective,setSyllabusLink,setSyllabusMaterialsReady,setSyllabusLearningGuide,guidedLearningInfo,syllabusCoverage,draftRequirements,addSource,addImportedDocument,addRequirement,previewManualQuestionImport,importManualQuestionList,addManualQuestionBatch,archiveRequirements,restoreRequirement,purgeArchivedRequirements,editRequirement,verifyRequirement,questionQualityAudit,confirmQuestionQuality,integrity:I.integrity,questionCoverage:I.questionCoverage,questionWarnings:I.questionWarnings,learningObjectiveMap,variationStudio,questionStudio,adoptQuestionProposal,coverageReviewQueue,addAssessment,linkedAssessments,estimatedSeconds,durationEstimate,evidenceType,inputModeFor,evidenceSummary,delayedRetrievalAudit,memoryModelReadinessAudit,prospectiveEvidenceAudit,previewProspectiveForecast,schedulingPolicyAudit,eligibleCandidates,planActivities,inspectStudyPriorities,buildReviewAgenda,forecastSchedule,setExactAnswerKey,exactKeyReady,previewLiteralCheck,literalDelayedAudit,recordAttempt,latestCorrectiveFeedback,assessmentCoverage,stats,demoDb};
+  return {DAY,id,today,addDays,daysUntil,initialDb,migrateDb,validateImport,getTarget,getTargets,getMemory,getActivities,getCriteria,addCriterion,proposeCriteria,rubricQualityReview,addRubricEvidenceDraft,reviseCriterion,setCriterionAlternatives,rubricSyllabusAlignment,setCriterionSyllabusGoals,verifyCriterion,archiveCriterion,criterionStatus,rubricProgress,chooseActivity,addRetrievalTarget,verifyRetrievalTarget,addActivityVariant,deactivateActivity,reviseSource,addCourse,addSyllabusObjectives,updateSyllabusObjective,archiveSyllabusObjective,setSyllabusLink,setSyllabusMaterialsReady,setSyllabusLearningGuide,guidedLearningInfo,syllabusCoverage,draftRequirements,addSource,addImportedDocument,addRequirement,previewManualQuestionImport,importManualQuestionList,addManualQuestionBatch,archiveRequirements,restoreRequirement,purgeArchivedRequirements,editRequirement,verifyRequirement,questionQualityAudit,confirmQuestionQuality,integrity:I.integrity,questionCoverage:I.questionCoverage,questionWarnings:I.questionWarnings,learningObjectiveMap,variationStudio,questionStudio,adoptQuestionProposal,coverageReviewQueue,addAssessment,linkedAssessments,estimatedSeconds,durationEstimate,evidenceType,inputModeFor,evidenceSummary,delayedRetrievalAudit,memoryModelReadinessAudit,prospectiveEvidenceAudit,previewProspectiveForecast,schedulingPolicyAudit,eligibleCandidates,planActivities,planDueReviews,catchUpPreview,inspectStudyPriorities,buildReviewAgenda,forecastSchedule,setExactAnswerKey,exactKeyReady,previewLiteralCheck,literalDelayedAudit,recordAttempt,latestCorrectiveFeedback,assessmentCoverage,stats,demoDb};
 });
