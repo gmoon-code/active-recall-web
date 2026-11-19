@@ -1,4 +1,8 @@
-# Active Recall Web — Free Edition v4.22
+# Active Recall Web — Free Edition v4.23
+
+## Blueprint 4.23 — Flag unreliable questions and repair them deliberately
+
+During any Study Now session, **Flag for correction · skip** records no answer and puts the entire problematic Q&A out of future automatic sessions and the calendar until reviewed. The v4.22 session summary also lets you flag an already skipped question. In **My Q&A → Questions needing correction**, review or edit each held question and its reference answer, then explicitly confirm **Reviewed · resume** to return it to normal eligibility. Ordinary unflagged skips remain session-only; a genuine failed recall should still be rated **Again**. Holds never change previous attempts, ratings or due dates; wording-only versus substantive edits retain the existing interval behaviour, and backing up / permanently deleting questions handles optional schema-v5 hold metadata safely. No change to the active scheduler, free offline/local data model or GitHub Pages hosting. [Read Blueprint 4.23](docs/BLUEPRINT_4_23_FREE.md).
 
 ## Blueprint 4.22 — Skip a question without inventing a recall result
 
