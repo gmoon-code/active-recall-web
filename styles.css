@@ -269,3 +269,12 @@
 .correction-item .document-outline{max-width:100%;margin-bottom:8px}
 .correction-item .document-outline textarea{max-width:100%}
 .correction-item .btnrow{flex-wrap:wrap}
+.repair-source{margin:10px 0;border:1px solid var(--line);border-radius:12px;padding:12px;background:#fbfdfb;min-width:0}
+.repair-source>summary{cursor:pointer;overflow-wrap:anywhere}
+.repair-source>p{margin:9px 0}
+.repair-source-excerpt{margin-top:10px;font-size:13px;overflow-wrap:anywhere}
+.repair-source-excerpt>strong{font-size:12px}
+.repair-source-excerpt blockquote{white-space:pre-wrap;overflow-wrap:anywhere;margin:7px 0;padding:10px 12px;border-left:3px solid #78b198;background:white}
+.repair-source-excerpt mark{background:#fff0aa;color:#314a3f}
+.repair-source-text{white-space:pre-wrap;overflow-wrap:anywhere;max-height:230px;overflow-y:auto;margin-top:8px;padding:10px 12px;background:white;border:1px solid var(--line);border-radius:8px;font-size:12px}
+.repair-note{white-space:pre-wrap;overflow-wrap:anywhere;margin:7px 0}
