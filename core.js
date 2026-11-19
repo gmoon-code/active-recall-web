@@ -89,7 +89,11 @@
         for(const r of input.requirements){
           if(r.studyHold!==undefined&&(!r.studyHold||typeof r.studyHold!=='object'||Array.isArray(r.studyHold)||
             r.studyHold.kind!=='correction_required'||typeof r.studyHold.heldAt!=='string'||
-            !Number.isFinite(Date.parse(r.studyHold.heldAt))))
+            !Number.isFinite(Date.parse(r.studyHold.heldAt))||
+            (r.studyHold.reason!==undefined&&!CORRECTION_REASONS.includes(r.studyHold.reason))||
+            (r.studyHold.note!==undefined&&(typeof r.studyHold.note!=='string'||r.studyHold.note.length>500))||
+            (r.studyHold.updatedAt!==undefined&&(typeof r.studyHold.updatedAt!=='string'||
+              !Number.isFinite(Date.parse(r.studyHold.updatedAt))))))
             throw Error('Invalid question correction hold in backup.');
         }
         const sessionTargets=new Set(input.retrievalTargets.map(t=>t.id));
@@ -1241,14 +1245,31 @@
     return true;
   }
   function requirementEligible(r){return r.active&&!r.studyHold&&!r.sourceRevisionPending&&(r.origin!=='rule_draft'||r.verificationStatus==='verified')&&!((r.possibleConflictWith||r.possibleDuplicateOf)&&r.origin==='rule_draft'&&!r.verifiedAt);}
-  function holdQuestionForCorrection(db,requirementId,now=new Date()){
+  const CORRECTION_REASONS=['unspecified','unclear','suspected_error','possible_duplicate','not_relevant','other'];
+  function correctionDetails(reason='unspecified',note=''){
+    if(!CORRECTION_REASONS.includes(reason))throw Error('Choose a supported correction reason.');
+    if(typeof note!=='string'||note.length>500)throw Error('Correction note must be at most 500 characters.');
+    return {reason,note:note.trim()};
+  }
+  function holdQuestionForCorrection(db,requirementId,now=new Date(),{reason='unspecified',note=''}={}){
     const r=db.requirements.find(x=>x.id===requirementId&&x.active!==false);
     if(!r)throw Error('Active question not found.');
     if(!(now instanceof Date)||!Number.isFinite(now.getTime()))throw Error('Invalid correction hold date.');
+    const details=correctionDetails(reason,note);
     if(r.studyHold)return r.studyHold;
-    const heldAt=now.toISOString();r.studyHold={kind:'correction_required',heldAt};
+    const heldAt=now.toISOString();r.studyHold={kind:'correction_required',heldAt,...details};
     db.events.push({type:'question.correction_hold',entityId:r.id,at:heldAt});
     return r.studyHold;
+  }
+  function updateQuestionCorrectionDetails(db,requirementId,{reason='unspecified',note=''}={},now=new Date()){
+    const r=db.requirements.find(x=>x.id===requirementId&&x.active!==false&&x.studyHold);
+    if(!r)throw Error('Held question not found.');
+    if(!(now instanceof Date)||!Number.isFinite(now.getTime()))throw Error('Invalid correction detail date.');
+    const details=correctionDetails(reason,note),hold=r.studyHold;
+    if((hold.reason||'unspecified')===details.reason&&(hold.note||'')===details.note)return hold;
+    Object.assign(hold,details,{updatedAt:now.toISOString()});
+    db.events.push({type:'question.correction_details_updated',entityId:r.id,at:hold.updatedAt});
+    return hold;
   }
   function releaseQuestionCorrectionHold(db,requirementId,{confirmed=false,now=new Date()}={}){
     const r=db.requirements.find(x=>x.id===requirementId&&x.active!==false);
@@ -1331,10 +1352,11 @@
     session.skippedIds.push(target.id);
     return target.id;
   }
-  function holdSessionQuestionForCorrection(db,session){
+  function holdSessionQuestionForCorrection(db,session,{reason='unspecified'}={}){
+    correctionDetails(reason);
     const requirementId=session?.currentReqId;
     const targetId=skipUnratedTarget(db,session);
-    try{holdQuestionForCorrection(db,requirementId);}
+    try{holdQuestionForCorrection(db,requirementId,new Date(),{reason});}
     catch(error){session.skippedIds.pop();throw error;}
     return targetId;
   }
@@ -2000,5 +2022,5 @@
   }
   function validateImport(x){return migrateDb(x);}
 
-  return {DAY,id,today,addDays,daysUntil,initialDb,migrateDb,validateImport,getTarget,getTargets,getMemory,getActivities,getCriteria,addCriterion,proposeCriteria,rubricQualityReview,addRubricEvidenceDraft,reviseCriterion,setCriterionAlternatives,rubricSyllabusAlignment,setCriterionSyllabusGoals,verifyCriterion,archiveCriterion,criterionStatus,rubricProgress,chooseActivity,addRetrievalTarget,verifyRetrievalTarget,addActivityVariant,deactivateActivity,reviseSource,addCourse,addSyllabusObjectives,updateSyllabusObjective,archiveSyllabusObjective,setSyllabusLink,setSyllabusMaterialsReady,setSyllabusLearningGuide,guidedLearningInfo,syllabusCoverage,draftRequirements,addSource,addImportedDocument,addRequirement,previewManualQuestionImport,importManualQuestionList,addManualQuestionBatch,archiveRequirements,restoreRequirement,purgeArchivedRequirements,editRequirement,verifyRequirement,questionQualityAudit,confirmQuestionQuality,integrity:I.integrity,questionCoverage:I.questionCoverage,questionWarnings:I.questionWarnings,learningObjectiveMap,variationStudio,questionStudio,adoptQuestionProposal,coverageReviewQueue,addAssessment,linkedAssessments,estimatedSeconds,durationEstimate,evidenceType,inputModeFor,evidenceSummary,delayedRetrievalAudit,memoryModelReadinessAudit,prospectiveEvidenceAudit,previewProspectiveForecast,schedulingPolicyAudit,eligibleCandidates,planActivities,planDueReviews,skipUnratedTarget,holdSessionQuestionForCorrection,holdQuestionForCorrection,releaseQuestionCorrectionHold,catchUpPreview,inspectStudyPriorities,buildReviewAgenda,forecastSchedule,setExactAnswerKey,exactKeyReady,previewLiteralCheck,literalDelayedAudit,recordAttempt,latestCorrectiveFeedback,assessmentCoverage,stats,demoDb};
+  return {DAY,id,today,addDays,daysUntil,initialDb,migrateDb,validateImport,getTarget,getTargets,getMemory,getActivities,getCriteria,addCriterion,proposeCriteria,rubricQualityReview,addRubricEvidenceDraft,reviseCriterion,setCriterionAlternatives,rubricSyllabusAlignment,setCriterionSyllabusGoals,verifyCriterion,archiveCriterion,criterionStatus,rubricProgress,chooseActivity,addRetrievalTarget,verifyRetrievalTarget,addActivityVariant,deactivateActivity,reviseSource,addCourse,addSyllabusObjectives,updateSyllabusObjective,archiveSyllabusObjective,setSyllabusLink,setSyllabusMaterialsReady,setSyllabusLearningGuide,guidedLearningInfo,syllabusCoverage,draftRequirements,addSource,addImportedDocument,addRequirement,previewManualQuestionImport,importManualQuestionList,addManualQuestionBatch,archiveRequirements,restoreRequirement,purgeArchivedRequirements,editRequirement,verifyRequirement,questionQualityAudit,confirmQuestionQuality,integrity:I.integrity,questionCoverage:I.questionCoverage,questionWarnings:I.questionWarnings,learningObjectiveMap,variationStudio,questionStudio,adoptQuestionProposal,coverageReviewQueue,addAssessment,linkedAssessments,estimatedSeconds,durationEstimate,evidenceType,inputModeFor,evidenceSummary,delayedRetrievalAudit,memoryModelReadinessAudit,prospectiveEvidenceAudit,previewProspectiveForecast,schedulingPolicyAudit,eligibleCandidates,planActivities,planDueReviews,skipUnratedTarget,holdSessionQuestionForCorrection,holdQuestionForCorrection,updateQuestionCorrectionDetails,releaseQuestionCorrectionHold,catchUpPreview,inspectStudyPriorities,buildReviewAgenda,forecastSchedule,setExactAnswerKey,exactKeyReady,previewLiteralCheck,literalDelayedAudit,recordAttempt,latestCorrectiveFeedback,assessmentCoverage,stats,demoDb};
 });

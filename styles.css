@@ -264,3 +264,8 @@
 @media(max-width:700px){.priority-compare{grid-template-columns:1fr}.priority-column{padding:10px}}
 @media(max-width:700px){.schedule-comparison{padding:10px}.schedule-days>div{grid-template-columns:1fr 1fr}.schedule-comparison-grid>*{padding:7px 5px;font-size:11px}}
 @media(max-width:700px){.rhythm-numbers{grid-template-columns:1fr!important}.rhythm-history{grid-template-columns:1fr}}
+.correction-item{align-items:flex-start;flex-wrap:wrap}
+.correction-item .rowbody{min-width:0;overflow-wrap:anywhere}
+.correction-item .document-outline{max-width:100%;margin-bottom:8px}
+.correction-item .document-outline textarea{max-width:100%}
+.correction-item .btnrow{flex-wrap:wrap}

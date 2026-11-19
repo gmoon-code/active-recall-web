@@ -1,4 +1,8 @@
-# Active Recall Web — Free Edition v4.23
+# Active Recall Web — Free Edition v4.24
+
+## Blueprint 4.24 — Explain why a question needs repair
+
+When a question seems unreliable during **Study Now**, choose a suspected issue category before **Flag for correction · skip**: unclear wording, a potentially wrong reference answer, a possible duplicate, irrelevance, or another issue. In **My Q&A → Questions needing correction**, you can update the category and write an optional private repair note (up to 500 characters). The reason and note persist in existing schema-v5 JSON backups and remain editable until you explicitly review and resume the question. Old holds without a reason still work. A flag describes a **suspected quality problem**, not proven inaccuracy or a failed recall attempt. These edits do not make a rating, change existing memory or due dates, or automatically unblock questions. No changes to the scheduler, local data privacy, offline operation or zero-cost hosting. [Read Blueprint 4.24](docs/BLUEPRINT_4_24_FREE.md).
 
 ## Blueprint 4.23 — Flag unreliable questions and repair them deliberately
 
