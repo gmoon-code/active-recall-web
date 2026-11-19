@@ -77,6 +77,7 @@ async function main(){
     assert.equal(restored.memory,original.memory);
     assert.equal(restored.attempts,original.attempts);
     await page.locator('.navbtn[data-page=study]').click();
+    await page.locator('[data-action=finish-session]').click();
     await page.locator('[data-action=new-session]').click();
     const preview=page.locator('.catchup-preview');await preview.waitFor();
     assert.equal(await preview.locator('.metric').first().innerText(),'2');
