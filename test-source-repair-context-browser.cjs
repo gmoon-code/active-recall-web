@@ -54,7 +54,7 @@ async function main(){
     assert.match(await modal.innerText(),/Check saved lecture evidence/);
     await modal.locator('.repair-source details').first().locator('summary').click();
     assert.match(await modal.innerText(),/Not an answer checker: <img/);
-    await modal.locator('[data-action=close-modal]').click();
+    await modal.locator('[data-action=close-modal]').first().click();
     await page.evaluate(async sourceId=>{
       const C=window.ActiveRecallCore,S=window.ActiveRecallStorage,{db}=await S.load();
       C.reviseSource(db,sourceId,{title:'Carbon and energy revised',content:'Updated lecture: water provides oxygen gas. The sugar-carbon statement was removed.'});
