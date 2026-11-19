@@ -1661,6 +1661,114 @@
       modelComparisonAvailable:false,
       warning:'Only observed learner self-ratings, strict literal agreement, and unblinded manual criterion judgments are available. Their meanings differ, so they must not be pooled as verified recall. Due-date and shadow interval snapshots are NOT predictions. Prospective numeric forecasts, when present, are two UNFITTED interval-anchored mathematical hypotheses, not FSRS or calibrated probabilities; their chosen 90% due-day anchor is arbitrary. A future evaluation must reserve later records, assess label quality and selection bias, and avoid retrofitting older outcomes. This audit does not train or compare FSRS, prove a superior policy, or modify scheduling.'};
   }
+  // v4.20: evaluate only pre-answer, version-matched *observations*. The two
+  // unfitted mathematical shapes are never used to schedule a review. We do
+  // not interpret learner ratings as outcome labels or merge fundamentally
+  // different literal/manual judgment tasks into a single "accuracy" score.
+  function prospectiveEvidenceAudit(db,{minDelayHours=24}={}){
+    if(!Number.isFinite(minDelayHours)||minDelayHours<1||minDelayHours>720)
+      throw Error('Delayed-evidence threshold must be between 1 and 720 hours.');
+    const raw=Array.isArray(db.attempts)?db.attempts:[],source=raw.slice(-50000);
+    const ordered=source.map((a,index)=>({a:a||{},index,t:Date.parse(a?.createdAt||'')}))
+      .sort((x,y)=>(Number.isFinite(x.t)?x.t:Infinity)-(Number.isFinite(y.t)?y.t:Infinity)||x.index-y.index);
+    const keyOf=a=>typeof a.requirementId==='string'&&a.requirementId&&
+      typeof a.retrievalTargetId==='string'&&a.retrievalTargetId&&
+      Number.isSafeInteger(a.requirementVersion)&&a.requirementVersion>0&&
+      Number.isSafeInteger(a.retrievalTargetVersion)&&a.retrievalTargetVersion>0?
+        JSON.stringify([a.requirementId,a.requirementVersion,a.retrievalTargetId,a.retrievalTargetVersion]):null;
+    const nextByIndex=new Map(),nextByTarget=new Map();
+    for(let i=ordered.length-1;i>=0;i--){
+      const {a,t}=ordered[i];if(!Number.isFinite(t)||!a.retrievalTargetId)continue;
+      nextByIndex.set(i,nextByTarget.get(a.retrievalTargetId)??null);
+      nextByTarget.set(a.retrievalTargetId,t);
+    }
+    const groups={literalRecall:[],selfExplain:[],selfApply:[],otherExplain:[],otherApply:[]};
+    const excluded={noReceipt:0,invalidOrUnlinkedReceipt:0,firstOrChangedVersion:0,
+      tooSoon:0,assistedOrImmediate:0,noWrittenAnswer:0,unverifiedRequirement:0,
+      withoutUsableLabel:0,lateOrInvalidHumanReview:0,inconclusiveHumanReview:0};
+    const prior=new Map();let linkedReceipts=0;
+    for(let i=0;i<ordered.length;i++){
+      const {a,t}=ordered[i],key=keyOf(a),f=a.prospectiveForecast;
+      const previous=key?prior.get(key):null;
+      if(key&&Number.isFinite(t))prior.set(key,{t,a}); // Assisted work still resets the interval.
+      if(!f){excluded.noReceipt++;continue;}
+      if(!key||!Number.isFinite(t)||!validProspectiveForecast(f,a)){
+        excluded.invalidOrUnlinkedReceipt++;continue;
+      }
+      if(!previous||t<=previous.t){excluded.firstOrChangedVersion++;continue;}
+      if(f.priorReviewedAt!==previous.a.createdAt||Date.parse(f.capturedAt)<previous.t){
+        excluded.invalidOrUnlinkedReceipt++;continue;
+      }
+      linkedReceipts++;
+      if((t-previous.t)/3600000<minDelayHours||
+         (Date.parse(f.capturedAt)-previous.t)/3600000<minDelayHours){
+        excluded.tooSoon++;continue;
+      }
+      if(a.assisted||a.practiceStage==='immediate_post_study'){
+        excluded.assistedOrImmediate++;continue;
+      }
+      if(inputModeFor(a)!=='written'||typeof a.response!=='string'||!a.response.trim()){
+        excluded.noWrittenAnswer++;continue;
+      }
+      if(a.requirementVerified===false){excluded.unverifiedRequirement++;continue;}
+      const row=(positive)=>({target:a.retrievalTargetId,positive:positive?1:0,
+        exponential:f.exponential,hyperbolic:f.hyperbolic});
+      if(a.activityKind==='recall'&&a.literalCheck?.version===1&&
+         a.literalCheck.method==='literal-match-v1'&&typeof a.literalCheck.matched==='boolean'&&
+         Array.isArray(a.literalCheck.acceptedSnapshot)&&a.literalCheck.acceptedSnapshot.length&&
+         a.literalCheck.matched===a.literalCheck.acceptedSnapshot.some(x=>
+           normaliseExactAnswer(x)===normaliseExactAnswer(a.response))){
+        groups.literalRecall.push(row(a.literalCheck.matched));continue;
+      }
+      if((a.activityKind==='explain'||a.activityKind==='apply')&&H.eligibility(a).ok){
+        const review=a.humanReviews?.[a.humanReviews.length-1];
+        if(review?.schema===1&&review.method==='manual-criterion-review-v1'&&
+           review.responseFingerprint===H.fingerprint(a.response)&&
+           review.requirementVersion===a.requirementVersion&&
+           review.targetVersion===a.retrievalTargetVersion&&
+           ['self','other_person'].includes(review.reviewerRole)&&
+           ['all_supported','gap_identified','inconclusive'].includes(review.finding)){
+          const time=Date.parse(review.reviewedAt),next=nextByIndex.get(i);
+          if(!Number.isFinite(time)||time<t||next!==null&&next!==undefined&&time>next){
+            excluded.lateOrInvalidHumanReview++;continue;
+          }
+          if(review.finding==='inconclusive'){
+            excluded.inconclusiveHumanReview++;continue;
+          }
+          const stream=(review.reviewerRole==='self'?'self':'other')+
+            (a.activityKind==='explain'?'Explain':'Apply');
+          groups[stream].push(row(review.finding==='all_supported'));continue;
+        }
+      }
+      excluded.withoutUsableLabel++;
+    }
+    // Conservative display gate; counts are not a proof of statistical power.
+    // Give each target equal weight so repeated reviews of one item cannot
+    // entirely determine the descriptive error of a cohort.
+    const gate={minAttempts:50,minTargets:15,minPositive:10,minNegative:10};
+    const summarise=rows=>{
+      const targetRows=new Map();let positives=0;
+      for(const r of rows){
+        positives+=r.positive;
+        if(!targetRows.has(r.target))targetRows.set(r.target,[]);
+        targetRows.get(r.target).push(r);
+      }
+      const n=rows.length,negatives=n-positives;
+      const scoreable=n>=gate.minAttempts&&targetRows.size>=gate.minTargets&&
+        positives>=gate.minPositive&&negatives>=gate.minNegative;
+      const targetBrier=shape=>{
+        const perTarget=[...targetRows.values()].map(list=>list.reduce((sum,r)=>
+          sum+(r[shape]-r.positive)**2,0)/list.length);
+        return Math.round(perTarget.reduce((sum,v)=>sum+v,0)/perTarget.length*10000)/10000;
+      };
+      return {attempts:n,distinctTargets:targetRows.size,positiveLabels:positives,negativeLabels:negatives,
+        scores:scoreable?{exponential:targetBrier('exponential'),hyperbolic:targetBrier('hyperbolic')}:null};
+    };
+    return {version:1,processed:source.length,olderAttemptsNotAudited:raw.length-source.length,
+      linkedReceipts,groups:Object.fromEntries(Object.entries(groups).map(([key,rows])=>[key,summarise(rows)])),
+      excluded,displayGate:gate,modelFitted:false,activePolicyChanged:false,
+      warning:'Scores, if ever displayed, are TARGET-BALANCED Brier errors for separate observed literal-string agreements or human rubric classifications, not verified memory accuracy. Smaller is closer to that narrow binary label, not proof of a better scheduler. Both curves are arbitrarily anchored at 90% when due, untrained and NOT FSRS. Observations are selected by the current scheduler, repeat targets, lack blinded labels, and are not an independent holdout or causal comparison. Withheld groups are not scored. No review dates, priorities or historical records are changed.'};
+  }
   function recordAttempt(db,{requirementId,targetId=null,activityId=null,response='',rating,assisted=false,sessionId=null,questionUsed=null,inputMode=null,durationSeconds=null,criterionChecks=[],correctionNote='',practiceStage=null,prospectiveForecast=null,now=new Date()}){
     const r=db.requirements.find(x=>x.id===requirementId);if(!r)throw Error('Requirement does not exist.');
     if(!['again','hard','good','easy'].includes(rating))throw Error('Invalid rating.');
@@ -1799,5 +1907,5 @@
   }
   function validateImport(x){return migrateDb(x);}
 
-  return {DAY,id,today,addDays,daysUntil,initialDb,migrateDb,validateImport,getTarget,getTargets,getMemory,getActivities,getCriteria,addCriterion,proposeCriteria,rubricQualityReview,addRubricEvidenceDraft,reviseCriterion,setCriterionAlternatives,rubricSyllabusAlignment,setCriterionSyllabusGoals,verifyCriterion,archiveCriterion,criterionStatus,rubricProgress,chooseActivity,addRetrievalTarget,verifyRetrievalTarget,addActivityVariant,deactivateActivity,reviseSource,addCourse,addSyllabusObjectives,updateSyllabusObjective,archiveSyllabusObjective,setSyllabusLink,setSyllabusMaterialsReady,setSyllabusLearningGuide,guidedLearningInfo,syllabusCoverage,draftRequirements,addSource,addImportedDocument,addRequirement,previewManualQuestionImport,importManualQuestionList,addManualQuestionBatch,archiveRequirements,restoreRequirement,purgeArchivedRequirements,editRequirement,verifyRequirement,questionQualityAudit,confirmQuestionQuality,integrity:I.integrity,questionCoverage:I.questionCoverage,questionWarnings:I.questionWarnings,learningObjectiveMap,variationStudio,questionStudio,adoptQuestionProposal,coverageReviewQueue,addAssessment,linkedAssessments,estimatedSeconds,durationEstimate,evidenceType,inputModeFor,evidenceSummary,delayedRetrievalAudit,memoryModelReadinessAudit,previewProspectiveForecast,schedulingPolicyAudit,eligibleCandidates,planActivities,inspectStudyPriorities,buildReviewAgenda,forecastSchedule,setExactAnswerKey,exactKeyReady,previewLiteralCheck,literalDelayedAudit,recordAttempt,latestCorrectiveFeedback,assessmentCoverage,stats,demoDb};
+  return {DAY,id,today,addDays,daysUntil,initialDb,migrateDb,validateImport,getTarget,getTargets,getMemory,getActivities,getCriteria,addCriterion,proposeCriteria,rubricQualityReview,addRubricEvidenceDraft,reviseCriterion,setCriterionAlternatives,rubricSyllabusAlignment,setCriterionSyllabusGoals,verifyCriterion,archiveCriterion,criterionStatus,rubricProgress,chooseActivity,addRetrievalTarget,verifyRetrievalTarget,addActivityVariant,deactivateActivity,reviseSource,addCourse,addSyllabusObjectives,updateSyllabusObjective,archiveSyllabusObjective,setSyllabusLink,setSyllabusMaterialsReady,setSyllabusLearningGuide,guidedLearningInfo,syllabusCoverage,draftRequirements,addSource,addImportedDocument,addRequirement,previewManualQuestionImport,importManualQuestionList,addManualQuestionBatch,archiveRequirements,restoreRequirement,purgeArchivedRequirements,editRequirement,verifyRequirement,questionQualityAudit,confirmQuestionQuality,integrity:I.integrity,questionCoverage:I.questionCoverage,questionWarnings:I.questionWarnings,learningObjectiveMap,variationStudio,questionStudio,adoptQuestionProposal,coverageReviewQueue,addAssessment,linkedAssessments,estimatedSeconds,durationEstimate,evidenceType,inputModeFor,evidenceSummary,delayedRetrievalAudit,memoryModelReadinessAudit,prospectiveEvidenceAudit,previewProspectiveForecast,schedulingPolicyAudit,eligibleCandidates,planActivities,inspectStudyPriorities,buildReviewAgenda,forecastSchedule,setExactAnswerKey,exactKeyReady,previewLiteralCheck,literalDelayedAudit,recordAttempt,latestCorrectiveFeedback,assessmentCoverage,stats,demoDb};
 });

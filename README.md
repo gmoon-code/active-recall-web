@@ -1,4 +1,8 @@
-# Active Recall Web — Free Edition v4.19
+# Active Recall Web — Free Edition v4.20
+
+## Blueprint 4.20 — Inspect prospective prediction evidence
+
+Open **Progress → Prospective prediction evidence check**. The new **read-only** quality audit pairs v4.19's frozen pre-answer curve guesses with real delayed written outcomes, while separating exact short-fact literal agreement from learner-reviewed and other-person-reviewed explanations or applications. It excludes first/revised targets, hints, short delays, non-written responses and unreviewable labels. Descriptive target-balanced Brier errors are **withheld** until each separate evidence stream has at least 50 observations across 15 targets and includes both positive and negative labels. Even then, the values concern **unfitted mathematical curves and narrow recorded labels**, not FSRS, verified memory accuracy or proof that a changed study policy would work better. The same review intervals, question selection, local schema-v5 data and permanently free hosting remain. [Read Blueprint 4.20](docs/BLUEPRINT_4_20_FREE.md).
 
 ## Blueprint 4.19 — Freeze experimental forecasts before studying
 
