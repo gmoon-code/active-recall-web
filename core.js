@@ -1246,6 +1246,32 @@
   }
   function requirementEligible(r){return r.active&&!r.studyHold&&!r.sourceRevisionPending&&(r.origin!=='rule_draft'||r.verificationStatus==='verified')&&!((r.possibleConflictWith||r.possibleDuplicateOf)&&r.origin==='rule_draft'&&!r.verifiedAt);}
   const CORRECTION_REASONS=['unspecified','unclear','suspected_error','possible_duplicate','not_relevant','other'];
+  // A read-only source comparison for question repair. Exact character offsets
+  // confirm text provenance only, never scientific correctness of the answer.
+  function questionRepairSourceContext(db,requirementId,{radius=260}={}){
+    const r=db.requirements.find(x=>x.id===requirementId&&x.active!==false);
+    if(!r)throw Error('Active question not found.');
+    if(!r.sourceId)return {status:'unlinked'};
+    const source=db.sources.find(s=>s.id===r.sourceId&&s.courseId===r.courseId);
+    if(!source)return {status:'source_unavailable'};
+    const currentVersion=source.version||1,linkedVersion=r.sourceVersion||currentVersion;
+    const snapshot=(db.sourceVersions||[]).find(v=>v.sourceId===source.id&&v.version===linkedVersion);
+    const linkedContent=typeof snapshot?.content==='string'?snapshot.content:
+      linkedVersion===currentVersion?source.content:null;
+    const quote=typeof r.sourceQuote==='string'?r.sourceQuote:'';
+    const at=r.sourceStart;
+    const exact=typeof linkedContent==='string'&&quote.length>0&&Number.isInteger(at)&&at>=0&&
+      linkedContent.slice(at,at+quote.length)===quote;
+    const span=Number.isInteger(radius)?Math.max(0,Math.min(800,radius)):260;
+    const start=exact?Math.max(0,at-span):0;
+    const end=exact?Math.min(linkedContent.length,at+quote.length+span):0;
+    return {status:'linked',sourceId:source.id,linkedTitle:snapshot?.title||source.title,currentTitle:source.title,
+      linkedVersion,currentVersion,revised:linkedVersion!==currentVersion,
+      linkedContent,currentContent:source.content,sourceQuote:quote,exactQuote:exact,
+      passageBefore:exact?linkedContent.slice(start,at):'',
+      passageQuote:exact?quote:'',passageAfter:exact?linkedContent.slice(at+quote.length,end):'',
+      openingPreview:!exact&&typeof linkedContent==='string'?linkedContent.slice(0,900):''};
+  }
   function correctionDetails(reason='unspecified',note=''){
     if(!CORRECTION_REASONS.includes(reason))throw Error('Choose a supported correction reason.');
     if(typeof note!=='string'||note.length>500)throw Error('Correction note must be at most 500 characters.');
@@ -2022,5 +2048,5 @@
   }
   function validateImport(x){return migrateDb(x);}
 
-  return {DAY,id,today,addDays,daysUntil,initialDb,migrateDb,validateImport,getTarget,getTargets,getMemory,getActivities,getCriteria,addCriterion,proposeCriteria,rubricQualityReview,addRubricEvidenceDraft,reviseCriterion,setCriterionAlternatives,rubricSyllabusAlignment,setCriterionSyllabusGoals,verifyCriterion,archiveCriterion,criterionStatus,rubricProgress,chooseActivity,addRetrievalTarget,verifyRetrievalTarget,addActivityVariant,deactivateActivity,reviseSource,addCourse,addSyllabusObjectives,updateSyllabusObjective,archiveSyllabusObjective,setSyllabusLink,setSyllabusMaterialsReady,setSyllabusLearningGuide,guidedLearningInfo,syllabusCoverage,draftRequirements,addSource,addImportedDocument,addRequirement,previewManualQuestionImport,importManualQuestionList,addManualQuestionBatch,archiveRequirements,restoreRequirement,purgeArchivedRequirements,editRequirement,verifyRequirement,questionQualityAudit,confirmQuestionQuality,integrity:I.integrity,questionCoverage:I.questionCoverage,questionWarnings:I.questionWarnings,learningObjectiveMap,variationStudio,questionStudio,adoptQuestionProposal,coverageReviewQueue,addAssessment,linkedAssessments,estimatedSeconds,durationEstimate,evidenceType,inputModeFor,evidenceSummary,delayedRetrievalAudit,memoryModelReadinessAudit,prospectiveEvidenceAudit,previewProspectiveForecast,schedulingPolicyAudit,eligibleCandidates,planActivities,planDueReviews,skipUnratedTarget,holdSessionQuestionForCorrection,holdQuestionForCorrection,updateQuestionCorrectionDetails,releaseQuestionCorrectionHold,catchUpPreview,inspectStudyPriorities,buildReviewAgenda,forecastSchedule,setExactAnswerKey,exactKeyReady,previewLiteralCheck,literalDelayedAudit,recordAttempt,latestCorrectiveFeedback,assessmentCoverage,stats,demoDb};
+  return {DAY,id,today,addDays,daysUntil,initialDb,migrateDb,validateImport,getTarget,getTargets,getMemory,getActivities,getCriteria,addCriterion,proposeCriteria,rubricQualityReview,addRubricEvidenceDraft,reviseCriterion,setCriterionAlternatives,rubricSyllabusAlignment,setCriterionSyllabusGoals,verifyCriterion,archiveCriterion,criterionStatus,rubricProgress,chooseActivity,addRetrievalTarget,verifyRetrievalTarget,addActivityVariant,deactivateActivity,reviseSource,addCourse,addSyllabusObjectives,updateSyllabusObjective,archiveSyllabusObjective,setSyllabusLink,setSyllabusMaterialsReady,setSyllabusLearningGuide,guidedLearningInfo,syllabusCoverage,draftRequirements,addSource,addImportedDocument,addRequirement,previewManualQuestionImport,importManualQuestionList,addManualQuestionBatch,archiveRequirements,restoreRequirement,purgeArchivedRequirements,editRequirement,verifyRequirement,questionQualityAudit,confirmQuestionQuality,integrity:I.integrity,questionCoverage:I.questionCoverage,questionWarnings:I.questionWarnings,learningObjectiveMap,variationStudio,questionStudio,adoptQuestionProposal,coverageReviewQueue,addAssessment,linkedAssessments,estimatedSeconds,durationEstimate,evidenceType,inputModeFor,evidenceSummary,delayedRetrievalAudit,memoryModelReadinessAudit,prospectiveEvidenceAudit,previewProspectiveForecast,schedulingPolicyAudit,eligibleCandidates,planActivities,planDueReviews,skipUnratedTarget,holdSessionQuestionForCorrection,holdQuestionForCorrection,questionRepairSourceContext,updateQuestionCorrectionDetails,releaseQuestionCorrectionHold,catchUpPreview,inspectStudyPriorities,buildReviewAgenda,forecastSchedule,setExactAnswerKey,exactKeyReady,previewLiteralCheck,literalDelayedAudit,recordAttempt,latestCorrectiveFeedback,assessmentCoverage,stats,demoDb};
 });

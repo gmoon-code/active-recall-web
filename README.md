@@ -1,4 +1,8 @@
-# Active Recall Web — Free Edition v4.24
+# Active Recall Web — Free Edition v4.25
+
+## Blueprint 4.25 — Compare flagged questions with saved lecture notes
+
+**My Q&A → Questions needing correction** now includes a read-only **Check saved lecture evidence** panel for every flagged question. When a source excerpt is anchored by an exact character position in the originally linked source version, the panel highlights that passage with nearby context. Otherwise, it clearly identifies unverified or missing provenance—including self-authored questions that have no linked notes. **Edit Q&A** keeps your quality-repair note visible and offers the complete linked notes; when the lecture was revised, it offers both the original and the current versions separately so edits do not silently reinterpret older evidence. Exact text matching is **not scientific validation** of the reference answer. This is a read-only repair aid: it does not create a rating, release a hold, change review priorities, or rewrite a due date. All source material stays in your browser; schema-v5 JSON backups, free hosting, and offline operation remain unchanged. [Read Blueprint 4.25](docs/BLUEPRINT_4_25_FREE.md).
 
 ## Blueprint 4.24 — Explain why a question needs repair
 
