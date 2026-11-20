@@ -95,6 +95,63 @@
       medianShadowDays:median(rows.map(x=>x.shadowIntervalDays)),exclusions,rows,
       warning:'This replays only complete, same-version, unassisted written learner-rated histories available by the preview date with default FSRS-7 weights. It does not optimize personal parameters, validate actual memory, compare causal learning benefits, or estimate grades. Self-reported studying outside the app is not treated as a recall rating. Its 90% desired retention is a provisional comparison setting, NOT a proven optimum. Excluded histories are not repaired or guessed. The shadow dates are NEVER written to saved memory, sessions or the automatic calendar; the existing transparent interval policy remains active.'};
   }
+  // Freeze an FSRS-7 default-weight guess before a real answer is shown. This
+  // is deliberately more restrictive than ordinary study eligibility: only a
+  // complete same-version, independently written, unassisted review sequence
+  // can be replayed. Null means no defensible model receipt, NOT zero recall.
+  async function forecastProbability(db,{Core=null,Vendor=null,now=new Date(),
+    requirementId,targetId,activityId}={}){
+    const C=Core||(typeof module==='object'&&module.exports?require('./core.js'):globalThis.ActiveRecallCore);
+    const V=Vendor||(typeof globalThis!=='undefined'?globalThis.ActiveRecallFSRSVendor:null);
+    if(typeof V?.DefaultScheduler!=='function')throw Error('The bundled FSRS scheduler is unavailable.');
+    if(!C||typeof C.previewProspectiveForecast!=='function')throw Error('Active Recall core is unavailable.');
+    if(!(now instanceof Date)||!Number.isFinite(now.getTime()))throw Error('Invalid forecast time.');
+    const baseline=C.previewProspectiveForecast(db,{requirementId,targetId,activityId,now});
+    if(!baseline)return null;
+    const candidate=C.eligibleCandidates(db,now).find(c=>c.target.id===targetId&&
+      c.req.id===requirementId&&c.activity.id===activityId);
+    if(!candidate)return null;
+    const memory=db.memory[targetId],raw=(db.attempts||[]).filter(a=>a.retrievalTargetId===targetId);
+    const history=raw.filter(a=>a.requirementId===requirementId&&
+      a.requirementVersion===candidate.req.version&&a.retrievalTargetVersion===candidate.target.version)
+      .sort((a,b)=>Date.parse(a.createdAt)-Date.parse(b.createdAt));
+    if(!history.length||history.length!==raw.length||history.length!==memory.reviewCount||
+       history.at(-1).createdAt!==memory.lastReviewedAt||
+       (history.at(-1).scheduleRating||history.at(-1).rating)!==memory.lastRating)return null;
+    const grades={again:V.Rating.Again,hard:V.Rating.Hard,good:V.Rating.Good,easy:V.Rating.Easy};
+    let last=-Infinity;
+    for(const a of history){
+      const t=Date.parse(a.createdAt);
+      if(!Number.isFinite(t)||t<=last||t>now.getTime()||!grades[a.scheduleRating||a.rating]||
+         a.assisted||a.practiceStage==='immediate_post_study'||a.inputMode!=='written'||
+         typeof a.response!=='string'||!a.response.trim()||a.requirementVerified!==true)return null;
+      last=t;
+    }
+    const scheduler=await V.DefaultScheduler({version:'FSRS-7',desiredRetention:0.9,
+      enableShortTerm:false,learningSteps:[],relearningSteps:[],enableFuzz:false,
+      maximumInterval:36500});
+    try{
+      let card=scheduler.newCard({cardId:targetId,now:new Date(history[0].createdAt)});
+      for(const a of history)card=scheduler.review({card,
+        grade:grades[a.scheduleRating||a.rating],now:new Date(a.createdAt)}).card;
+      // Date.parse(Date) stringifies and silently drops milliseconds. Real
+      // browser attempts nearly always have fractional seconds; keep them.
+      const replayedAt=card.lastReviewAt instanceof Date?
+        card.lastReviewAt.getTime():Date.parse(card.lastReviewAt);
+      if(replayedAt!==Date.parse(memory.lastReviewedAt))return null;
+      const elapsed=scheduler.chrono.difference(card.lastReviewAt,now);
+      if(!Number.isFinite(elapsed)||elapsed<0)return null;
+      const probability=scheduler.model.forgettingCurve(card,elapsed);
+      if(!Number.isFinite(probability)||probability<0||probability>1)return null;
+      return {version:1,method:'fsrs-7-default-probability-v1',model:'FSRS-7',
+        modelFitted:false,policy:'default-weights-shadow-v1',desiredRetention:0.9,
+        capturedAt:baseline.capturedAt,requirementId,requirementVersion:baseline.requirementVersion,
+        targetId,targetVersion:baseline.targetVersion,activityId,activityVersion:baseline.activityVersion,
+        priorReviewedAt:baseline.priorReviewedAt,priorDueAt:baseline.priorDueAt,
+        priorIntervalDays:baseline.priorIntervalDays,historyCount:history.length,
+        probability:Math.round(probability*1000000)/1000000};
+    }catch{return null;}
+  }
   // A one-step calendar sensitivity analysis. The temporary copy substitutes
   // eligible *next* due dates only. All later revisit windows keep the same
   // conditional agenda heuristic, because no future learner grades exist.
@@ -145,5 +202,5 @@
       current:summarize(baseline),hybrid:summarize(hybrid),movements,examCoverage,
       warning:'A partial, read-only calendar sensitivity scenario: only eligible targets get hypothetical FSRS-7 next due dates. Excluded and uninspected targets retain their real dates. Both calendars use the same capacity, missed days, exam adjustments and conditional later-revisit heuristic; no future responses are assumed. First passes and exam coverage are opportunities, not verified learning or predicted grades. No saved due dates, attempts, calendar preferences or automatic schedules change.'}};
   }
-  return {compare,compareCalendar};
+  return {compare,compareCalendar,forecastProbability};
 });

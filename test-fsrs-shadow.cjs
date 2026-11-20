@@ -33,6 +33,64 @@ test('official FSRS-7 browser bundle replays real recorded grades in shadow with
   assert.deepEqual(await Shadow.compare(f.db,{Core:C,Vendor,now:at(10)}),a);
 });
 
+test('FSRS-7 freezes a reproducible pre-answer probability only from complete independent history',async()=>{
+  const f=fixture();for(const day of [0,3,9])f.attempt(day);
+  const input={Core:C,Vendor,requirementId:f.req.id,targetId:f.target.id,
+    activityId:f.activity.id,now:at(10)},before=JSON.stringify(f.db);
+  const p=await Shadow.forecastProbability(f.db,input);
+  assert.ok(p,'Expected a valid prospective FSRS guess');
+  assert.equal(p.method,'fsrs-7-default-probability-v1');
+  assert.equal(p.modelFitted,false);
+  assert.equal(p.historyCount,3);
+  assert.equal(p.capturedAt,at(10).toISOString());
+  assert.ok(p.probability>0&&p.probability<1);
+  assert.deepEqual(await Shadow.forecastProbability(f.db,input),p);
+  assert.equal(JSON.stringify(f.db),before);
+  const precise=fixture(),base=Date.parse('2026-11-01T12:00:00.374Z');
+  for(const day of [0,5,10])precise.attempt(day,{now:new Date(base+day*86400000)});
+  const preciseForecast=await Shadow.forecastProbability(precise.db,{Core:C,Vendor,
+    requirementId:precise.req.id,targetId:precise.target.id,
+    activityId:precise.activity.id,now:new Date(base+20*86400000+93)});
+  assert.ok(preciseForecast,'FSRS Date timestamps must retain milliseconds on real attempts');
+  assert.equal(await Shadow.forecastProbability(f.db,{...input,now:at(8)}),null,
+    'A preview cannot replay future evidence');
+  const bad=fixture();bad.attempt(0);bad.attempt(3,{assisted:true});
+  assert.equal(await Shadow.forecastProbability(bad.db,{Core:C,Vendor,
+    requirementId:bad.req.id,targetId:bad.target.id,
+    activityId:bad.activity.id,now:at(4)}),null);
+  const partial=fixture();partial.attempt(0);partial.db.memory[partial.target.id].reviewCount++;
+  assert.equal(await Shadow.forecastProbability(partial.db,{Core:C,Vendor,
+    requirementId:partial.req.id,targetId:partial.target.id,
+    activityId:partial.activity.id,now:at(3)}),null);
+});
+
+test('frozen FSRS receipt is optional, survives backup and never changes active scheduling',async()=>{
+  const first=fixture();for(const day of [0,3,9])first.attempt(day);
+  const other=C.validateImport(JSON.parse(JSON.stringify(first.db))),now=at(10);
+  const props={requirementId:first.req.id,targetId:first.target.id,activityId:first.activity.id};
+  const prospective=C.previewProspectiveForecast(first.db,{...props,now});
+  const fsrs=await Shadow.forecastProbability(first.db,{Core:C,Vendor,...props,now});
+  assert.ok(prospective&&fsrs);
+  const options={...props,response:'A proton gradient.',rating:'good',now};
+  const predicted=C.recordAttempt(first.db,{...options,prospectiveForecast:prospective,fsrsForecast:fsrs});
+  const ordinary=C.recordAttempt(other,options);
+  assert.equal(predicted.dueAt,ordinary.dueAt);
+  assert.deepEqual(first.db.memory,other.memory);
+  assert.deepEqual(predicted.attempt.fsrsForecast,fsrs);
+  assert.deepEqual(C.validateImport(JSON.parse(JSON.stringify(first.db))),JSON.parse(JSON.stringify(first.db)));
+  assert.equal(C.memoryModelReadinessAudit(first.db).fsrsShadowForecastReceipts,1);
+  assert.equal(C.memoryModelReadinessAudit(other).fsrsShadowForecastReceipts,0);
+  const tampered=JSON.parse(JSON.stringify(first.db));
+  tampered.attempts.at(-1).fsrsForecast.probability=1.5;
+  assert.throws(()=>C.validateImport(tampered),/Invalid FSRS shadow forecast/);
+  const wrongLink=JSON.parse(JSON.stringify(first.db));
+  wrongLink.attempts.at(-1).fsrsForecast.targetId='another-target';
+  assert.throws(()=>C.validateImport(wrongLink),/Invalid FSRS shadow forecast/);
+  const noBaseline=JSON.parse(JSON.stringify(first.db));
+  delete noBaseline.attempts.at(-1).prospectiveForecast;
+  assert.throws(()=>C.validateImport(noBaseline),/Invalid FSRS shadow forecast/);
+});
+
 test('missing, legacy and unverifiable histories are excluded rather than reconstructed',async()=>{
   const a=fixture();a.attempt(0);a.attempt(3,{assisted:true});
   assert.equal((await Shadow.compare(a.db,{Core:C,Vendor,now:at(4)})).exclusions.assistedOrImmediate,1);

@@ -6,6 +6,9 @@
   let focusedLecture='', editingQuestionId=null, lastWrittenLecture='', lastWrittenSourceId='', pendingQuestionImport=null;
   let schedulePreview=null;
   let fsrsShadowResult=null,fsrsShadowBusy=false,fsrsShadowGeneration=0;
+  // Ephemeral until a genuine rated attempt: never save an experimental guess
+  // as a completed review or show it while the answer is still hidden.
+  let fsrsPreAnswerReceipt=null,fsrsPreAnswerGeneration=0;
   let selectingQuestions=false, selectedQuestionIds=new Set(),permanentDeleteBusy=false;
   let guidedGoalId=null, guidedStep='source', guidedAnswer='', guidedRevealed=false, guidedStartedAt=0;
   let outlookSettings={days:21,weekdayMinutes:25,weekendMinutes:60,missedDates:[]};
@@ -67,7 +70,7 @@
   function empty(title,desc,cta='',action=''){return `<div class="empty"><div class="bigemoji">✧</div><h2>${esc(title)}</h2><p>${esc(desc)}</p>${cta?`<button class="btn primary" data-action="${action}">${esc(cta)}</button>`:''}</div>`;}
   const nav=[['home','◫','Overview'],['capture','✎','Capture'],['questions','?','My Q&A'],['study','◉','Study Now'],['courses','▤','Knowledge'],['assessments','▦','Assessments'],['forecast','◴','Calendar'],['insights','◷','Progress']];
   function sidebar(){return `<aside class="sidebar"><div class="brand"><span class="mark">✳</span><span>active<span style="color:#176d5e">recall</span></span></div><nav class="nav" aria-label="Main navigation">${nav.map(([key,icon,label])=>`<button class="navbtn ${page===key?'active':''}" data-action="navigate" data-page="${key}" ${page===key?'aria-current="page"':''}><span class="navicon">${icon}</span>${label}</button>`).join('')}</nav><div class="sidefoot"><strong><span class="statusdot"></span>100% free · Browser-local</strong><p>Hosted as a static site. No payments, API keys, accounts, or cloud sync. Export backups regularly.</p></div></aside>`;}
-  function header(){return `<div class="topline"><div class="path">ACTIVE RECALL WEB <span style="color:#b7c4bd">/</span> ${esc(nav.find(x=>x[0]===page)?.[2]||(page==='guided'?'Guided learning':''))}</div><div class="topright"><span class="tag">Blueprint 4.27 · Free</span><span class="avatar" aria-label="Local learner profile">A</span></div></div>`;}
+  function header(){return `<div class="topline"><div class="path">ACTIVE RECALL WEB <span style="color:#b7c4bd">/</span> ${esc(nav.find(x=>x[0]===page)?.[2]||(page==='guided'?'Guided learning':''))}</div><div class="topright"><span class="tag">Blueprint 4.28 · Free</span><span class="avatar" aria-label="Local learner profile">A</span></div></div>`;}
   function shell(content){return `<div class="app">${sidebar()}<main class="main">${header()}${content}<div class="footer">Free &amp; static · Notes stay in this browser · Export backups · Review generated drafts before relying on them · <a href="./health.html">Site diagnostics</a></div></main></div>${modalReqId?editModal():''}${qualityReqId?questionQualityModal():''}${modalSourceId?editSourceModal():''}${studioSourceId?studioModal():''}${modalReviewId?humanReviewModal():''}${modalPairId?PU.modal({db,esc,courseName,attemptId:modalPairId}):''}`;}
   function dashboard(){const integrity=C.integrity(db);const s=C.stats(db),preview=C.planActivities(db,15).items.slice(0,4),topUpcoming=s.upcoming.slice(0,3),ready=C.planActivities(db,duration).items.length>0,ongoing=activeSession()?.status==='active';
     const startAction=ongoing?'data-action="navigate" data-page="study"':'data-action="start-session"',startLabel=ongoing?'Continue studying':`Study now · ${duration} min`;
@@ -532,6 +535,7 @@ A">${esc((a.exactAnswerKey?.answers||[]).join('\n'))}</textarea><label class="ch
       <div class="grid cols3" style="margin:16px 0">${metric('Comparable delayed answers',a.comparableDelayedWritten,'Written, unassisted · self-reported')}${metric('Distinct targets',a.comparableDistinctTargets,'Across all eligible answer types')}${metric('Prospective forecast receipts',a.prospectiveProbabilityForecasts,'Two unfitted curves per receipt · not FSRS')}</div>
       <div class="list">${sources.map(([label,s,note])=>`<div class="listrow"><div class="rowbody"><strong>${esc(label)}</strong><small>${esc(note)} · ${s.distinctTargets} distinct targets · ${s.withProspectiveForecast} with pre-answer forecasts</small></div><span class="pill blue">${s.attempts} delayed records</span></div>`).join('')}</div>
       <p class="small muted" style="margin-top:12px">${a.forecastEligibleDelayedWritten} comparable delayed written answer(s) have pre-answer receipts. The two fixed mathematical shapes assume an arbitrary 90% value at the existing review interval; they are <strong>not</strong> measured retention, trained FSRS, or a scheduling recommendation. Predictions are never shown before answering and never determine the review date.</p>
+      <p class="small muted">Experimental FSRS-7 default-weight probabilities frozen before answering: <strong>${a.fsrsShadowForecastReceipts}</strong> receipt(s), including ${a.fsrsShadowEligibleDelayedWritten} with a later comparable delayed written answer. Only complete, same-version independent histories qualify. These receipts have <strong>not</strong> been scored, fitted or shown to be accurate. They cannot change study priorities, ratings, or due dates.</p>
       <details class="document-outline"><summary><strong>Could we reserve later records for an evaluation?</strong> <span class="small muted">Inspect chronology and exclusions</span></summary>
         <p class="small muted" style="margin-top:12px">Illustrative earliest 80% / latest 20% split, <strong>within each separate label type</strong>; these are only possible partitions, not training or test results. Repeated targets can occur on both sides, and the latest 20% is not an independent study.</p>
         ${sources.map(([label,s])=>`<p class="small">${esc(label)}: ${s.early} earlier · ${s.later} later records across ${s.laterDistinctTargets} later target(s).</p>`).join('')}
@@ -764,6 +768,20 @@ A">${esc((a.exactAnswerKey?.answers||[]).join('\n'))}</textarea><label class="ch
     if(page==='insights')$('#app .pagehead')?.insertAdjacentHTML('afterend',rhythmHistoryPanel());
     if(page==='home'&&db.courses.length)$('#app .hero')?.insertAdjacentHTML('afterend',scheduleFitPanel({compact:true}));
   }
+  function captureFsrsBeforeAnswer(se){
+    const generation=++fsrsPreAnswerGeneration,prior=se?.preAnswerForecast;
+    fsrsPreAnswerReceipt=null;
+    if(!prior||typeof FSRSShadow?.forecastProbability!=='function')return;
+    Promise.resolve().then(()=>FSRSShadow.forecastProbability(db,{Core:C,
+      Vendor:window.ActiveRecallFSRSVendor,requirementId:prior.requirementId,
+      targetId:prior.targetId,activityId:prior.activityId,
+      now:new Date(prior.capturedAt)})).then(receipt=>{
+      if(generation!==fsrsPreAnswerGeneration||se.status!=='active'||
+         se.showReference||se.preAnswerForecast!==prior||
+         se.currentTargetId!==prior.targetId)return;
+      fsrsPreAnswerReceipt=receipt;
+    }).catch(()=>{ /* A missing optional comparison never blocks studying. */ });
+  }
   function selectNext(se){
     const remain=Math.max(0,sessionRemainingMs(se)/60000),excluded=[...(se.completedIds||[]),...(se.skippedIds||[])],plan=(se.queueMode==='due_only'?C.planDueReviews:C.planActivities)(db,remain,excluded,se.courseCounts);
     let chosen=plan.items[0]||null;
@@ -781,6 +799,7 @@ A">${esc((a.exactAnswerKey?.answers||[]).join('\n'))}</textarea><label class="ch
     }
     se.currentReqId=chosen?.req.id||null;se.currentActivityId=chosen?.activity?.id||null;se.currentTargetId=chosen?.target?.id||null;se.draftAnswer='';se.showHint=false;se.showReference=false;se.assistedForCurrent=false;se.criterionDraft={};se.correctionDraft='';se.activityStartedElapsedMs=sessionElapsedMs(se);
     se.preAnswerForecast=chosen?C.previewProspectiveForecast(db,{requirementId:se.currentReqId,targetId:se.currentTargetId,activityId:se.currentActivityId,now:new Date()}):null;
+    captureFsrsBeforeAnswer(se);
     if(!se.currentReqId)finishSession(se);
   }
   function finishSession(se){if(!se||se.status!=='active')return;if(!se.paused){se.elapsedMs=sessionElapsedMs(se);se.paused=true;se.runningSince=null;}se.status='completed';se.completedAt=new Date().toISOString();se.currentReqId=null;se.preAnswerForecast=null;}
@@ -1007,7 +1026,7 @@ A">${esc((a.exactAnswerKey?.answers||[]).join('\n'))}</textarea><label class="ch
     case 'release-question-hold':if(window.confirm('I have checked the question and reference answer for correctness and clarity. Return it to automatic study?'))transact(()=>{C.releaseQuestionCorrectionHold(db,btn.dataset.id,{confirmed:true});});break;
     case 'hint':transact(()=>{if(se&&!se.paused){se.showHint=true;se.assistedForCurrent=true;}});break;
     case 'reveal':transact(()=>{if(se&&!se.paused){const field=$('#study-response');if(field)se.draftAnswer=field.value;se.showReference=true;}});break;
-    case 'rate':{if(!se||se.paused||!se.showReference)return;transact(()=>{const rid=se.currentReqId,req=reqById(rid);const rating=btn.dataset.rating;const age=Date.now()-Date.parse(se.preAnswerForecast?.capturedAt||'');const forecast=age>=0&&age<=6*3600000?se.preAnswerForecast:null;C.recordAttempt(db,{requirementId:rid,activityId:se.currentActivityId,targetId:se.currentTargetId,response:se.draftAnswer,rating,assisted:se.assistedForCurrent,sessionId:se.id,inputMode:$('#response-mode')?.value==='oral'?'oral':$('#response-mode')?.value==='mental'?'mental':null,durationSeconds:Math.max(0,Math.round((sessionElapsedMs(se)-(se.activityStartedElapsedMs??sessionElapsedMs(se)))/1000)),criterionChecks:Object.entries(se.criterionDraft||{}).map(([criterionId,status])=>({criterionId,status})),correctionNote:se.correctionDraft||'',prospectiveForecast:forecast});se.completedIds.push(se.currentTargetId);se.courseCounts[req.courseId]=(se.courseCounts[req.courseId]||0)+1;selectNext(se);});break;}
+    case 'rate':{if(!se||se.paused||!se.showReference)return;transact(()=>{const rid=se.currentReqId,req=reqById(rid);const rating=btn.dataset.rating;const age=Date.now()-Date.parse(se.preAnswerForecast?.capturedAt||'');const forecast=age>=0&&age<=6*3600000?se.preAnswerForecast:null;const m=db.memory[se.currentTargetId],receipt=fsrsPreAnswerReceipt;const fsrsForecast=forecast&&receipt&&receipt.capturedAt===forecast.capturedAt&&receipt.targetId===se.currentTargetId&&m?.lastReviewedAt===receipt.priorReviewedAt&&m?.reviewCount===receipt.historyCount?receipt:null;C.recordAttempt(db,{requirementId:rid,activityId:se.currentActivityId,targetId:se.currentTargetId,response:se.draftAnswer,rating,assisted:se.assistedForCurrent,sessionId:se.id,inputMode:$('#response-mode')?.value==='oral'?'oral':$('#response-mode')?.value==='mental'?'mental':null,durationSeconds:Math.max(0,Math.round((sessionElapsedMs(se)-(se.activityStartedElapsedMs??sessionElapsedMs(se)))/1000)),criterionChecks:Object.entries(se.criterionDraft||{}).map(([criterionId,status])=>({criterionId,status})),correctionNote:se.correctionDraft||'',prospectiveForecast:forecast,fsrsForecast});se.completedIds.push(se.currentTargetId);se.courseCounts[req.courseId]=(se.courseCounts[req.courseId]||0)+1;selectNext(se);});break;}
     case 'new-session':transact(()=>{currentSessionId=null;page='study';});break;
     case 'delete-assessment':{const id=btn.dataset.id;const a=db.assessments.find(x=>x.id===id);if(a&&window.confirm(`Remove assessment “${a.title}”?`)){transact(()=>{db.assessments=db.assessments.filter(x=>x.id!==id);db.events.push({type:'assessment.deleted',entityId:id,at:new Date().toISOString()});});}break;}
     case 'persist-storage':{Store.requestPersistence().then(ok=>notify(ok?'Browser granted more durable local storage.':'Browser did not grant persistent storage. Export backups regularly.')).catch(()=>notify('Persistent storage is not supported. Export backups regularly.',true));break;}
@@ -1193,6 +1212,7 @@ A">${esc((a.exactAnswerKey?.answers||[]).join('\n'))}</textarea><label class="ch
       const stored=saved?.activeSessionId;
       if(stored&&db.sessions.some(s=>s.id===stored&&s.status==='active')){currentSessionId=stored;page='study';}
       render();
+      if(currentSessionId){const active=activeSession();if(active?.status==='active'&&!active.showReference)captureFsrsBeforeAnswer(active);}
       if(saved?.db && saved.db.schemaVersion!==db.schemaVersion) save();
     } catch(error) {
       // Never overwrite a possibly recoverable local database on load failure.

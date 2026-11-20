@@ -69,8 +69,92 @@ async function main(){
       return JSON.stringify({memory:db.memory,attempts:db.attempts});
     });
     assert.equal(saved,before,'FSRS preview must not persist a changed review date or attempt');
+
+    // A genuine session freezes a default-weight probability before the
+    // reference is revealed. It must never schedule from that probability.
+    const fixture=await page.evaluate(async()=>{
+      const C=window.ActiveRecallCore,S=window.ActiveRecallStorage,db=C.initialDb();
+      const course=C.addCourse(db,'Biology');
+      const req=C.addRequirement(db,{courseId:course.id,kind:'recall',
+        question:'What drives ATP synthesis?',answer:'A proton gradient.'});
+      const target=C.getTarget(db,req.id),activity=C.getActivities(db,req.id,target.id)[0];
+      const now=Date.now();
+      for(const days of [-20,-15,-10])C.recordAttempt(db,{requirementId:req.id,
+        targetId:target.id,activityId:activity.id,response:'A proton gradient.',
+        rating:'good',now:new Date(now+days*86400000)});
+      await S.save(db,null);await S.ready();
+      return {targetId:target.id,previousDue:db.memory[target.id].dueAt};
+    });
+    await page.reload();
+    await page.evaluate(()=>{
+      const original=window.ActiveRecallFSRSShadow.forecastProbability;
+      window.__shadowTestResolved=false;
+      window.ActiveRecallFSRSShadow.forecastProbability=async(...args)=>{
+        const result=await original(...args);
+        window.__shadowTestResult=result;
+        window.__shadowTestResolved=true;
+        return result;
+      };
+    });
+    await page.locator('button[data-action="start-session"]').first().click();
+    await page.waitForFunction(()=>window.__shadowTestResolved===true);
+    await page.locator('button[data-action="reveal"]').click();
+    await page.locator('button[data-action="rate"][data-rating="good"]').click();
+    const persisted=await page.evaluate(async()=>{
+      const C=window.ActiveRecallCore,S=window.ActiveRecallStorage;
+      await S.ready();const {db}=await S.load(),last=db.attempts.at(-1);
+      return {receipt:last.fsrsForecast||null,forecast:last.prospectiveForecast||null,
+        attempts:db.attempts.length,lastRating:last.rating,
+        candidate:window.__shadowTestResult||null,
+        toast:document.querySelector('.toast')?.textContent||null,
+        due:db.memory[last.retrievalTargetId].dueAt,decision:last.schedulingDecision,
+        valid:C.validateImport(JSON.parse(JSON.stringify(db))).schemaVersion};
+    });
+    assert.equal(persisted.valid,5);
+    assert.ok(persisted.receipt,'Expected a frozen pre-answer FSRS receipt: '+JSON.stringify(persisted));
+    assert.equal(persisted.receipt.targetId,fixture.targetId);
+    assert.equal(persisted.receipt.capturedAt,persisted.forecast.capturedAt);
+    assert.equal(persisted.receipt.modelFitted,false);
+    assert.equal(persisted.decision.activePolicy,'transparent-interval-v1');
+    assert.equal(persisted.due,persisted.decision.activeDueAt);
+    assert.notEqual(persisted.due,fixture.previousDue);
+    // If the learner reveals first, an asynchronously completed prediction
+    // must be discarded even though its calculation began beforehand.
+    await page.evaluate(async()=>{
+      const C=window.ActiveRecallCore,S=window.ActiveRecallStorage,db=C.initialDb();
+      const course=C.addCourse(db,'Chemistry');
+      const req=C.addRequirement(db,{courseId:course.id,kind:'recall',
+        question:'Which molecule stores energy?',answer:'ATP.'});
+      const target=C.getTarget(db,req.id),activity=C.getActivities(db,req.id,target.id)[0];
+      for(const days of [-20,-15,-10])C.recordAttempt(db,{requirementId:req.id,
+        targetId:target.id,activityId:activity.id,response:'ATP.',rating:'good',
+        now:new Date(Date.now()+days*86400000)});
+      await S.save(db,null);await S.ready();
+    });
+    await page.reload();
+    await page.evaluate(()=>{
+      const original=window.ActiveRecallFSRSShadow.forecastProbability;
+      window.__shadowReleased=false;
+      window.ActiveRecallFSRSShadow.forecastProbability=(...args)=>new Promise(resolve=>{
+        window.__shadowRelease=()=>original(...args).then(value=>{
+          window.__shadowReleased=true;resolve(value);
+        });
+      });
+    });
+    await page.locator('button[data-action="start-session"]').first().click();
+    await page.waitForFunction(()=>typeof window.__shadowRelease==='function');
+    await page.locator('button[data-action="reveal"]').click();
+    await page.evaluate(()=>window.__shadowRelease());
+    await page.waitForFunction(()=>window.__shadowReleased===true);
+    await page.locator('button[data-action="rate"][data-rating="good"]').click();
+    const race=await page.evaluate(async()=>{
+      const S=window.ActiveRecallStorage;await S.ready();
+      return (await S.load()).db.attempts.at(-1);
+    });
+    assert.ok(race.prospectiveForecast,'Original unfitted forecast still captured before reveal');
+    assert.equal(race.fsrsForecast,undefined,'Late shadow calculation must not be recorded');
     assert.deepEqual(errors,[]);
-    process.stdout.write('PASS: local FSRS shadow, unchanged memory, no page errors, responsive layout.\n');
+    process.stdout.write('PASS: local FSRS shadow, pre-answer receipt, unchanged active policy, responsive layout.\n');
   }finally{if(browser)await browser.close();await new Promise(resolve=>server.close(resolve));}
 }
 main().catch(e=>{console.error(e);process.exitCode=1;});
