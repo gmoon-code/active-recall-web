@@ -353,7 +353,7 @@ test('static v4.7 scripts load safely and offline assets are cached and in healt
    health=fs.readFileSync('health.html','utf8'),core=fs.readFileSync('core.js','utf8');
  assert.ok(index.indexOf('reviewer-usability.js')<index.indexOf('core.js'));
  assert.ok(index.indexOf('reviewer-usability-ui.js')<index.indexOf('app.js'));
- assert.match(sw,/active-recall-web-v4-32/);
+ assert.match(sw,/active-recall-web-v4-33/);
  assert.match(sw,/reviewer-usability-offline\.html/);
  assert.match(health,/reviewer-usability-offline\.html/);
  assert.match(core,/Usability\.validate\(input\)/);

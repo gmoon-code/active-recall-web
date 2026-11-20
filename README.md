@@ -1,4 +1,8 @@
-# Active Recall Web — Free Edition v4.32
+# Active Recall Web — Free Edition v4.33
+
+## Blueprint 4.33 — Warn before a stale tab overwrites study data
+
+When two tabs open the same browser-local notebook, v4.33 checks each IndexedDB save against the exact record and revision that tab previously loaded. If another tab has saved first, the stale tab **does not overwrite the newer record**. A persistent warning explains that its in-memory edits are unsaved, links to **Progress → Export JSON backup** to preserve them separately, and asks the learner to reload before further editing. A refreshed tab can save again. Older IndexedDB rows without revision metadata remain readable and are upgraded on their next successful write; schema-v5 JSON backups need no conversion. An already-running older app version cannot itself enforce this new safeguard, so close old tabs when upgrading. Browser-local fallback storage does not offer the same atomic protection. There is no cloud sync, account, subscription, change to review scheduling, or claim that conflicting notebooks can be merged automatically. [Release checklist](docs/RELEASE_4_33_ROLLOUT.md).
 
 ## Blueprint 4.32 — Bring back a failed question only when its retry is due
 
