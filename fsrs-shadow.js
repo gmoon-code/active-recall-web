@@ -155,7 +155,7 @@
   // A saved probability is a claim about *past* model state, not proof by
   // itself. Reconstruct that state using only earlier same-target attempts;
   // never call forecastProbability on today's memory, which looks ahead.
-  async function auditReceipts(db,{Vendor=null,limit=200,minDelayHours=24}={}){
+  async function auditReceipts(db,{Vendor=null,limit=200,minDelayHours=24,includeVerifiedRows=false}={}){
     const V=Vendor||(typeof globalThis!=='undefined'?globalThis.ActiveRecallFSRSVendor:null);
     if(typeof V?.DefaultScheduler!=='function')throw Error('The bundled FSRS scheduler is unavailable.');
     if(!Number.isSafeInteger(limit)||limit<1||limit>500)throw Error('Audit limit must be 1–500 receipts.');
@@ -170,11 +170,12 @@
       activePolicyChanged:false,modelFitted:false,recordedReceipts:receipts.length,
       inspected:0,notInspected:0,replayed:0,eligibleDelayedWritten:0,
       literalOutcomeCandidates:0,exclusions:excluded,
+      ...(includeVerifiedRows?{verifiedRows:[]}:{}),
       warning:'Replay checks whether the stored default-weight probability agrees with earlier learner-rated histories. It cannot prove when an imported value was captured, whether a rating represents true recall, or that a schedule is optimal. Only independently written unassisted attempts delayed at least 24 hours can be candidates for later outcome analysis. No scores are calculated and no study dates or priorities change.'};
     // Truncating the attempt history can make a forged or partial sequence
     // look complete. Abstain rather than replay a partial notebook.
     if(raw.length>50000){result.notInspected=receipts.length;return result;}
-    const inspected=receipts.slice(-limit),wanted=new Set(inspected.map(x=>x.index));
+    const inspected=receipts.slice(-limit);
     result.inspected=inspected.length;result.notInspected=receipts.length-inspected.length;
     const byTarget=new Map();
     for(const item of all){
@@ -240,10 +241,13 @@
           excluded.modelMismatch++;continue;
         }
         result.replayed++;
-        if(item.t-previous.at(-1).t>=minDelayHours*3600000&&
+        const delayedWritten=item.t-previous.at(-1).t>=minDelayHours*3600000&&
            captured-previous.at(-1).t>=minDelayHours*3600000&&
            !a.assisted&&a.practiceStage!=='immediate_post_study'&&
-           a.inputMode==='written'&&!!a.response?.trim()&&a.requirementVerified===true){
+           a.inputMode==='written'&&!!a.response?.trim()&&a.requirementVerified===true;
+        if(includeVerifiedRows)result.verifiedRows.push({index:item.index,
+          targetId:a.retrievalTargetId,t:item.t,probability:f.probability,delayedWritten});
+        if(delayedWritten){
           result.eligibleDelayedWritten++;
           if(a.activityKind==='recall'&&a.literalCheck?.version===1&&
              a.literalCheck.method==='literal-match-v1'&&
@@ -254,6 +258,110 @@
       }catch{excluded.replayFailure++;}
     }
     return result;
+  }
+  // Descriptive evidence on the *same* replay-verified receipts, with five
+  // distinct outcome definitions. This never grades a learner or changes the
+  // live policy. It is not a causal comparison of schedules.
+  async function auditOutcomes(db,{Vendor=null,Human=null,limit=500,minDelayHours=24}={}){
+    const H=Human||(typeof module==='object'&&module.exports?require('./human-review.js'):
+      globalThis.ActiveRecallHumanReview);
+    if(typeof H?.eligibility!=='function'||typeof H?.fingerprint!=='function')
+      throw Error('Human-review evidence checks are unavailable.');
+    const {verifiedRows=[],...audit}=await auditReceipts(db,{Vendor,limit,minDelayHours,includeVerifiedRows:true});
+    const keys=['literalRecall','selfExplain','selfApply','otherExplain','otherApply'];
+    const groups=Object.fromEntries(keys.map(k=>[k,[]]));
+    const excluded={noUsableLabel:0,invalidLiteralCheck:0,
+      lateOrInvalidHumanReview:0,inconclusiveHumanReview:0};
+    const ordered=(db.attempts||[]).map((a,index)=>({a,index,t:Date.parse(a?.createdAt||'')}))
+      .sort((x,y)=>(Number.isFinite(x.t)?x.t:Infinity)-(Number.isFinite(y.t)?y.t:Infinity)||x.index-y.index);
+    const nextByIndex=new Map(),laterByTarget=new Map();
+    for(let i=ordered.length-1;i>=0;i--){
+      const x=ordered[i];
+      if(!Number.isFinite(x.t)||!x.a?.retrievalTargetId)continue;
+      nextByIndex.set(x.index,laterByTarget.get(x.a.retrievalTargetId)??null);
+      laterByTarget.set(x.a.retrievalTargetId,x.t);
+    }
+    const normalise=s=>String(s??'').normalize('NFC').trim().replace(/\s+/gu,' ').toLowerCase();
+    for(const row of verifiedRows){
+      if(!row.delayedWritten)continue;
+      const a=db.attempts[row.index],record={target:row.targetId,t:row.t,
+        probability:row.probability,positive:0};
+      if(a.activityKind==='recall'&&a.literalCheck){
+        const k=a.literalCheck;
+        if(k.version!==1||k.method!=='literal-match-v1'||
+           typeof k.matched!=='boolean'||!Array.isArray(k.acceptedSnapshot)||
+           !k.acceptedSnapshot.length||!k.acceptedSnapshot.every(x=>typeof x==='string')||
+           k.matched!==k.acceptedSnapshot.some(x=>normalise(x)===normalise(a.response))){
+          excluded.invalidLiteralCheck++;continue;
+        }
+        record.positive=k.matched?1:0;groups.literalRecall.push(record);continue;
+      }
+      if((a.activityKind==='explain'||a.activityKind==='apply')&&H.eligibility(a).ok){
+        const review=a.humanReviews?.at(-1);
+        if(review?.schema===1&&review.method==='manual-criterion-review-v1'&&
+           review.responseFingerprint===H.fingerprint(a.response)&&
+           review.requirementVersion===a.requirementVersion&&
+           review.targetVersion===a.retrievalTargetVersion&&
+           ['self','other_person'].includes(review.reviewerRole)&&
+           ['all_supported','gap_identified','inconclusive'].includes(review.finding)){
+          const when=Date.parse(review.reviewedAt),next=nextByIndex.get(row.index);
+          if(!Number.isFinite(when)||when<row.t||next!==null&&next!==undefined&&when>next){
+            excluded.lateOrInvalidHumanReview++;continue;
+          }
+          if(review.finding==='inconclusive'){
+            excluded.inconclusiveHumanReview++;continue;
+          }
+          const key=(review.reviewerRole==='self'?'self':'other')+
+            (a.activityKind==='explain'?'Explain':'Apply');
+          record.positive=review.finding==='all_supported'?1:0;
+          groups[key].push(record);continue;
+        }
+      }
+      excluded.noUsableLabel++;
+    }
+    const displayGate={minAttempts:50,minTargets:15,minPositive:10,minNegative:10};
+    const chronologyGate={minEarlierAttempts:50,minEarlierTargets:15,
+      minEarlierPositive:10,minEarlierNegative:10,minLaterAttempts:20,
+      minLaterTargets:8,minLaterPositive:5,minLaterNegative:5};
+    const targetBrier=rows=>{
+      const byTarget=new Map();
+      for(const r of rows){
+        if(!byTarget.has(r.target))byTarget.set(r.target,[]);
+        byTarget.get(r.target).push((r.probability-r.positive)**2);
+      }
+      const means=[...byTarget.values()].map(values=>values.reduce((s,x)=>s+x,0)/values.length);
+      return Math.round(means.reduce((s,x)=>s+x,0)/means.length*10000)/10000;
+    };
+    const count=rows=>({attempts:rows.length,
+      distinctTargets:new Set(rows.map(r=>r.target)).size,
+      positiveLabels:rows.filter(r=>r.positive===1).length,
+      negativeLabels:rows.filter(r=>r.positive===0).length});
+    const summarize=rows=>{
+      const all=count(rows),enough=audit.notInspected===0&&
+        all.attempts>=displayGate.minAttempts&&all.distinctTargets>=displayGate.minTargets&&
+        all.positiveLabels>=displayGate.minPositive&&all.negativeLabels>=displayGate.minNegative;
+      const sorted=rows.slice().sort((a,b)=>a.t-b.t),desiredCut=Math.floor(sorted.length*.8);
+      let cut=desiredCut;
+      while(cut>0&&cut<sorted.length&&sorted[cut-1].t===sorted[cut].t)cut--;
+      const earlier=sorted.slice(0,cut||sorted.length),later=cut?sorted.slice(cut):[];
+      const first=count(earlier),last=count(later);
+      const laterEnough=enough&&first.attempts>=chronologyGate.minEarlierAttempts&&
+        first.distinctTargets>=chronologyGate.minEarlierTargets&&
+        first.positiveLabels>=chronologyGate.minEarlierPositive&&
+        first.negativeLabels>=chronologyGate.minEarlierNegative&&
+        last.attempts>=chronologyGate.minLaterAttempts&&
+        last.distinctTargets>=chronologyGate.minLaterTargets&&
+        last.positiveLabels>=chronologyGate.minLaterPositive&&
+        last.negativeLabels>=chronologyGate.minLaterNegative;
+      return {...all,brier:enough?targetBrier(rows):null,
+        laterWindow:{earlier:first,later:last,firstLaterAt:later.length?
+          new Date(later[0].t).toISOString():null,brier:laterEnough?targetBrier(later):null}};
+    };
+    return {...audit,warning:'Earlier review histories are replayed before any outcome is considered. Only sufficiently diverse, separate delayed-label groups may show descriptive prediction errors. These cannot authenticate original capture timing, verify recall, prove an optimal interval or change the current schedule.',
+      evaluation:{version:1,displayGate,chronologyGate,
+      groups:Object.fromEntries(keys.map(key=>[key,summarize(groups[key])])),excluded,
+      comparableEvidenceLabels:keys.length,modelFitted:false,activePolicyChanged:false,
+      warning:'These target-balanced Brier errors, if shown, compare fixed default-weight FSRS-7 guesses with narrowly defined recorded labels, NOT verified memory accuracy. Literal mismatch can be a correct synonym. Manual rubric judgments and reviewer identity are unblinded/unverified. Strict later-time scores require diverse earlier and later outcomes, but targets may recur and scheduling selected the attempts. This is not an independent trial, a policy winner, proven optimal timing, or evidence that changing the calendar would improve learning.'}};
   }
   // A one-step calendar sensitivity analysis. The temporary copy substitutes
   // eligible *next* due dates only. All later revisit windows keep the same
@@ -305,5 +413,5 @@
       current:summarize(baseline),hybrid:summarize(hybrid),movements,examCoverage,
       warning:'A partial, read-only calendar sensitivity scenario: only eligible targets get hypothetical FSRS-7 next due dates. Excluded and uninspected targets retain their real dates. Both calendars use the same capacity, missed days, exam adjustments and conditional later-revisit heuristic; no future responses are assumed. First passes and exam coverage are opportunities, not verified learning or predicted grades. No saved due dates, attempts, calendar preferences or automatic schedules change.'}};
   }
-  return {compare,compareCalendar,forecastProbability,auditReceipts};
+  return {compare,compareCalendar,forecastProbability,auditReceipts,auditOutcomes};
 });

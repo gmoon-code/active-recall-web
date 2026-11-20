@@ -124,8 +124,13 @@ async function main(){
     await auditPanel.getByText('Receipts replayed exactly').waitFor();
     const auditText=await auditPanel.innerText();
     assert.match(auditText,/Of 1 inspected/);
-    assert.match(auditText,/No scores are calculated/);
-    assert.match(auditText,/no study dates or priorities change/);
+    assert.match(auditText,/never changes the automatic calendar/i);
+    await auditPanel.locator('summary').filter({hasText:'Outcome check by evidence type'}).click();
+    const checked=await auditPanel.innerText();
+    assert.match(checked,/Short factual recall · literal agreement/);
+    assert.match(checked,/Scores withheld/);
+    assert.match(checked,/Strictly later time window/);
+    assert.match(checked,/NOT verified memory accuracy/);
     const afterAudit=await page.evaluate(async()=>{
       await window.ActiveRecallStorage.ready();
       const {db}=await window.ActiveRecallStorage.load();
