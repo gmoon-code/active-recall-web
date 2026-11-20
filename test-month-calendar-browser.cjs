@@ -40,7 +40,7 @@ async function main(){
       function assertOk(value){if(!value)throw Error('Expected valid plan snapshot');}
     });
     await page.reload();
-    await page.locator('[data-page=forecast]').click();
+    await page.locator('.navbtn[data-page=forecast]').click();
     assert.equal(await page.locator('.outlook-day').count(),21,'Original 21-day list stays');
     const calendar=page.locator('.month-calendar');
     await calendar.locator('.month-calendar-day').first().waitFor();
