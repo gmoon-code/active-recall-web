@@ -38,7 +38,7 @@ async function main(){
     await simulator.locator('button[type=submit]').click();
     const result=page.locator('.schedule-comparison');
     await result.waitFor();
-    assert.match(await result.innerText(),/Current plan versus your proposal/);
+    assert.match(await result.innerText(),/Current and proposed schedules/);
     assert.match(await result.innerText(),/Known first-pass review slots/);
     const state=async()=>page.evaluate(async()=>{
       await window.ActiveRecallStorage.ready();const {db}=await window.ActiveRecallStorage.load();

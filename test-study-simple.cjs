@@ -33,7 +33,7 @@ test('one-click Overview study and simple Study Now entry preserve real memory e
   const click=(action,page)=>listeners.click({target:{closest(){return {dataset:{action,page}};}}});
   click('navigate','study');
   const simple=app.innerHTML;
-  assert.match(simple,/How much time do you have\?/);
+  assert.match(simple,/<h2[^>]*>Session length<\/h2>/);
   assert.match(simple,/data-action="start-session"[^>]*>Start studying · 25 min/);
   assert.match(simple,/<details id="study-plan-details"[^>]*>/);
   assert.match(simple,/<details id="study-more-options"[^>]*>/);
@@ -43,7 +43,7 @@ test('one-click Overview study and simple Study Now entry preserve real memory e
     'The primary study action precedes technical options');
   click('navigate','home');
   click('start-session');
-  assert.match(app.innerHTML,/Your study session/);
+  assert.match(app.innerHTML,/<h1>Study session<\/h1>/);
   assert.match(app.innerHTML,/What makes ATP\?/);
   assert.equal(db.sessions.length,1);
   assert.equal(db.sessions[0].status,'active');
