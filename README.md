@@ -1,4 +1,8 @@
-# Active Recall Web — Free Edition v4.26
+# Active Recall Web — Free Edition v4.27
+
+## Blueprint 4.27 — More useful review priorities and safer local study
+
+The automatic calendar now prioritises known due reviews over optional preparation, while making exam-preparation opportunities and unassigned work more explicit. **Study Now** has a simpler entry path and clearer skip-versus-rated-recall behavior. Local JSON backup and restore have additional browser regression coverage, and the v4.27 offline cache has been checked with a real HTTPS offline reload. These are capacity-aware planning heuristics, **not a scientifically validated optimal scheduler**. Genuine recall attempts alone adjust memory intervals; outside-study logs, future calendar placeholders and the read-only FSRS-7 comparison cannot fabricate a successful review or alter due dates. [Release and rollback checklist](docs/RELEASE_4_27_ROLLOUT.md).
 
 ## Blueprint 4.26 — Preview question revisions before changing your schedule
 
