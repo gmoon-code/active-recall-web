@@ -31,10 +31,15 @@ async function main(){
     });
     await page.reload();
     await page.locator('.navbtn[data-page=study]').click();
+    assert.equal(await page.locator('.priority-compare').isVisible(),false,
+      'Technical scheduling comparisons must be hidden on the basic study screen');
+    await page.locator('#study-more-options > summary').click();
     await page.locator('.priority-compare').waitFor();
     assert.match(await page.locator('.priority-compare').innerText(),/Review-first alternative/);
     assert.match(await page.locator('.priority-compare').innerText(),/Due review/);
     await page.locator('[data-action=duration][data-minutes="5"]').click();
+    assert.equal(await page.locator('#study-more-options').evaluate(el=>el.open),true,
+      'Changing study duration preserves an expanded scheduling explanation');
     const candidate=await page.evaluate(async()=>{
       const {db}=await window.ActiveRecallStorage.load();
       return window.ActiveRecallCore.inspectStudyPriorities(db,{minutes:5}).current.items[0].question;

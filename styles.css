@@ -264,6 +264,20 @@
 @media(max-width:700px){.priority-compare{grid-template-columns:1fr}.priority-column{padding:10px}}
 @media(max-width:700px){.schedule-comparison{padding:10px}.schedule-days>div{grid-template-columns:1fr 1fr}.schedule-comparison-grid>*{padding:7px 5px;font-size:11px}}
 @media(max-width:700px){.rhythm-numbers{grid-template-columns:1fr!important}.rhythm-history{grid-template-columns:1fr}}
+/* Eight destinations cannot fit legibly in one narrow bottom-navigation row. */
+@media(max-width:640px){
+  .nav{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:2px 4px}
+  .navbtn{width:100%;min-width:0;min-height:48px;padding:5px 3px;font-size:10px;line-height:1.2;justify-content:center}
+  .navicon{font-size:18px}
+  .main{padding-bottom:154px}
+  /* Long select options must not size a form grid wider than the phone. */
+  form.stack{grid-template-columns:minmax(0,1fr)}
+  form.stack .field{min-width:0}
+  .field input[type="file"]{width:100%;min-width:0;max-width:100%}
+  .main .btn{max-width:100%;min-width:0;white-space:normal;overflow-wrap:anywhere;text-align:center;line-height:1.35}
+  button[data-action="inspect-fsrs-shadow"]{max-width:100%;white-space:normal;text-align:center;line-height:1.35}
+}
+@media(max-width:400px){.grid.cols2,.grid.cols3,.grid.cols4{grid-template-columns:minmax(0,1fr)}}
 .correction-item{align-items:flex-start;flex-wrap:wrap}
 .correction-item .rowbody{min-width:0;overflow-wrap:anywhere}
 .correction-item .document-outline{max-width:100%;margin-bottom:8px}
@@ -278,6 +292,20 @@
 .repair-source-excerpt mark{background:#fff0aa;color:#314a3f}
 .repair-source-text{white-space:pre-wrap;overflow-wrap:anywhere;max-height:230px;overflow-y:auto;margin-top:8px;padding:10px 12px;background:white;border:1px solid var(--line);border-radius:8px;font-size:12px}
 .repair-note{white-space:pre-wrap;overflow-wrap:anywhere;margin:7px 0}
+.study-ready-summary{padding:14px 0;margin:4px 0 8px;color:var(--muted);font-size:15px}
+.study-ready-summary strong{color:var(--text);font-size:17px}
+#study-plan-details>summary span{margin-left:8px}
+.study-more-options{margin:15px auto 0;padding:15px}
+.study-more-options>summary{font-size:15px}
+.study-more-options>summary span{display:block;margin:3px 0 0}
+.study-more-options>.section{margin:16px 0 0}
+.study-more-options>.section .card{box-shadow:none}
+.study-session-tools{margin:0 0 15px}
+.study-session-tools>summary,.study-question-why>summary{font-size:14px;font-weight:750}
+.study-session-tools>summary span{font-weight:400;margin-left:7px}
+.session-extra-controls{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:14px}
+.study-question-why{margin:0 0 15px}
+.study-question-why>.note{margin:10px 0 0!important}
 .revision-impact{border:1px solid #a7c7b7;background:#f2f8f3;border-radius:12px;padding:13px 15px;overflow-wrap:anywhere}
 .revision-impact strong{font-size:14px}
 .revision-impact p{margin:6px 0 0}

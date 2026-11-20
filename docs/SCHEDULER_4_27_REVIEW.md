@@ -1,0 +1,49 @@
+# Active Recall Web — scheduler-focused review increment (unreleased)
+
+**Baseline:** published v4.26, `main` at `444560d`. **Working branch:** `feat/known-review-calendar-priority`.
+
+## Why this increment exists
+
+The central product is an automatic multi-course, deadline-aware spaced-retrieval calendar, not a question-bank editor. The existing engine already recalculates from real attempts, saved due dates, course assessments and availability. But next-review intervals still use `transparent-interval-v1` multipliers; neither that policy nor its candidate scores have been validated as optimal.
+
+## Two calendar changes
+
+1. **First-pass before provisional future revisits:** a fitting first opportunity (an actual due window, a target's first attempt, or explicitly optional exam preparation) cannot be displaced by a speculative second review whose date assumes future performance. The existing score, course balance and time fit still order candidates *within* each tier. Optional exam preparation is not itself an overdue review.
+2. **Capacity-aware pre-exam window:** when a saved memory due date falls on or after a related assessment, the planner can offer an earlier optional practice slot. It packs whole estimated task durations backward across available days before the exam to find a feasible starting window. Declared unavailable dates have zero capacity, and selected-scope assessments affect only linked requirements. Actual calendar assignment still applies priority, time fit and other demands, so the computed window is not a guarantee. If an optional review cannot happen before that exam, its original due date becomes relevant again; the planner does not impose a fictitious overdue obligation after the exam.
+
+The early slot is explicitly labelled as optional assessment preparation. **No saved `db.memory` due date, previous interval, existing attempt, or actual rating policy is changed by opening the calendar.** Recording a genuine new attempt continues to apply the existing interval policy, not a claimed scientifically validated one.
+
+## Simple learner-facing study flow
+
+The calculation and audit layers stay available, but the basic study path should require very little thought: **select available minutes → start → retrieve → reveal → self-rate**. The Overview's primary action now starts a feasible session in one click (or resumes an ongoing one), without a preliminary planning screen or manual course/deck selection. Study Now initially shows the selected time and a brief estimated question/course count. Its per-course estimate, priority reasons, due-only catch-up option and technical current-versus-review-first comparison remain available in native expandable sections. Expanding options and then choosing another time preserves the expanded state.
+
+These are **presentation and navigation changes only**. The same verified eligible targets, real queue, future scheduling policy, evidence records, local storage and JSON backup format remain in place. The question-count preview is an estimate because later selections may respond to actual answers. Returning to the Overview during an active session resumes that session rather than creating another one.
+
+The **active question screen** now similarly keeps the timer, Pause, Skip without rating, Finish, prompt, response field, hint and answer reveal in plain view. Optional time extensions and the question-quality hold controls sit under **More session tools**, while the priority-score reasoning sits under **Why this question now?**. Both are accessible native disclosures and open only on request. Hiding those explanations does not hide the critical distinction between a skipped question, an assisted attempt and an actual rated retrieval; explanation checklists and correction notes remain available after revealing the reference.
+
+## Safer local backup restore
+
+The Progress page's JSON import now waits for a successful browser-storage write **before** replacing the active notebook or reporting success. If storage rejects the write, the existing notebook remains active and the app explicitly reports that the backup was not imported. File-read failures also produce an error. This is a safety improvement for the same schema-v5 offline backup, not a data migration or a change to recall scheduling.
+
+A browser regression has been added to exercise the real Export download, user-confirmed file-picker Import, storage reload, exact schema-v5 data, automatic question queue and calendar, cancelled replacement, and a tampered versioned scheduling decision. The fixture uses fictional data and checks that outside-study records survive without inventing recall attempts. **This browser regression has been authored but not yet run successfully**; it must pass in CI before release.
+
+A second browser regression now serves the app through temporary local HTTPS at the same `/active-recall-web/` path used on GitHub Pages. It checks service-worker control, a subsequent reload while the browser is explicitly offline, IndexedDB attempt/memory and study-queue continuity, and a JSON export made without network access. It does **not** replace a final check of the real hosted site's HTTPS cache or a user's normal browser profile.
+
+A deployment preflight now also checks every declared service-worker cache path exists and that every local resource loaded by `index.html` is precached. This catches missing offline resources without requiring a browser; it cannot prove the service worker actually runs.
+
+## Engineering hypotheses, not scientific claims
+
+The research supports active retrieval and distributed practice in general, but does not establish that this particular exam-window packing, score formula, or interval multiplier maximizes retention. Capacity-based planning is an engineering feasibility improvement, not a fitted forgetting curve or predicted exam result. Estimated activity time may differ from observed time, other objectives can compete for capacity, and all later revisits remain conditional on future attempts.
+
+## Verification and release gate
+
+- New deterministic cases cover constrained-known-review precedence, exam workload distributed across dates, unavailable dates, scope isolation, due-on-exam-day handling, unchanged saved memory, and the absence of post-exam fictitious obligations.
+- Full non-browser suite passed: **425 tests** on 20 November 2026, including FSRS-7 shadow replay, partial-hybrid calendar comparisons, capacity and chronology gates, exclusion of future evidence from past-date previews, a schema-v5 JSON backup round-trip, one-click start/resume without inventing recall evidence, and a simulated storage rejection that leaves the original notebook active during a failed Import. Eight deployment preflights also passed, including offline asset completeness.
+- The managed Chrome preview passed a desktop workflow with a real sample written attempt, read-only FSRS comparison, saved dates intact after browser reload, and separate diagnostic storage-reload checks. A 390px/320px frame viewport check found and repaired mobile navigation and horizontal overflow; the preview then had no horizontal document overflow at either width.
+- The simplified Study Now screen was visually checked in the managed browser on desktop and within a **320px iframe viewport**. It showed a single clear primary action, accessible collapsed details and four navigation buttons per row. The viewport's `scrollWidth` equalled `clientWidth` at 305 CSS px (space remaining after its scrollbar). Opening advanced options and changing duration kept them open, updated the start label, and introduced no horizontal overflow. This is not a physical touch-device test.
+- The active recall view was subsequently checked in the managed desktop browser: Pause/Skip/Finish and the retrieval prompt were immediately visible; session tools and scheduling reasons were collapsed. Opening session tools showed the original two time-extension buttons and question-flag reason/hold controls; revealing a fictional answer still displayed all four original self-ratings. The browser file-picker, full Chromium test suite and HTTPS offline gate remain pending.
+- **Not yet published.** The full automated browser suite still cannot run locally. `/usr/bin/google-chrome` is unavailable; the alternative `/usr/bin/chromium` aborts at startup because the sandbox denies its process-singleton socket (`Operation not permitted`). A review-branch push to GitHub to trigger CI was also rejected because the local Git checkout lacks HTTPS credentials; the remote repo was not changed. The local HTTP preview does not register the HTTPS-only service worker. New HTTPS-subpath offline and file-picker tests are included for CI, but **both remain unexecuted successfully**. Real hosted HTTPS offline reload, physical-device touch behaviour, and passing browser import/export verification remain release checks. Keep the v4.26 live baseline untouched until those are resolved.
+
+## Next scientific scheduler milestone
+
+Treat **memory timing** and **calendar allocation** as separate systems. Benchmark the current transparent memory interval policy against a documented FSRS-style candidate on separately identified, delayed and unassisted response streams. Strict literal equality cannot grade complex answers; subjective self-ratings cannot be pooled with reviewed written responses as objective correctness. Use forward-only receipts, calibration diagnostics and an out-of-time evaluation, with conservative fallback for sparse or unreliable data. Only consider opt-in live-policy migration after clear workload and recall evidence, backed by reversible exports and no silent historical due-date rewrite.

@@ -41,9 +41,11 @@ async function main(){
         schema:window.ActiveRecallCore.validateImport(JSON.parse(JSON.stringify(db))).schemaVersion};
     });
     await page.reload();await page.locator('.navbtn[data-page=study]').click();
+    await page.locator('#study-more-options > summary').click();
     await page.locator('.catchup-preview [data-action=start-due-session]').click();
     await page.locator('h2.question').waitFor();
     const firstQuestion=await page.locator('h2.question').innerText();
+    await page.locator('#study-session-tools > summary').click();
     await page.locator('[data-action=hold-session-question]').click();
     const nextQuestion=await page.locator('h2.question').innerText();
     assert.notEqual(firstQuestion,nextQuestion);
@@ -80,6 +82,7 @@ async function main(){
     assert.equal(restored.schema,5);
     await page.locator('.navbtn[data-page=study]').click();
     await page.locator('[data-action=new-session]').click();
+    await page.locator('#study-more-options > summary').click();
     const preview=page.locator('.catchup-preview');await preview.waitFor();
     assert.equal(await preview.locator('.metric').first().innerText(),'1','Only released review returns to the due queue');
     await preview.locator('[data-action=start-due-session]').click();

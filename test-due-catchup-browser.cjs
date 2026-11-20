@@ -42,6 +42,8 @@ async function main(){
     await page.reload();
     await page.locator('.navbtn[data-page=study]').click();
     const panel=page.locator('.catchup-preview');
+    assert.equal(await panel.isVisible(),false,'Advanced due-only options are hidden initially');
+    await page.locator('#study-more-options > summary').click();
     await panel.getByRole('heading',{name:'Catch up on due reviews'}).waitFor();
     const copy=await panel.innerText();
     assert.match(copy,/Due reviews/);

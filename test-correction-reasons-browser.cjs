@@ -36,8 +36,14 @@ async function main(){
     });
     await page.reload();
     await page.locator('.navbtn[data-page=study]').click();
+    await page.locator('#study-more-options > summary').click();
     await page.locator('.catchup-preview [data-action=start-due-session]').click();
     await page.locator('h2.question').waitFor();
+    assert.equal(await page.locator('[data-action=skip-question]').isVisible(),true,
+      'Skipping an unsuitable question remains a visible one-click action');
+    assert.equal(await page.locator('[data-action=hold-session-question]').isVisible(),false,
+      'Advanced correction controls start collapsed');
+    await page.locator('#study-session-tools > summary').click();
     await page.locator('#study-hold-reason').selectOption('suspected_error');
     await page.locator('[data-action=hold-session-question]').click();
     let saved=await state();
@@ -79,6 +85,7 @@ async function main(){
     await page.locator('.navbtn[data-page=study]').click();
     await page.locator('[data-action=finish-session]').click();
     await page.locator('[data-action=new-session]').click();
+    await page.locator('#study-more-options > summary').click();
     const preview=page.locator('.catchup-preview');await preview.waitFor();
     assert.equal(await preview.locator('.metric').first().innerText(),'2');
     assert.deepEqual(errors,[]);
