@@ -1,4 +1,8 @@
-# Active Recall Web — Free Edition v4.38
+# Active Recall Web — Free Edition v4.39
+
+## Blueprint 4.39 — Monthly study calendar
+
+**Study calendar** now includes a Monday-first monthly grid **below** the existing configurable 7–42-day daily review list (21 days by default). Navigate previous/next months, jump directly to a month, or return to the current month; select a day to see its review opportunities, conditional revisits, syllabus preparation, and assessments. The grid refreshes from the same live plan whenever you open the page or change study availability. Historical dates show only genuinely recorded daily plan snapshots, revisions, and attempts; missing snapshots are not marked as missed study. For months beyond the short planning window, the grid still shows actual saved memory due dates and assessments, explicitly **without assigning invented future review appointments or assuming successful recall**. Unavailable days remain visible. The Moon styling, full-height highlighters, mobile accessibility, free offline hosting, current review logic, local storage, schema-v5 backups, and all prior records are unchanged. [Release and rollback checklist](docs/RELEASE_4_39_ROLLOUT.md).
 
 ## Blueprint 4.38 — Clear, accurate headings
 

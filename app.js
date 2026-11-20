@@ -1,6 +1,6 @@
 (() => {
   'use strict';
-  const C=window.ActiveRecallCore, Rh=window.ActiveRecallStudyRhythm, Store=window.ActiveRecallStorage, Doc=window.ActiveRecallDocumentImport, H=window.ActiveRecallHumanReview, P=window.ActiveRecallPairedReview, PU=window.ActiveRecallPairedUI, R=window.ActiveRecallReviewPackets, RU=window.ActiveRecallReviewPacketUI, F=window.ActiveRecallReferenceFirst, FU=window.ActiveRecallReferenceFirstUI, Pilot=window.ActiveRecallReviewerPilot, PilotUI=window.ActiveRecallPilotUI, Training=window.ActiveRecallReviewerTraining, TrainingUI=window.ActiveRecallReviewerTrainingUI, Usability=window.ActiveRecallReviewerUsability, UsabilityUI=window.ActiveRecallReviewerUsabilityUI, FSRSShadow=window.ActiveRecallFSRSShadow;
+  const C=window.ActiveRecallCore, Rh=window.ActiveRecallStudyRhythm, Store=window.ActiveRecallStorage, Doc=window.ActiveRecallDocumentImport, H=window.ActiveRecallHumanReview, P=window.ActiveRecallPairedReview, PU=window.ActiveRecallPairedUI, R=window.ActiveRecallReviewPackets, RU=window.ActiveRecallReviewPacketUI, F=window.ActiveRecallReferenceFirst, FU=window.ActiveRecallReferenceFirstUI, Pilot=window.ActiveRecallReviewerPilot, PilotUI=window.ActiveRecallPilotUI, Training=window.ActiveRecallReviewerTraining, TrainingUI=window.ActiveRecallReviewerTrainingUI, Usability=window.ActiveRecallReviewerUsability, UsabilityUI=window.ActiveRecallReviewerUsabilityUI, FSRSShadow=window.ActiveRecallFSRSShadow, Month=window.ActiveRecallMonthCalendar;
   let db, page='home', focusedCourse=null, duration=25, currentSessionId=null, modalReqId=null, modalSourceId=null, modalReviewId=null, modalPairId=null, qualityReqId=null, toastTimer=null, saveIssue=null;
   let clearBusy=false;
   let pendingDocument=null, documentImportBusy=false, studioSourceId=null, syllabusEditingId=null, syllabusFocusedId=null;
@@ -15,6 +15,7 @@
   let selectingQuestions=false, selectedQuestionIds=new Set(),permanentDeleteBusy=false;
   let guidedGoalId=null, guidedStep='source', guidedAnswer='', guidedRevealed=false, guidedStartedAt=0;
   let outlookSettings={days:21,weekdayMinutes:25,weekendMinutes:60,missedDates:[]};
+  let calendarMonth=null,calendarSelectedDate=null;
   const STALE_STORAGE_MESSAGE='Another tab saved a newer notebook. Changes made in this tab have not been saved. Export this tab’s JSON backup from Progress if you need to preserve them, then reload to view the newer notebook. Do not import that backup over newer work without reconciling the differences.';
   const $=s=>document.querySelector(s);
   const esc=v=>String(v??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
@@ -716,6 +717,66 @@ A">${esc((a.exactAnswerKey?.answers||[]).join('\n'))}</textarea><label class="ch
   function insights(){const s=C.stats(db),attempts=db.attempts.slice().reverse().slice(0,12),evidence=C.evidenceSummary(db),rubric=C.rubricProgress(db);
     return `<div class="pagehead"><div><div class="eyebrow">Learning evidence</div><h1>Progress</h1><p>Review attempts and upcoming work. This prototype shows self-rated attempts and assessment coverage, not calibrated mastery or exam-score predictions.</p></div></div><div class="grid cols3">${metric('Recall targets',s.targets,'Across all requirements')}${metric('Attempted',s.practiced,'Targets with review history')}${metric('Due / new',s.due,'Eligible for practice')}</div><section class="section"><div class="card"><div class="card-title"><h2>Practice records</h2><span class="pill blue">Learner self-report</span></div><div class="grid cols3">${metric('Self-rated Good / Easy',evidence.independentSelfReport,'Unassisted by hint; not verified grading')}${metric('With hints',evidence.assisted,'Supported practice, not independent recall')}${metric('Immediate post-study',evidence.immediatePostStudy,'Retrieval after source study, not delayed retention')}${metric('Needs practice',evidence.needsPractice,'Includes reported criterion gaps')}</div><p class="info" style="margin-top:15px">Recorded responses: ${evidence.written} written · ${evidence.oral} spoken (self-report) · ${evidence.mental} mentally recalled or unrecorded. These counts are attempts, not unique topics. Only explicitly configured short factual questions have strict literal checks; complex answers remain self-assessed.</p><p class="muted small">Timing samples: ${evidence.withTiming} attempts with plausible active-task durations. Estimated times are personal planning aids, not claims about learning performance.</p></div></section>${TrainingUI.panel({db,esc})}${UsabilityUI.panel({db,esc})}${PilotUI.panel({db,esc,courseName})}${FU.panel({db,esc,courseName})}${RU.panel({db,esc,courseName})}${PU.panel({db,esc,courseName})}${humanReviewPanel()}${delayedEvidencePanel()}${literalEvidencePanel()}${policyEvidencePanel()}<section class="section"><div class="card"><div class="card-title"><h2>Explanation checklist evidence</h2><span class="pill blue">Self-check · not grading</span></div><div class="grid cols4">${metric('Rubric points',rubric.total,'Active, verified criteria')}${metric('Included',rubric.met,'Latest applicable self-check')}${metric('Missed / unsure',rubric.missed+rubric.unsure,'Self-reported explanation gaps')}${metric('Not yet checked',rubric.unassessed,'Missing criterion-level evidence')}</div>${rubric.pendingReview?`<p class="info warningtext" style="margin-top:12px">${rubric.pendingReview} criterion(s) await review after an edit.</p>`:''}<p class="info" style="margin-top:12px">Each point reflects your latest applicable self-check, not an AI score, evidence of delayed retention, or exam readiness. Revisions preserve older attempts without treating them as current proof.</p></div></section><section class="section grid cols2"><div class="card"><div class="card-title"><h2>Course coverage</h2></div>${db.courses.length?db.courses.map(c=>{const reqs=db.requirements.filter(r=>r.courseId===c.id&&r.active);const targets=reqs.flatMap(r=>C.getTargets(db,r.id,{includePending:true}));const n=targets.filter(t=>!!db.memory[t.id]).length;return `<div style="margin-bottom:17px"><div style="display:flex;justify-content:space-between;margin-bottom:7px"><strong>${esc(c.name)}</strong><span class="small muted">${n}/${targets.length} recall targets attempted</span></div><div class="progress"><span style="width:${targets.length?Math.round(100*n/targets.length):0}%"></span></div></div>`;}).join(''):'<p class="muted">Create courses to see coverage.</p>'}<p class="info">Attempt coverage is not a mastery score.</p></div><div class="card"><div class="card-title"><h2>Recent recall attempts</h2></div>${attempts.length?attempts.map(a=>`<div class="listrow"><span class="roundicon">${courseName(a.courseId)[0]}</span><div class="rowbody"><strong>${esc(a.questionSnapshot||reqById(a.requirementId)?.question||'Historical question')}</strong><small>${esc(courseName(a.courseId))} · ${new Date(a.createdAt).toLocaleDateString()}${a.assisted?' · With hint':''}${a.practiceStage==='immediate_post_study'?' · Immediate after learning':''}${(a.criterionChecks||[]).some(c=>c.status!=='met')?' · Explanation gap':''}</small>${a.correctionNote?`<p class="small muted"><strong>Your corrective note:</strong> ${esc(a.correctionNote)}</p>`:''}${(a.criterionChecks||[]).filter(c=>c.status==='missed'||c.status==='unsure').map(c=>`<p class="small warningtext">${c.status==='missed'?'Missed':'Unsure'}: ${esc(c.textSnapshot)}</p>`).join('')}</div><span class="pill ${rClass(a.scheduleRating||a.rating)}">${rateLabel(a.rating)}${a.scheduleRating&&a.scheduleRating!==a.rating?' · gap':''}</span></div>`).join(''):'<p class="muted">No recall attempts yet.</p>'}</div></section><section class="section"><div class="card"><div class="card-title"><h2>Data and privacy controls</h2></div><div class="note" style="margin-bottom:18px"><strong>Local-only storage — no accounts, billing, or server</strong><br>This free app stores your notes on your device using IndexedDB when supported (with a localStorage fallback). GitHub Pages hosts only the public application code; your private notes are not uploaded. Browser cleanup, device changes, and private browsing may remove local data. Export regular JSON backups, and do not enter sensitive personal or student information into this unencrypted prototype. <strong>No automatic cross-device sync.</strong><br><br><strong>Storage status:</strong> <span id="storage-status">${esc(Store.storageMode())}</span></div><div class="btnrow"><button class="btn secondary" data-action="export">↓ Export JSON backup</button><label class="btn secondary" for="import-file" style="cursor:pointer">↑ Import backup</label><input class="sr-only" type="file" id="import-file" accept=".json,application/json"/><button class="btn secondary" data-action="persist-storage">Request more durable storage</button><button class="btn danger" data-action="reset">Clear local data</button></div></div></section>`;
   }
+  function monthCalendar(report,prefs){
+    const month=calendarMonth||Month.monthOf(new Date());
+    const model=Month.build(db,C,report,{month,prefs});
+    const selectedDate=calendarSelectedDate?.startsWith(month)?calendarSelectedDate:
+      model.today.startsWith(month)?model.today:month+'-01';
+    const selected=model.byDate.get(selectedDate);
+    const dateLabel=selected?fmtDate(selected.date):model.label;
+    const items=[];
+    if(selected?.day){
+      for(const slot of selected.day.activities){
+        const req=reqById(slot.requirementId),target=db.retrievalTargets.find(t=>t.id===slot.targetId);
+        items.push(`<li class="month-detail-item"><strong>${esc(courseName(slot.courseId))} · ${slot.conditional?'Conditional revisit':slot.earlyForExam?'Optional early review':'Known first opportunity'}</strong><span>${esc(target?.label||req?.objective||'Recall focus')}</span><small>${Math.ceil(slot.seconds/60)} min · ${esc(slot.reason)}</small></li>`);
+      }
+      for(const step of selected.day.preparationActivities||[]){
+        items.push(`<li class="month-detail-item"><strong>${esc(courseName(step.courseId))} · Preparation</strong><span>${esc(step.label)}</span><small>${Math.ceil(step.seconds/60)} min · ${esc(step.reason)}</small></li>`);
+      }
+    }else if(selected&&!selected.past){
+      for(const due of selected.savedDue){
+        const req=reqById(due.requirementId),target=db.retrievalTargets.find(t=>t.id===due.targetId);
+        items.push(`<li class="month-detail-item"><strong>${esc(courseName(due.courseId))} · Saved review due date</strong><span>${esc(target?.label||req?.objective||'Recall focus')}</span><small>${due.earlierOpportunity?'An optional earlier review opportunity appears in the rolling plan. No appointment is assigned on this due date.':'Not assigned a study slot yet.'} This due date comes from your last rated review.</small></li>`);
+      }
+    }
+    for(const exam of selected?.exams||[]){
+      items.push(`<li class="month-detail-item"><strong>Assessment · ${esc(courseName(exam.courseId))}</strong><span>${esc(exam.title)}</span><small>Saved assessment date, not a completed study task.</small></li>`);
+    }
+    const record=selected&&(selected.past||selected.today)?`<p class="small">${selected.plan?`A plan was recorded on this date${selected.plan.revision>1?` and revised ${selected.plan.revision-1} time(s)`:''}. Latest recorded availability: ${selected.plan.availabilityMinutes} min.`:'No dated plan snapshot is available for this day.'} ${selected.attempts} recall attempt(s) recorded · ${selected.outsideMinutes} min of self-reported outside study. Missing records do not mean you failed to study.</p>`:'';
+    const future=selected&&!selected.past&&!selected.inAgenda?`<p class="small muted">This date is beyond the current ${report.days.length}-day planning window (through ${fmtDate(model.lastAgendaDate)}). Saved due dates and assessments can still appear here, but review slots and later repetitions have <strong>not</strong> been assigned this far ahead. The rolling plan will update as you study.</p>`:'';
+    const capacity=selected&&!selected.past?`<p class="small muted">${selected.budgetMinutes} min availability${selected.unavailable?' (unavailable day)':''}${selected.inAgenda?` · ${Math.ceil(selected.day.usedSeconds/60)} min assigned${selected.unplaced?` · ${selected.unplaced} known review(s) waiting for space`:''}`:''}.</p>`:'';
+    const cells=model.cells.map(cell=>{
+      if(!cell.inMonth)return `<span class="month-calendar-outside" aria-hidden="true">${cell.number}</span>`;
+      const badges=[];
+      if(cell.past){
+        if(cell.attempts)badges.push(`<span class="month-count history">${cell.attempts} attempt${cell.attempts===1?'':'s'}</span>`);
+        if(cell.plan)badges.push(`<span class="month-count history">Plan${cell.plan.revision>1?' updated':''}</span>`);
+        if(cell.outsideMinutes)badges.push(`<span class="month-count history">${cell.outsideMinutes} min logged</span>`);
+      }else{
+        if(cell.known)badges.push(`<span class="month-count known">${cell.known} known</span>`);
+        if(cell.conditional)badges.push(`<span class="month-count conditional">${cell.conditional} later</span>`);
+        if(cell.preparation)badges.push(`<span class="month-count preparation">${cell.preparation} prep</span>`);
+        if(cell.savedDue.length)badges.push(`<span class="month-count due">${cell.savedDue.length} due</span>`);
+        if(cell.today&&cell.plan?.revision>1)badges.push('<span class="month-count history">Plan updated</span>');
+      }
+      if(cell.exams.length)badges.push(`<span class="month-count assessment">${cell.exams.length} exam</span>`);
+      if(cell.unavailable&&!cell.past)badges.push('<span class="month-count unavailable">Off</span>');
+      const summary=badges.map(b=>b.replace(/<[^>]+>/g,'')).join(', ')|| (cell.inAgenda?'No assigned work':'No dated record or assigned work');
+      const accessibleDate=new Date(cell.date+'T12:00:00').toLocaleDateString(undefined,{weekday:'long',month:'long',day:'numeric',year:'numeric'});
+      return `<button type="button" class="month-calendar-day ${cell.today?'is-today':''} ${cell.date===selectedDate?'is-selected':''}" data-action="calendar-select-day" data-date="${cell.date}" aria-label="${esc(accessibleDate+': '+summary)}" aria-pressed="${cell.date===selectedDate?'true':'false'}"><strong>${cell.number}</strong><span class="month-calendar-counts">${badges.join('')}</span></button>`;
+    }).join('');
+    return `<section class="section"><div class="card month-calendar" aria-label="Monthly study calendar">
+      <div class="card-title"><h2>Monthly calendar</h2></div>
+      <div class="month-calendar-controls"><div class="month-calendar-nav"><button type="button" class="btn secondary small" data-action="calendar-previous" ${month==='1900-01'?'disabled':''}>Previous month</button><strong aria-live="polite">${esc(model.label)}</strong><button type="button" class="btn secondary small" data-action="calendar-next" ${month==='2100-12'?'disabled':''}>Next month</button></div>
+        <form data-form="calendar-jump" class="month-calendar-jump"><label for="calendar-month-input">Go to month</label><input class="input" id="calendar-month-input" name="month" type="month" min="1900-01" max="2100-12" value="${month}" required/><button class="btn secondary small" type="submit">Go</button><button class="btn secondary small" type="button" data-action="calendar-today">Current month</button></form>
+      </div>
+      <div class="month-calendar-weekdays" aria-hidden="true">${['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(day=>`<span>${day}</span>`).join('')}</div>
+      <div class="month-calendar-grid">${cells}</div>
+      <div class="month-calendar-legend"><span class="month-count known">Known review</span><span class="month-count conditional">Conditional revisit</span><span class="month-count preparation">Preparation</span><span class="month-count assessment">Assessment</span><span class="month-count due">Saved due date</span></div>
+      <div class="month-calendar-detail" role="region" aria-live="polite" aria-label="Selected date details"><h3>${esc(dateLabel)}</h3>${record}${capacity}${future}${items.length?`<ul class="month-detail-list">${items.join('')}</ul>`:`<p class="small muted">${selected?.past?'No further dated details.':selected?.inAgenda?'No study activities are currently placed on this day.':'No further saved dates or plans for this day.'}</p>`}</div>
+      <p class="small muted month-calendar-note">The monthly view follows the same rolling plan shown above. Only the current planning window contains assigned study opportunities; later saved due dates and assessments are shown separately. Conditional revisits depend on future answers. Viewing months does not change your study schedule or saved history.</p>
+    </div></section>`;
+  }
   function outlook(){
     const prefs=db.agendaPreferences||outlookSettings;
     const report=C.buildReviewAgenda(db,{start:new Date(),...prefs});
@@ -767,7 +828,8 @@ A">${esc((a.exactAnswerKey?.answers||[]).join('\n'))}</textarea><label class="ch
     <section class="section"><div class="card"><div class="card-title"><h2>Preparation before retrieval</h2><span class="pill blue">Planning steps · not recall grades</span></div><p class="small muted">${report.preparationGoals} syllabus objective(s) still need source preparation, a trustworthy question, or verification. ${report.preparationSteps} have a four-minute planning step in this outlook; ${report.unplannedPreparation} could not fit. These are small starting tasks, not proof that the objective has been learned. Mark materials prepared only after locating and studying them, then write or review a source-supported question. Spaced retrieval starts only after verification.</p></div></section>
     <section class="section grid cols2 outlook-summary"><div class="card"><div class="card-title"><h2>Upcoming assessment coverage</h2><span class="pill blue">Opportunities, not mastery</span></div>${report.coverage.length?report.coverage.map(c=>`<div class="outlook-exam"><div class="outlook-exam-top"><strong>${esc(c.title)}</strong><span class="small muted">${fmtDate(c.date)}</span></div><p class="small muted">${esc(courseName(c.courseId))} · ${c.firstPass}/${c.eligibleTargets} targets with a known review opportunity before the assessment · ${c.conditionalOpportunities} conditional revisits${c.blocked?` · ${c.blocked} held for verification`:''}.</p><div class="progress"><span style="width:${c.eligibleTargets?Math.round(c.firstPass*100/c.eligibleTargets):0}%"></span></div></div>`).join(''):'<p class="muted small">Add an upcoming assessment to see whether eligible learning targets have a proposed study slot before the deadline.</p>'}<p class="info" style="margin-top:12px">A scheduled opportunity is not a forecast of grades, proof of learning, predicted retention or exam readiness.</p></div>
     <div class="card"><div class="card-title"><h2>Known and conditional reviews</h2></div><p class="small muted"><strong>Known review:</strong> derived from the actual saved due date or a not-yet-attempted target. <strong>Conditional revisit:</strong> a planning placeholder for subsequent spaced practice; its actual date changes when you study, use hints, or miss important explanation criteria.</p><div class="note" style="margin-top:15px"><strong>Research limitation</strong><br>${esc(report.warning)}</div></div></section>
-    <section class="section"><div class="card"><div class="card-title"><h2>Daily review plan</h2><span class="pill">${report.days.length} days</span></div><div class="outlook-days">${rows}</div><p class="small muted" style="margin-top:16px">The plan is recalculated from your current learning records whenever you open it. These are proposed review windows, not background reminders or fixed appointments. A completed session changes future calculations; the current Study Now queue remains available for shorter or longer sessions.</p></div></section>`;
+    <section class="section"><div class="card"><div class="card-title"><h2>Daily review plan</h2><span class="pill">${report.days.length} days</span></div><div class="outlook-days">${rows}</div><p class="small muted" style="margin-top:16px">The plan is recalculated from your current learning records whenever you open it. These are proposed review windows, not background reminders or fixed appointments. A completed session changes future calculations; the current Study Now queue remains available for shorter or longer sessions.</p></div></section>
+    ${monthCalendar(report,prefs)}`;
   }
   function guidedLearning(){
     if(!guidedGoalId)return empty('Choose a syllabus goal','Start guided learning from the Knowledge page.');
@@ -863,6 +925,18 @@ A">${esc((a.exactAnswerKey?.answers||[]).join('\n'))}</textarea><label class="ch
   function pauseSession(se){if(se.paused)return;se.elapsedMs=sessionElapsedMs(se);se.paused=true;se.runningSince=null;}
   function resumeSession(se){if(!se.paused)return;se.runningSince=Date.now();se.paused=false;}
   function handleAction(btn){const action=btn.dataset.action;if(clearBusy&&action!=='export'){notify('Finishing the local data clear. Please wait.',true);return;}const se=activeSession();switch(action){
+    case 'calendar-previous':case 'calendar-next':{
+      try{calendarMonth=Month.shiftMonth(calendarMonth||Month.monthOf(new Date()),action==='calendar-next'?1:-1);calendarSelectedDate=null;render();
+        $(`#app [data-action="${action}"]`)?.focus();}catch(error){notify(error.message,true);}break;
+    }
+    case 'calendar-today':calendarMonth=Month.monthOf(new Date());calendarSelectedDate=null;render();$('#app [data-action="calendar-today"]')?.focus();break;
+    case 'calendar-select-day':{
+      const date=btn.dataset.date,month=calendarMonth||Month.monthOf(new Date());
+      if(typeof date==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(date)&&date.startsWith(month+'-')){
+        calendarSelectedDate=date;render();$(`#app [data-action="calendar-select-day"][data-date="${date}"]`)?.focus();
+      }
+      break;
+    }
     case 'audit-fsrs-receipts':{
       const generation=++fsrsShadowGeneration;
       fsrsShadowBusy=false;
@@ -1117,6 +1191,10 @@ A">${esc((a.exactAnswerKey?.answers||[]).join('\n'))}</textarea><label class="ch
         transact(()=>{Pilot.start(db,{plannedTargets:Number(f.get('plannedTargets')),confirmed:f.get('confirmed')==='yes'});
           notify('Local reviewer pilot rules locked. New attempts will be screened prospectively.');});break;
       case 'outlook':{try{const days=Number(f.get('days')),weekdayMinutes=Number(f.get('weekdayMinutes')),weekendMinutes=Number(f.get('weekendMinutes'));const missedDates=String(f.get('missedDates')||'').split(/[\s,]+/).filter(Boolean);C.buildReviewAgenda(db,{days,weekdayMinutes,weekendMinutes,missedDates});outlookSettings={days,weekdayMinutes,weekendMinutes,missedDates};transact(()=>{db.agendaPreferences={...outlookSettings};Rh.recordDailyPlan(db,C,{reason:'availability_changed'});});notify('Availability saved. Today’s revised plan is recorded without rewriting the original snapshot.');}catch(error){notify(error.message,true);}break;}
+      case 'calendar-jump':{
+        try{calendarMonth=Month.shiftMonth(String(f.get('month')||''),0);calendarSelectedDate=null;render();
+          $('#app [data-action="calendar-today"]')?.focus();}catch(error){notify(error.message,true);}break;
+      }
       case 'simulate-schedule':{
         try{
           const base=Rh.preferences(db),proposal={days:base.days,weekdayMinutes:Number(f.get('weekdayMinutes')),
