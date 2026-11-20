@@ -113,6 +113,9 @@ async function runScenario(browser,baseUrl,choice){
   page.on('pageerror',error=>errors.push(error.message));
   try{
     await page.clock.install({time:new Date(START)});
+    // install() advances virtual time at real speed unless explicitly frozen.
+    // Freeze Date for an exact-second due boundary without stopping page timers.
+    await page.clock.setFixedTime(new Date(START));
     await page.goto(baseUrl);
     const fixture=await seed(page);
     const due=await reachDueRetry(page,fixture);
