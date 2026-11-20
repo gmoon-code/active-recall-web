@@ -46,6 +46,12 @@ test('FSRS-7 freezes a reproducible pre-answer probability only from complete in
   assert.ok(p.probability>0&&p.probability<1);
   assert.deepEqual(await Shadow.forecastProbability(f.db,input),p);
   assert.equal(JSON.stringify(f.db),before);
+  const precise=fixture(),base=Date.parse('2026-11-01T12:00:00.374Z');
+  for(const day of [0,5,10])precise.attempt(day,{now:new Date(base+day*86400000)});
+  const preciseForecast=await Shadow.forecastProbability(precise.db,{Core:C,Vendor,
+    requirementId:precise.req.id,targetId:precise.target.id,
+    activityId:precise.activity.id,now:new Date(base+20*86400000+93)});
+  assert.ok(preciseForecast,'FSRS Date timestamps must retain milliseconds on real attempts');
   assert.equal(await Shadow.forecastProbability(f.db,{...input,now:at(8)}),null,
     'A preview cannot replay future evidence');
   const bad=fixture();bad.attempt(0);bad.attempt(3,{assisted:true});
