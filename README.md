@@ -1,4 +1,8 @@
-# Active Recall Web — Free Edition v4.28
+# Active Recall Web — Free Edition v4.29
+
+## Blueprint 4.29 — Independently replay saved FSRS predictions
+
+**Progress → FSRS prediction history check** now offers an optional, read-only audit that reconstructs each stored FSRS-7 default-weight probability from the earlier, same-version, independently written review sequence. A correctly shaped JSON field is insufficient: a forged, mismatched or incomplete history is excluded. The audit counts history-replayed receipts separately from delayed unassisted written candidates and narrow short-fact outcome candidates; it **withholds numerical prediction scores and policy rankings**. The current automatic question priorities and calendar, ratings, schema-v5 JSON backups, browser-local privacy, offline use and zero-cost hosting remain unchanged. The check cannot authenticate the moment a file was captured or establish that a student's response was truly correct. [Release checklist](docs/RELEASE_4_29_ROLLOUT.md).
 
 ## Blueprint 4.28 — Record experimental FSRS predictions before recall
 

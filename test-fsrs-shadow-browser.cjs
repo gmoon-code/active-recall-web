@@ -118,6 +118,23 @@ async function main(){
     assert.equal(persisted.decision.activePolicy,'transparent-interval-v1');
     assert.equal(persisted.due,persisted.decision.activeDueAt);
     assert.notEqual(persisted.due,fixture.previousDue);
+    await page.locator('.navbtn[data-page=insights]').click();
+    const auditPanel=page.locator('section').filter({has:page.getByRole('heading',{name:'FSRS prediction history check'})});
+    await auditPanel.getByRole('button',{name:'Check saved FSRS prediction history'}).click();
+    await auditPanel.getByText('Receipts replayed exactly').waitFor();
+    const auditText=await auditPanel.innerText();
+    assert.match(auditText,/Of 1 inspected/);
+    assert.match(auditText,/No scores are calculated/);
+    assert.match(auditText,/no study dates or priorities change/);
+    const afterAudit=await page.evaluate(async()=>{
+      await window.ActiveRecallStorage.ready();
+      const {db}=await window.ActiveRecallStorage.load();
+      return {due:db.memory[db.attempts.at(-1).retrievalTargetId].dueAt,
+        attempts:db.attempts.length,receipt:db.attempts.at(-1).fsrsForecast};
+    });
+    assert.equal(afterAudit.due,persisted.due);
+    assert.equal(afterAudit.attempts,persisted.attempts);
+    assert.deepEqual(afterAudit.receipt,persisted.receipt);
     // If the learner reveals first, an asynchronously completed prediction
     // must be discarded even though its calculation began beforehand.
     await page.evaluate(async()=>{
