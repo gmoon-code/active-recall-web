@@ -72,7 +72,7 @@
   function empty(title,desc,cta='',action=''){return `<div class="empty"><div class="bigemoji">✧</div><h2>${esc(title)}</h2><p>${esc(desc)}</p>${cta?`<button class="btn primary" data-action="${action}">${esc(cta)}</button>`:''}</div>`;}
   const nav=[['home','◫','Overview'],['capture','✎','Capture'],['questions','?','My Q&A'],['study','◉','Study Now'],['courses','▤','Knowledge'],['assessments','▦','Assessments'],['forecast','◴','Calendar'],['insights','◷','Progress']];
   function sidebar(){return `<aside class="sidebar"><div class="brand"><span class="mark">✳</span><span>active<span style="color:#176d5e">recall</span></span></div><nav class="nav" aria-label="Main navigation">${nav.map(([key,icon,label])=>`<button class="navbtn ${page===key?'active':''}" data-action="navigate" data-page="${key}" ${page===key?'aria-current="page"':''}><span class="navicon">${icon}</span>${label}</button>`).join('')}</nav><div class="sidefoot"><strong><span class="statusdot"></span>100% free · Browser-local</strong><p>Hosted as a static site. No payments, API keys, accounts, or cloud sync. Export backups regularly.</p></div></aside>`;}
-  function header(){return `<div class="topline"><div class="path">ACTIVE RECALL WEB <span style="color:#b7c4bd">/</span> ${esc(nav.find(x=>x[0]===page)?.[2]||(page==='guided'?'Guided learning':''))}</div><div class="topright"><span class="tag">Blueprint 4.31 · Free</span><span class="avatar" aria-label="Local learner profile">A</span></div></div>`;}
+  function header(){return `<div class="topline"><div class="path">ACTIVE RECALL WEB <span style="color:#b7c4bd">/</span> ${esc(nav.find(x=>x[0]===page)?.[2]||(page==='guided'?'Guided learning':''))}</div><div class="topright"><span class="tag">Blueprint 4.32 · Free</span><span class="avatar" aria-label="Local learner profile">A</span></div></div>`;}
   function shell(content){return `<div class="app">${sidebar()}<main class="main">${header()}${content}<div class="footer">Free &amp; static · Notes stay in this browser · Export backups · Review generated drafts before relying on them · <a href="./health.html">Site diagnostics</a></div></main></div>${modalReqId?editModal():''}${qualityReqId?questionQualityModal():''}${modalSourceId?editSourceModal():''}${studioSourceId?studioModal():''}${modalReviewId?humanReviewModal():''}${modalPairId?PU.modal({db,esc,courseName,attemptId:modalPairId}):''}`;}
   function dashboard(){const integrity=C.integrity(db);const s=C.stats(db),preview=C.planActivities(db,15).items.slice(0,4),topUpcoming=s.upcoming.slice(0,3),ready=C.planActivities(db,duration).items.length>0,ongoing=activeSession()?.status==='active',shortWait=shortRetrySummary;
     const startAction=ongoing?'data-action="navigate" data-page="study"':'data-action="start-session"',startLabel=ongoing?'Continue studying':`Study now · ${duration} min`;
@@ -777,6 +777,10 @@ A">${esc((a.exactAnswerKey?.answers||[]).join('\n'))}</textarea><label class="ch
           <p class="small muted" style="margin-top:12px">Skip sets a question aside for this session only. Flag for correction also keeps it out of future automatic study until you review it in My Q&amp;A. Neither is a recall rating. If you tried a valid question and could not remember, reveal the answer and choose Again.${se.skippedIds?.length?' '+se.skippedIds.length+' skipped this session.':''}</p></details>`);
         const extra=$('#app .session-extra-controls');
         if(toolbar&&extra)extra.prepend(...toolbar.querySelectorAll('[data-action="extend-session"],[data-action="remaining-five"]'));
+        if(se.completedIds?.includes(se.currentTargetId)){
+          $('#app .sessionpanel .card-title')?.insertAdjacentHTML('afterend',
+            '<p class="small muted" style="margin:0 0 12px">Due retry · you chose Again earlier in this session. This is a new recall attempt.</p>');
+        }
         const why=$('#app .sessionpanel .card > .note');
         if(why?.textContent?.includes('Why this activity?')){
           const details=document.createElement('details'),summary=document.createElement('summary');
@@ -813,7 +817,7 @@ A">${esc((a.exactAnswerKey?.answers||[]).join('\n'))}</textarea><label class="ch
     }).catch(()=>{ /* A missing optional comparison never blocks studying. */ });
   }
   function selectNext(se){
-    const remain=Math.max(0,sessionRemainingMs(se)/60000),excluded=[...(se.completedIds||[]),...(se.skippedIds||[])],plan=(se.queueMode==='due_only'?C.planDueReviews:C.planActivities)(db,remain,excluded,se.courseCounts);
+    const remain=Math.max(0,sessionRemainingMs(se)/60000),now=new Date(),excluded=C.sessionExclusions(db,se,now),plan=(se.queueMode==='due_only'?C.planDueReviews:C.planActivities)(db,remain,excluded,se.courseCounts,now);
     let chosen=plan.items[0]||null;
     if(plan.items.length){
       // Both views use the same target IDs, saved review evidence and availability.

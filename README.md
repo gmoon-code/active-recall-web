@@ -1,4 +1,8 @@
-# Active Recall Web — Free Edition v4.31
+# Active Recall Web — Free Edition v4.32
+
+## Blueprint 4.32 — Bring back a failed question only when its retry is due
+
+In a long **Study Now** session, a question rated **Again** can now return **after its actual saved one-hour retry becomes due**, provided the session is still active and another selection occurs. The queue gives that real due review its normal priority and labels it as a retry. It will never replay the question before the hour, after a later **Good/Hard/Easy** rating, or because of activity in another session. **Skip question** or **Flag for correction** on a due repeat records navigation only—not a recall attempt—and preserves backup validation without overwriting previously completed work. If a session finishes before the retry becomes due, the learner can start another session when ready. No new settings, rating, active heuristic, scheduled intervals, FSRS policy, memory evidence, schema version, cloud dependencies, or subscription costs are introduced. This improves fidelity to the app's *existing* heuristic, not scientific proof of optimal spacing. [Release checklist](docs/RELEASE_4_32_ROLLOUT.md).
 
 ## Blueprint 4.31 — Respect the hour for a short retry
 
