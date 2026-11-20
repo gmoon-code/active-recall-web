@@ -206,8 +206,11 @@
       }
       if(!previous.length||!Number.isSafeInteger(f.historyCount)||previous.length!==f.historyCount||
          !last||last.createdAt!==f.priorReviewedAt||
-         last.schedulingDecision?.activeDueAt!==f.priorDueAt||
-         last.schedulingDecision?.activeIntervalDays!==f.priorIntervalDays||
+         // Older valid attempts may predate versioned policy snapshots. The
+         // grade history can still be replayed; check a snapshot if present.
+         (last.schedulingDecision&&(
+           last.schedulingDecision.activeDueAt!==f.priorDueAt||
+           last.schedulingDecision.activeIntervalDays!==f.priorIntervalDays))||
          previous.some(x=>x.a.requirementId!==a.requirementId||
            x.a.requirementVersion!==a.requirementVersion||
            x.a.retrievalTargetVersion!==a.retrievalTargetVersion)){

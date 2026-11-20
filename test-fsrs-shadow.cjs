@@ -116,6 +116,10 @@ test('historical FSRS receipts are independently replayed, not trusted by shape 
   const rejected=await Shadow.auditReceipts(forged,{Vendor});
   assert.equal(rejected.replayed,0);
   assert.equal(rejected.exclusions.modelMismatch,1);
+  const oldValid=JSON.parse(JSON.stringify(f.db));
+  delete oldValid.attempts[2].schedulingDecision;
+  assert.equal((await Shadow.auditReceipts(oldValid,{Vendor})).replayed,1,
+    'Older real attempts without policy snapshots can still replay their grades');
   const changed=JSON.parse(JSON.stringify(f.db));
   changed.attempts[1].rating='hard';changed.attempts[1].scheduleRating='hard';
   assert.equal((await Shadow.auditReceipts(changed,{Vendor})).exclusions.modelMismatch,1);
