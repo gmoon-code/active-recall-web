@@ -105,6 +105,15 @@
             new Set(se.skippedIds).size!==se.skippedIds.length||
             se.skippedIds.some(id=>typeof id!=='string'||!sessionTargets.has(id)||(se.completedIds||[]).includes(id))))
             throw Error('Invalid unrated session skips in backup.');
+          // A later-due Again repeat may be passed over *after* the same
+          // question was rated earlier in the session. Keep that navigation
+          // separate from ordinary skips, which must never overlap ratings.
+          if(se.retrySkippedIds!==undefined&&(!Array.isArray(se.retrySkippedIds)||
+            se.retrySkippedIds.length>200000||!Array.isArray(se.completedIds)||
+            new Set(se.retrySkippedIds).size!==se.retrySkippedIds.length||
+            se.retrySkippedIds.some(id=>typeof id!=='string'||!sessionTargets.has(id)||
+              !se.completedIds.includes(id)||(se.skippedIds||[]).includes(id))))
+            throw Error('Invalid session retry skips in backup.');
         }
         if(!Array.isArray(input.rubricCriteria)||!Array.isArray(input.criterionVersions))throw Error('Missing rubric history.');
         if(input.rubricCriteria.length>500000)throw Error('Too many criteria.');
@@ -932,13 +941,15 @@
         const completed=Array.isArray(s.completedIds)?s.completedIds:[];
         const keep=completed.filter(id=>!removedIds.has(id));
         const skipped=Array.isArray(s.skippedIds)?s.skippedIds.filter(id=>!removedIds.has(id)):s.skippedIds;
+        const retrySkipped=Array.isArray(s.retrySkippedIds)?s.retrySkippedIds.filter(id=>!removedIds.has(id)):s.retrySkippedIds;
         const counts={...(s.courseCounts||{})};
         for(const r of rows){
           const removed=completed.filter(id=>id===r.id||db.retrievalTargets.some(t=>t.requirementId===r.id&&t.id===id)).length;
           if(removed&&counts[r.courseId])counts[r.courseId]=Math.max(0,counts[r.courseId]-removed);
         }
         const current=removedIds.has(s.currentReqId)||removedIds.has(s.currentTargetId)||removedIds.has(s.currentActivityId);
-        return {...s,completedIds:keep,...(skipped===undefined?{}:{skippedIds:skipped}),courseCounts:counts,...(current?{
+        return {...s,completedIds:keep,...(skipped===undefined?{}:{skippedIds:skipped}),
+          ...(retrySkipped===undefined?{}:{retrySkippedIds:retrySkipped}),courseCounts:counts,...(current?{
           currentReqId:null,currentTargetId:null,currentActivityId:null,preAnswerForecast:null,draftAnswer:'',correctionDraft:'',criterionDraft:{},showHint:false,showReference:false,assistedForCurrent:false
         }:{})};
       }),
@@ -1415,6 +1426,26 @@
     return {count:waiting.length,nextReadyAt:new Date(first).toISOString(),
       minutesRemaining:Math.max(1,Math.ceil((first-now.getTime())/60000))};
   }
+  // A target rated Again can be studied twice in a *long* session, but only
+  // after its saved one-hour retry has actually become due. The most recent
+  // attempt must be that session's actual Again rating and match current
+  // memory; earlier ratings and cross-session activity cannot unlock it.
+  function dueSessionRetry(db,session,targetId,now=new Date(),lastAttempt=null){
+    const m=db.memory[targetId],due=Date.parse(m?.dueAt||'');
+    if(!session?.completedIds?.includes(targetId)||m?.lastRating!=='again'||
+       Math.abs(m.intervalDays-1/24)>1e-9||!Number.isFinite(due)||due>now.getTime()||
+       session.skippedIds?.includes(targetId)||session.retrySkippedIds?.includes(targetId))return false;
+    const last=lastAttempt||db.attempts.findLast(a=>a.retrievalTargetId===targetId);
+    return !!last&&last.sessionId===session.id&&last.scheduleRating==='again'&&
+      last.createdAt===m.lastReviewedAt;
+  }
+  function sessionExclusions(db,session,now=new Date()){
+    const lastAttempts=new Map();
+    for(const a of db.attempts)lastAttempts.set(a.retrievalTargetId,a);
+    return [...new Set((session.completedIds||[]).filter(id=>
+      !dueSessionRetry(db,session,id,now,lastAttempts.get(id)))),
+      ...(session.skippedIds||[]),...(session.retrySkippedIds||[])];
+  }
   function packActivities(db,minutes,completedIds=[],courseCounts={},now=new Date(),dueOnly=false){
     const budgetSeconds=Math.max(0,Math.round(minutes*60));
     const reserve=budgetSeconds<=300?40:Math.min(180,Math.round(budgetSeconds*0.08));
@@ -1453,8 +1484,14 @@
       !session.currentTargetId||!session.currentReqId)throw Error('No active question can be skipped.');
     const target=db.retrievalTargets.find(t=>t.id===session.currentTargetId&&
       t.requirementId===session.currentReqId);
-    if(!target||session.completedIds?.includes(target.id)||session.skippedIds?.includes(target.id))
+    if(!target||session.skippedIds?.includes(target.id)||session.retrySkippedIds?.includes(target.id))
       throw Error('Question is not eligible to skip.');
+    if(session.completedIds?.includes(target.id)){
+      if(!dueSessionRetry(db,session,target.id))throw Error('Question is not eligible to skip.');
+      if(!Array.isArray(session.retrySkippedIds))session.retrySkippedIds=[];
+      session.retrySkippedIds.push(target.id);
+      return target.id;
+    }
     if(!Array.isArray(session.skippedIds))session.skippedIds=[];
     session.skippedIds.push(target.id);
     return target.id;
@@ -1463,8 +1500,9 @@
     correctionDetails(reason);
     const requirementId=session?.currentReqId;
     const targetId=skipUnratedTarget(db,session);
+    const skipped= session.retrySkippedIds?.includes(targetId)?session.retrySkippedIds:session.skippedIds;
     try{holdQuestionForCorrection(db,requirementId,new Date(),{reason});}
-    catch(error){session.skippedIds.pop();throw error;}
+    catch(error){skipped.pop();throw error;}
     return targetId;
   }
   function catchUpPreview(db,{minutes=25,now=new Date(),prefs=db.agendaPreferences}={}){
@@ -2231,5 +2269,5 @@
   }
   function validateImport(x){return migrateDb(x);}
 
-  return {DAY,id,today,addDays,daysUntil,initialDb,migrateDb,validateImport,getTarget,getTargets,getMemory,getActivities,getCriteria,addCriterion,proposeCriteria,rubricQualityReview,addRubricEvidenceDraft,reviseCriterion,setCriterionAlternatives,rubricSyllabusAlignment,setCriterionSyllabusGoals,verifyCriterion,archiveCriterion,criterionStatus,rubricProgress,chooseActivity,addRetrievalTarget,verifyRetrievalTarget,addActivityVariant,deactivateActivity,reviseSource,addCourse,addSyllabusObjectives,updateSyllabusObjective,archiveSyllabusObjective,setSyllabusLink,setSyllabusMaterialsReady,setSyllabusLearningGuide,guidedLearningInfo,syllabusCoverage,draftRequirements,addSource,addImportedDocument,addRequirement,previewManualQuestionImport,importManualQuestionList,addManualQuestionBatch,archiveRequirements,restoreRequirement,purgeArchivedRequirements,previewRequirementRevision,editRequirement,verifyRequirement,questionQualityAudit,confirmQuestionQuality,integrity:I.integrity,questionCoverage:I.questionCoverage,questionWarnings:I.questionWarnings,learningObjectiveMap,variationStudio,questionStudio,adoptQuestionProposal,coverageReviewQueue,addAssessment,linkedAssessments,estimatedSeconds,durationEstimate,evidenceType,inputModeFor,evidenceSummary,delayedRetrievalAudit,memoryModelReadinessAudit,prospectiveEvidenceAudit,previewProspectiveForecast,schedulingPolicyAudit,eligibleCandidates,shortRetryWait,planActivities,planDueReviews,skipUnratedTarget,holdSessionQuestionForCorrection,holdQuestionForCorrection,questionRepairSourceContext,updateQuestionCorrectionDetails,releaseQuestionCorrectionHold,catchUpPreview,inspectStudyPriorities,buildReviewAgenda,forecastSchedule,setExactAnswerKey,exactKeyReady,previewLiteralCheck,literalDelayedAudit,recordAttempt,latestCorrectiveFeedback,assessmentCoverage,stats,demoDb};
+  return {DAY,id,today,addDays,daysUntil,initialDb,migrateDb,validateImport,getTarget,getTargets,getMemory,getActivities,getCriteria,addCriterion,proposeCriteria,rubricQualityReview,addRubricEvidenceDraft,reviseCriterion,setCriterionAlternatives,rubricSyllabusAlignment,setCriterionSyllabusGoals,verifyCriterion,archiveCriterion,criterionStatus,rubricProgress,chooseActivity,addRetrievalTarget,verifyRetrievalTarget,addActivityVariant,deactivateActivity,reviseSource,addCourse,addSyllabusObjectives,updateSyllabusObjective,archiveSyllabusObjective,setSyllabusLink,setSyllabusMaterialsReady,setSyllabusLearningGuide,guidedLearningInfo,syllabusCoverage,draftRequirements,addSource,addImportedDocument,addRequirement,previewManualQuestionImport,importManualQuestionList,addManualQuestionBatch,archiveRequirements,restoreRequirement,purgeArchivedRequirements,previewRequirementRevision,editRequirement,verifyRequirement,questionQualityAudit,confirmQuestionQuality,integrity:I.integrity,questionCoverage:I.questionCoverage,questionWarnings:I.questionWarnings,learningObjectiveMap,variationStudio,questionStudio,adoptQuestionProposal,coverageReviewQueue,addAssessment,linkedAssessments,estimatedSeconds,durationEstimate,evidenceType,inputModeFor,evidenceSummary,delayedRetrievalAudit,memoryModelReadinessAudit,prospectiveEvidenceAudit,previewProspectiveForecast,schedulingPolicyAudit,eligibleCandidates,shortRetryWait,sessionExclusions,planActivities,planDueReviews,skipUnratedTarget,holdSessionQuestionForCorrection,holdQuestionForCorrection,questionRepairSourceContext,updateQuestionCorrectionDetails,releaseQuestionCorrectionHold,catchUpPreview,inspectStudyPriorities,buildReviewAgenda,forecastSchedule,setExactAnswerKey,exactKeyReady,previewLiteralCheck,literalDelayedAudit,recordAttempt,latestCorrectiveFeedback,assessmentCoverage,stats,demoDb};
 });
