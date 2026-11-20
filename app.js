@@ -6,6 +6,7 @@
   let focusedLecture='', editingQuestionId=null, lastWrittenLecture='', lastWrittenSourceId='', pendingQuestionImport=null;
   let schedulePreview=null;
   let fsrsShadowResult=null,fsrsShadowBusy=false,fsrsShadowGeneration=0;
+  let fsrsReceiptAuditResult=null,fsrsReceiptAuditBusy=false;
   // Ephemeral until a genuine rated attempt: never save an experimental guess
   // as a completed review or show it while the answer is still hidden.
   let fsrsPreAnswerReceipt=null,fsrsPreAnswerGeneration=0;
@@ -64,13 +65,13 @@
     }
   }
   function notify(message,error=false){let old=$('.toast');if(old)old.remove();const el=document.createElement('div');el.className='toast'+(error?' error':'');el.textContent=message;document.body.appendChild(el);if(toastTimer)clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.remove(),3800);}
-  function transact(fn){try{recordFirstOpenPlan();const ret=fn();schedulePreview=null;fsrsShadowResult=null;fsrsShadowBusy=false;fsrsShadowGeneration++;save();render();return ret;}catch(e){notify(e.message||'Something went wrong.',true);}}
+  function transact(fn){try{recordFirstOpenPlan();const ret=fn();schedulePreview=null;fsrsShadowResult=null;fsrsShadowBusy=false;fsrsReceiptAuditResult=null;fsrsReceiptAuditBusy=false;fsrsShadowGeneration++;save();render();return ret;}catch(e){notify(e.message||'Something went wrong.',true);}}
   function recordFirstOpenPlan(){if(!db)return;const snapshot=Rh.recordDailyPlan(db,C);if(snapshot)save();}
   function courseOptions(selected='',placeholder='Select a course'){return `<option value="">${esc(placeholder)}</option>`+db.courses.map(c=>`<option value="${esc(c.id)}" ${c.id===selected?'selected':''}>${esc(c.name)}</option>`).join('');}
   function empty(title,desc,cta='',action=''){return `<div class="empty"><div class="bigemoji">✧</div><h2>${esc(title)}</h2><p>${esc(desc)}</p>${cta?`<button class="btn primary" data-action="${action}">${esc(cta)}</button>`:''}</div>`;}
   const nav=[['home','◫','Overview'],['capture','✎','Capture'],['questions','?','My Q&A'],['study','◉','Study Now'],['courses','▤','Knowledge'],['assessments','▦','Assessments'],['forecast','◴','Calendar'],['insights','◷','Progress']];
   function sidebar(){return `<aside class="sidebar"><div class="brand"><span class="mark">✳</span><span>active<span style="color:#176d5e">recall</span></span></div><nav class="nav" aria-label="Main navigation">${nav.map(([key,icon,label])=>`<button class="navbtn ${page===key?'active':''}" data-action="navigate" data-page="${key}" ${page===key?'aria-current="page"':''}><span class="navicon">${icon}</span>${label}</button>`).join('')}</nav><div class="sidefoot"><strong><span class="statusdot"></span>100% free · Browser-local</strong><p>Hosted as a static site. No payments, API keys, accounts, or cloud sync. Export backups regularly.</p></div></aside>`;}
-  function header(){return `<div class="topline"><div class="path">ACTIVE RECALL WEB <span style="color:#b7c4bd">/</span> ${esc(nav.find(x=>x[0]===page)?.[2]||(page==='guided'?'Guided learning':''))}</div><div class="topright"><span class="tag">Blueprint 4.28 · Free</span><span class="avatar" aria-label="Local learner profile">A</span></div></div>`;}
+  function header(){return `<div class="topline"><div class="path">ACTIVE RECALL WEB <span style="color:#b7c4bd">/</span> ${esc(nav.find(x=>x[0]===page)?.[2]||(page==='guided'?'Guided learning':''))}</div><div class="topright"><span class="tag">Blueprint 4.29 · Free</span><span class="avatar" aria-label="Local learner profile">A</span></div></div>`;}
   function shell(content){return `<div class="app">${sidebar()}<main class="main">${header()}${content}<div class="footer">Free &amp; static · Notes stay in this browser · Export backups · Review generated drafts before relying on them · <a href="./health.html">Site diagnostics</a></div></main></div>${modalReqId?editModal():''}${qualityReqId?questionQualityModal():''}${modalSourceId?editSourceModal():''}${studioSourceId?studioModal():''}${modalReviewId?humanReviewModal():''}${modalPairId?PU.modal({db,esc,courseName,attemptId:modalPairId}):''}`;}
   function dashboard(){const integrity=C.integrity(db);const s=C.stats(db),preview=C.planActivities(db,15).items.slice(0,4),topUpcoming=s.upcoming.slice(0,3),ready=C.planActivities(db,duration).items.length>0,ongoing=activeSession()?.status==='active';
     const startAction=ongoing?'data-action="navigate" data-page="study"':'data-action="start-session"',startLabel=ongoing?'Continue studying':`Study now · ${duration} min`;
@@ -570,6 +571,16 @@ A">${esc((a.exactAnswerKey?.answers||[]).join('\n'))}</textarea><label class="ch
       ${a.olderAttemptsNotAudited?`<p class="small muted">Latest 50,000 attempts scanned; ${a.olderAttemptsNotAudited} older records not included.</p>`:''}
     </div></section>`;
   }
+  function fsrsReceiptAuditPanel(){
+    const r=fsrsReceiptAuditResult,e=r?.exclusions;
+    return `<section class="section"><div class="card"><div class="card-title"><h2>FSRS prediction history check</h2><span class="pill blue">Read-only · no scheduling change</span></div>
+      <p class="small muted">A saved prediction is only a numerical claim. This optional local audit independently rebuilds the FSRS-7 memory state from <strong>earlier</strong> written review history and checks whether the saved six-decimal probability matches. It does not use later answers to calculate an earlier prediction.</p>
+      <div class="btnrow"><button type="button" class="btn secondary" data-action="audit-fsrs-receipts" ${fsrsReceiptAuditBusy?'disabled':''}>${fsrsReceiptAuditBusy?'Replaying earlier reviews locally…':'Check saved FSRS prediction history'}</button></div>
+      ${r?`<div class="grid cols3" style="margin:16px 0">${metric('Receipts replayed exactly',r.replayed,'Of '+r.inspected+' inspected · '+r.notInspected+' not inspected')}${metric('Delayed written candidates',r.eligibleDelayedWritten,'At least 24h; unassisted')}${metric('Factual labels to inspect',r.literalOutcomeCandidates,'Literal comparison only; not a score')}</div>
+        ${r.recordedReceipts===0?'<p class="info">No FSRS receipts yet. Keep studying normally; no special action is required.</p>':`<p class="small muted">${r.recordedReceipts} stored receipt(s). Excluded from replay: ${e.unlinkedMetadata} inconsistent metadata · ${e.incompleteOrChangedHistory} incomplete or changed histories · ${e.unsupportedPractice} assisted, oral or other ineligible earlier practice · ${e.invalidChronology} time conflicts · ${e.modelMismatch} numerical mismatches · ${e.replayFailure} model replay errors.</p>`}
+        <p class="info">${esc(r.warning)}</p>`:'<p class="small muted">Run this check only if you want to inspect the evidence. It changes no notes, grades, attempts, predictions or review dates. The normal Study Now experience needs no extra steps.</p>'}
+    </div></section>`;
+  }
   function fsrsShadowPanel(){
     const p=fsrsShadowResult,e=p?.exclusions,cal=p?.calendar;
     const samples=p?.rows.slice(0,8).map(row=>{
@@ -593,7 +604,7 @@ A">${esc((a.exactAnswerKey?.answers||[]).join('\n'))}</textarea><label class="ch
   function policyEvidencePanel(){
     const p=C.schedulingPolicyAudit(db);
     const noData=p.recordedDecisions===0;
-    return modelReadinessPanel()+prospectiveEvidencePanel()+fsrsShadowPanel()+`<section class="section"><div class="card"><div class="card-title"><h2>Prospective scheduling policy audit</h2><span class="pill blue">Read-only · no policy switch</span></div>
+    return modelReadinessPanel()+prospectiveEvidencePanel()+fsrsReceiptAuditPanel()+fsrsShadowPanel()+`<section class="section"><div class="card"><div class="card-title"><h2>Prospective scheduling policy audit</h2><span class="pill blue">Read-only · no policy switch</span></div>
     <p class="muted small">From this release onward, each real self-rated review stores two time-stamped policy proposals: the interval the app actually used, and a deliberately more frequent shadow alternative. <strong>Only the active recommendation sets your due date.</strong> Historical records are never assigned made-up shadow proposals.</p>
     <div class="grid cols3" style="margin:16px 0">${metric('Versioned decisions',p.recordedDecisions,'Recorded when the real attempt occurred')}${metric('Different shadow proposals',p.shadowEarlier+p.shadowLater,'Differences are NOT evidence of better retention')}${metric('Distinct recall targets',p.observedTargets,'Prompt variations share the same review target')}</div>
     ${noData?'<p class="info">Not enough prospective records yet. Complete an actual study attempt to begin recording policy decisions. Past attempts remain untouched.</p>':`<details class="document-outline"><summary><strong>Compare suggested intervals</strong><span class="muted small">Open policy sensitivity comparison</span></summary>
@@ -807,8 +818,18 @@ A">${esc((a.exactAnswerKey?.answers||[]).join('\n'))}</textarea><label class="ch
   function pauseSession(se){if(se.paused)return;se.elapsedMs=sessionElapsedMs(se);se.paused=true;se.runningSince=null;}
   function resumeSession(se){if(!se.paused)return;se.runningSince=Date.now();se.paused=false;}
   function handleAction(btn){const action=btn.dataset.action;const se=activeSession();switch(action){
+    case 'audit-fsrs-receipts':{
+      const generation=++fsrsShadowGeneration;
+      fsrsShadowBusy=false;
+      fsrsReceiptAuditBusy=true;fsrsReceiptAuditResult=null;render();
+      Promise.resolve().then(()=>FSRSShadow.auditReceipts(db,{Vendor:window.ActiveRecallFSRSVendor}))
+        .then(result=>{if(generation!==fsrsShadowGeneration)return;fsrsReceiptAuditResult=result;fsrsReceiptAuditBusy=false;render();})
+        .catch(error=>{if(generation!==fsrsShadowGeneration)return;fsrsReceiptAuditBusy=false;notify('FSRS evidence check unavailable: '+(error.message||'Unknown error'),true);render();});
+      break;
+    }
     case 'inspect-fsrs-shadow':{
       const generation=++fsrsShadowGeneration;
+      fsrsReceiptAuditBusy=false;
       fsrsShadowBusy=true;fsrsShadowResult=null;render();
       Promise.resolve().then(()=>FSRSShadow.compareCalendar(db,{Core:C,Vendor:window.ActiveRecallFSRSVendor,now:new Date(),prefs:db.agendaPreferences||outlookSettings}))
         .then(result=>{if(generation!==fsrsShadowGeneration)return;fsrsShadowResult=result;fsrsShadowBusy=false;render();})
@@ -1120,7 +1141,7 @@ A">${esc((a.exactAnswerKey?.answers||[]).join('\n'))}</textarea><label class="ch
       // browser has actually committed the imported snapshot.
       await Store.save(data,null);
       committed=true;
-      db=data;fsrsShadowResult=null;fsrsShadowBusy=false;fsrsShadowGeneration++;currentSessionId=null;focusedCourse=null;page='home';render();notify('Backup imported.');
+      db=data;fsrsShadowResult=null;fsrsShadowBusy=false;fsrsReceiptAuditResult=null;fsrsReceiptAuditBusy=false;fsrsShadowGeneration++;currentSessionId=null;focusedCourse=null;page='home';render();notify('Backup imported.');
     }catch(err){notify(committed?'Backup saved, but the view could not refresh. Reload to continue.':'Backup not imported: '+(err.message||'Could not read or save file.'),true);
     }finally{e.target.value='';}};
     reader.onerror=()=>{e.target.value='';notify('Backup not imported: Could not read file.',true);};

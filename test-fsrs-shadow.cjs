@@ -91,6 +91,54 @@ test('frozen FSRS receipt is optional, survives backup and never changes active 
   assert.throws(()=>C.validateImport(noBaseline),/Invalid FSRS shadow forecast/);
 });
 
+test('historical FSRS receipts are independently replayed, not trusted by shape alone',async()=>{
+  const f=fixture();for(const day of [0,3,9])f.attempt(day);
+  const now=at(12),props={requirementId:f.req.id,targetId:f.target.id,activityId:f.activity.id};
+  const prospective=C.previewProspectiveForecast(f.db,{...props,now});
+  const fsrs=await Shadow.forecastProbability(f.db,{Core:C,Vendor,...props,now});
+  assert.ok(fsrs&&prospective);
+  f.attempt(12,{prospectiveForecast:prospective,fsrsForecast:fsrs});
+  const before=JSON.stringify(f.db),audit=await Shadow.auditReceipts(f.db,{Vendor});
+  assert.equal(audit.recordedReceipts,1);
+  assert.equal(audit.replayed,1);
+  assert.equal(audit.eligibleDelayedWritten,1);
+  assert.equal(audit.literalOutcomeCandidates,0,'No approved literal key in this fixture');
+  assert.equal(audit.activePolicyChanged,false);
+  assert.equal(JSON.stringify(f.db),before);
+  // Today's memory can include arbitrarily many later review outcomes. They
+  // may not be used to reconstruct a forecast that was frozen before them.
+  f.attempt(15);
+  assert.equal((await Shadow.auditReceipts(f.db,{Vendor})).replayed,1);
+  const forged=JSON.parse(JSON.stringify(f.db));
+  forged.attempts[3].fsrsForecast.probability=0.123456;
+  assert.equal(C.validateImport(forged).schemaVersion,5,
+    'Shape validation alone cannot authenticate a numerical probability');
+  const rejected=await Shadow.auditReceipts(forged,{Vendor});
+  assert.equal(rejected.replayed,0);
+  assert.equal(rejected.exclusions.modelMismatch,1);
+  const oldValid=JSON.parse(JSON.stringify(f.db));
+  delete oldValid.attempts[2].schedulingDecision;
+  assert.equal((await Shadow.auditReceipts(oldValid,{Vendor})).replayed,1,
+    'Older real attempts without policy snapshots can still replay their grades');
+  const changed=JSON.parse(JSON.stringify(f.db));
+  changed.attempts[1].rating='hard';changed.attempts[1].scheduleRating='hard';
+  assert.equal((await Shadow.auditReceipts(changed,{Vendor})).exclusions.modelMismatch,1);
+  const incomplete=JSON.parse(JSON.stringify(f.db));incomplete.attempts.shift();
+  assert.equal((await Shadow.auditReceipts(incomplete,{Vendor})).exclusions.incompleteOrChangedHistory,1);
+});
+
+test('FSRS replay audit abstains on sparse, assisted, mixed-version and untrusted history',async()=>{
+  const f=fixture();f.attempt(0);f.attempt(3,{assisted:true});
+  const noReceipt=await Shadow.auditReceipts(f.db,{Vendor});
+  assert.equal(noReceipt.replayed,0);
+  assert.equal(noReceipt.recordedReceipts,0);
+  const empty=await Shadow.auditReceipts(C.initialDb(),{Vendor});
+  assert.equal(empty.inspected,0);
+  await assert.rejects(Shadow.auditReceipts(f.db,{Vendor:{}}),/unavailable/);
+  await assert.rejects(Shadow.auditReceipts(f.db,{Vendor,limit:501}),/1–500/);
+  await assert.rejects(Shadow.auditReceipts(f.db,{Vendor,minDelayHours:0}),/1 and 720/);
+});
+
 test('missing, legacy and unverifiable histories are excluded rather than reconstructed',async()=>{
   const a=fixture();a.attempt(0);a.attempt(3,{assisted:true});
   assert.equal((await Shadow.compare(a.db,{Core:C,Vendor,now:at(4)})).exclusions.assistedOrImmediate,1);
