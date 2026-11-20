@@ -1,4 +1,8 @@
-# Active Recall Web — Free Edition v4.33
+# Active Recall Web — Free Edition v4.34
+
+## Blueprint 4.34 — Clear local data only after the browser actually saves
+
+**Progress → Clear local data** now keeps the existing notebook on screen until the empty replacement is successfully committed to browser storage. Cancelling the confirmation does nothing; a rejected or interrupted write reports failure and leaves the original courses, questions, attempts, and review dates intact and visible, rather than prematurely appearing cleared. Other editing actions are blocked while a clear is pending. Successful clearing still requires explicit confirmation, resets only this browser's local notebook, and keeps the schema-v5 JSON backup format; export first if any history might be needed later. The existing backup import already follows this commit-first rule and remains unchanged. No automatic data deletion, new account, cloud sync, review-interval change, payment, or AI grading has been introduced. [Release checklist](docs/RELEASE_4_34_ROLLOUT.md).
 
 ## Blueprint 4.33 — Warn before a stale tab overwrites study data
 

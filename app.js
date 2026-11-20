@@ -2,6 +2,7 @@
   'use strict';
   const C=window.ActiveRecallCore, Rh=window.ActiveRecallStudyRhythm, Store=window.ActiveRecallStorage, Doc=window.ActiveRecallDocumentImport, H=window.ActiveRecallHumanReview, P=window.ActiveRecallPairedReview, PU=window.ActiveRecallPairedUI, R=window.ActiveRecallReviewPackets, RU=window.ActiveRecallReviewPacketUI, F=window.ActiveRecallReferenceFirst, FU=window.ActiveRecallReferenceFirstUI, Pilot=window.ActiveRecallReviewerPilot, PilotUI=window.ActiveRecallPilotUI, Training=window.ActiveRecallReviewerTraining, TrainingUI=window.ActiveRecallReviewerTrainingUI, Usability=window.ActiveRecallReviewerUsability, UsabilityUI=window.ActiveRecallReviewerUsabilityUI, FSRSShadow=window.ActiveRecallFSRSShadow;
   let db, page='home', focusedCourse=null, duration=25, currentSessionId=null, modalReqId=null, modalSourceId=null, modalReviewId=null, modalPairId=null, qualityReqId=null, toastTimer=null, saveIssue=null;
+  let clearBusy=false;
   let pendingDocument=null, documentImportBusy=false, studioSourceId=null, syllabusEditingId=null, syllabusFocusedId=null;
   let focusedLecture='', editingQuestionId=null, lastWrittenLecture='', lastWrittenSourceId='', pendingQuestionImport=null;
   let schedulePreview=null;
@@ -40,7 +41,27 @@
     'Q: What powers ATP synthase?',
     'A: A proton electrochemical gradient.'
   ].join('\n');
-  function save(){Store.save(db,currentSessionId).then(()=>{if(saveIssue&&!Store.hasStorageConflict?.()){saveIssue=null;render();}}).catch(e=>{saveIssue=e.code==='STALE_SNAPSHOT'?STALE_STORAGE_MESSAGE:'Saving failed: '+(e.message||'Check browser storage. Export a backup.');notify(saveIssue,true);render();});}
+  function save(){if(clearBusy)return;Store.save(db,currentSessionId).then(()=>{if(saveIssue&&!Store.hasStorageConflict?.()){saveIssue=null;render();}}).catch(e=>{saveIssue=e.code==='STALE_SNAPSHOT'?STALE_STORAGE_MESSAGE:'Saving failed: '+(e.message||'Check browser storage. Export a backup.');notify(saveIssue,true);render();});}
+  async function clearLocalNotebook(){
+    if(clearBusy||Store.hasStorageConflict?.()){notify('This tab must be up to date before clearing data. Export any unsaved work and reload first.',true);return;}
+    if(!window.confirm('Permanently replace this browser’s local courses, notes, questions, practice history, and assessments with an empty notebook?\n\nThis cannot be undone unless you have a JSON backup. Cancel and export from Progress first if you want to keep any of this work.'))return;
+    clearBusy=true;
+    let cleared=false, failure=null;
+    try{
+      const emptyNotebook=C.initialDb();
+      // No visible deletion until IndexedDB (or the explicit fallback) commits.
+      await Store.save(emptyNotebook,null);
+      db=emptyNotebook;currentSessionId=null;focusedCourse=null;page='home';saveIssue=null;
+      modalReqId=null;modalSourceId=null;modalReviewId=null;modalPairId=null;qualityReqId=null;studioSourceId=null;
+      selectedQuestionIds.clear();selectingQuestions=false;pendingQuestionImport=null;pendingDocument=null;
+      focusedLecture='';editingQuestionId=null;lastWrittenLecture='';lastWrittenSourceId='';guidedGoalId=null;guidedStep='source';
+      schedulePreview=null;shortRetryWakeAt=null;shortRetrySummary=null;fsrsShadowResult=null;fsrsReceiptAuditResult=null;
+      fsrsShadowBusy=false;fsrsReceiptAuditBusy=false;fsrsShadowGeneration++;fsrsPreAnswerReceipt=null;
+      cleared=true;
+    }catch(error){failure=error;}
+    finally{clearBusy=false;render();}
+    notify(cleared?'Local data cleared. Restore a saved JSON backup if needed.':'Local data was not cleared: '+(failure?.message||'Browser storage did not complete the save.'),!cleared);
+  }
   function downloadJsonFile(value,filename){
     const blob=new Blob([JSON.stringify(value,null,2)],{type:'application/json'});
     const url=URL.createObjectURL(blob),link=document.createElement('a');
@@ -68,12 +89,12 @@
   }
   function notify(message,error=false){if(error&&Store.hasStorageConflict?.()&&!saveIssue){saveIssue=STALE_STORAGE_MESSAGE;render();}let old=$('.toast');if(old)old.remove();const el=document.createElement('div');el.className='toast'+(error?' error':'');el.textContent=message;document.body.appendChild(el);if(toastTimer)clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.remove(),3800);}
   function transact(fn){try{if(Store.hasStorageConflict?.())throw Error('This tab is out of date. Export any unsaved changes, then reload before editing.');recordFirstOpenPlan();const ret=fn();schedulePreview=null;fsrsShadowResult=null;fsrsShadowBusy=false;fsrsReceiptAuditResult=null;fsrsReceiptAuditBusy=false;fsrsShadowGeneration++;save();render();return ret;}catch(e){notify(e.message||'Something went wrong.',true);}}
-  function recordFirstOpenPlan(){if(!db)return;const snapshot=Rh.recordDailyPlan(db,C);if(snapshot)save();}
+  function recordFirstOpenPlan(){if(!db||clearBusy)return;const snapshot=Rh.recordDailyPlan(db,C);if(snapshot)save();}
   function courseOptions(selected='',placeholder='Select a course'){return `<option value="">${esc(placeholder)}</option>`+db.courses.map(c=>`<option value="${esc(c.id)}" ${c.id===selected?'selected':''}>${esc(c.name)}</option>`).join('');}
   function empty(title,desc,cta='',action=''){return `<div class="empty"><div class="bigemoji">✧</div><h2>${esc(title)}</h2><p>${esc(desc)}</p>${cta?`<button class="btn primary" data-action="${action}">${esc(cta)}</button>`:''}</div>`;}
   const nav=[['home','◫','Overview'],['capture','✎','Capture'],['questions','?','My Q&A'],['study','◉','Study Now'],['courses','▤','Knowledge'],['assessments','▦','Assessments'],['forecast','◴','Calendar'],['insights','◷','Progress']];
   function sidebar(){return `<aside class="sidebar"><div class="brand"><span class="mark">✳</span><span>active<span style="color:#176d5e">recall</span></span></div><nav class="nav" aria-label="Main navigation">${nav.map(([key,icon,label])=>`<button class="navbtn ${page===key?'active':''}" data-action="navigate" data-page="${key}" ${page===key?'aria-current="page"':''}><span class="navicon">${icon}</span>${label}</button>`).join('')}</nav><div class="sidefoot"><strong><span class="statusdot"></span>100% free · Browser-local</strong><p>Hosted as a static site. No payments, API keys, accounts, or cloud sync. Export backups regularly.</p></div></aside>`;}
-  function header(){return `<div class="topline"><div class="path">ACTIVE RECALL WEB <span style="color:#b7c4bd">/</span> ${esc(nav.find(x=>x[0]===page)?.[2]||(page==='guided'?'Guided learning':''))}</div><div class="topright"><span class="tag">Blueprint 4.33 · Free</span><span class="avatar" aria-label="Local learner profile">A</span></div></div>`;}
+  function header(){return `<div class="topline"><div class="path">ACTIVE RECALL WEB <span style="color:#b7c4bd">/</span> ${esc(nav.find(x=>x[0]===page)?.[2]||(page==='guided'?'Guided learning':''))}</div><div class="topright"><span class="tag">Blueprint 4.34 · Free</span><span class="avatar" aria-label="Local learner profile">A</span></div></div>`;}
   function shell(content){return `<div class="app">${sidebar()}<main class="main">${header()}${saveIssue?`<div class="note warningtext" role="alert" data-storage-warning style="margin:12px 0 18px"><strong>Unsaved changes in this tab.</strong> ${esc(saveIssue)} <button class="btn secondary small" type="button" data-action="navigate" data-page="insights">Open backup controls</button></div>`:''}${content}<div class="footer">Free &amp; static · Notes stay in this browser · Export backups · Review generated drafts before relying on them · <a href="./health.html">Site diagnostics</a></div></main></div>${modalReqId?editModal():''}${qualityReqId?questionQualityModal():''}${modalSourceId?editSourceModal():''}${studioSourceId?studioModal():''}${modalReviewId?humanReviewModal():''}${modalPairId?PU.modal({db,esc,courseName,attemptId:modalPairId}):''}`;}
   function dashboard(){const integrity=C.integrity(db);const s=C.stats(db),preview=C.planActivities(db,15).items.slice(0,4),topUpcoming=s.upcoming.slice(0,3),ready=C.planActivities(db,duration).items.length>0,ongoing=activeSession()?.status==='active',shortWait=shortRetrySummary;
     const startAction=ongoing?'data-action="navigate" data-page="study"':'data-action="start-session"',startLabel=ongoing?'Continue studying':`Study now · ${duration} min`;
@@ -841,7 +862,7 @@ A">${esc((a.exactAnswerKey?.answers||[]).join('\n'))}</textarea><label class="ch
   function startSession(queueMode='mixed'){if(!['mixed','due_only'].includes(queueMode))throw Error('Invalid study queue mode.');if(!C.eligibleCandidates(db).length)throw Error('Add a learning requirement or verify your generated questions in Knowledge before starting a session.');if(queueMode==='due_only'&&!C.planDueReviews(db,duration).items.length)throw Error('No due reviews fit this session. Increase available time or use the regular mixed queue.');if(queueMode==='mixed'&&!C.planActivities(db,duration).items.length)throw Error('No question is ready for this session length. Try more time or wait for a short retry to become due.');const now=Date.now();const se={id:C.id('session'),queueMode,status:'active',budgetMinutes:duration,createdAt:new Date().toISOString(),runningSince:now,elapsedMs:0,paused:false,completedIds:[],courseCounts:{},currentReqId:null,currentActivityId:null,currentTargetId:null,draftAnswer:'',showHint:false,showReference:false,assistedForCurrent:false,criterionDraft:{},correctionDraft:'',activityStartedElapsedMs:0};db.sessions.push(se);currentSessionId=se.id;selectNext(se);page='study';}
   function pauseSession(se){if(se.paused)return;se.elapsedMs=sessionElapsedMs(se);se.paused=true;se.runningSince=null;}
   function resumeSession(se){if(!se.paused)return;se.runningSince=Date.now();se.paused=false;}
-  function handleAction(btn){const action=btn.dataset.action;const se=activeSession();switch(action){
+  function handleAction(btn){const action=btn.dataset.action;if(clearBusy&&action!=='export'){notify('Finishing the local data clear. Please wait.',true);return;}const se=activeSession();switch(action){
     case 'audit-fsrs-receipts':{
       const generation=++fsrsShadowGeneration;
       fsrsShadowBusy=false;
@@ -1076,9 +1097,9 @@ A">${esc((a.exactAnswerKey?.answers||[]).join('\n'))}</textarea><label class="ch
     case 'delete-assessment':{const id=btn.dataset.id;const a=db.assessments.find(x=>x.id===id);if(a&&window.confirm(`Remove assessment “${a.title}”?`)){transact(()=>{db.assessments=db.assessments.filter(x=>x.id!==id);db.events.push({type:'assessment.deleted',entityId:id,at:new Date().toISOString()});});}break;}
     case 'persist-storage':{Store.requestPersistence().then(ok=>notify(ok?'Browser granted more durable local storage.':'Browser did not grant persistent storage. Export backups regularly.')).catch(()=>notify('Persistent storage is not supported. Export backups regularly.',true));break;}
     case 'export':{const blob=new Blob([JSON.stringify(db,null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const anchor=document.createElement('a');anchor.href=url;anchor.download=`active-recall-backup-${C.today()}.json`;document.body.appendChild(anchor);anchor.click();anchor.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);notify('Backup exported.');break;}
-    case 'reset':if(window.confirm('Delete all local courses, notes, practice attempts, and assessments in this browser? Export first if you want a backup.'))transact(()=>{db=C.initialDb();currentSessionId=null;focusedCourse=null;page='home';});break;
+    case 'reset':clearLocalNotebook();break;
   }}
-  function handleForm(form){const f=new FormData(form),kind=form.dataset.form;
+  function handleForm(form){if(clearBusy){notify('Finishing the local data clear. Please wait.',true);return;}const f=new FormData(form),kind=form.dataset.form;
     switch(kind){
       case 'correction-details':transact(()=>{C.updateQuestionCorrectionDetails(db,f.get('requirementId'),{reason:f.get('reason'),note:String(f.get('note')||'')});notify('Question-quality note saved. The hold and review date are unchanged.');});break;
       case 'confirm-question-quality':transact(()=>{
@@ -1155,6 +1176,10 @@ A">${esc((a.exactAnswerKey?.answers||[]).join('\n'))}</textarea><label class="ch
       case 'add-assessment':transact(()=>{C.addAssessment(db,{title:f.get('title'),courseId:f.get('courseId'),date:f.get('date'),scope:f.get('scope'),requirementIds:f.getAll('requirementIds')});notify('Assessment added to the planning horizon.');});break;
     }
   }
+  // Hold input/file changes as well as buttons while a destructive replacement
+  // is in flight; no later draft save may overtake the queued empty snapshot.
+  document.addEventListener('input',e=>{if(clearBusy)e.stopImmediatePropagation();},true);
+  document.addEventListener('change',e=>{if(clearBusy){e.preventDefault();e.stopImmediatePropagation();notify('Finishing the local data clear. Please wait.',true);}},true);
   document.addEventListener('click',e=>{const b=e.target.closest('[data-action]');if(!b)return;handleAction(b);});
   document.addEventListener('submit',e=>{if(!e.target.matches('form[data-form]'))return;e.preventDefault();handleForm(e.target);});
   document.addEventListener('change',e=>{if(e.target.matches('input[data-question-select]')){if(e.target.checked)selectedQuestionIds.add(e.target.dataset.questionSelect);else selectedQuestionIds.delete(e.target.dataset.questionSelect);render();return;}if(e.target.id==='qa-course'){selectedQuestionIds.clear();selectingQuestions=false;focusedCourse=e.target.value;focusedLecture='';editingQuestionId=null;lastWrittenLecture='';lastWrittenSourceId='';pendingQuestionImport=null;render();return;}if(e.target.id==='qa-filter'){selectedQuestionIds.clear();selectingQuestions=false;focusedLecture=e.target.value;editingQuestionId=null;pendingQuestionImport=null;render();return;}if(e.target.id==='qa-source'){const title=$('#qa-lecture-title');if(title)title.disabled=!!e.target.value;if(pendingQuestionImport){pendingQuestionImport=null;$('.qa-import-preview')?.remove();}return;}if(e.target.matches('input[data-criterion-id]')){const se=activeSession();if(se&&se.status==='active'){se.criterionDraft=se.criterionDraft||{};se.criterionDraft[e.target.dataset.criterionId]=e.target.value;save();}}if(e.target.matches('#assessment-scope,#assessment-course'))assessmentSelection();if(e.target.matches('#import-file')){
