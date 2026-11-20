@@ -134,7 +134,11 @@
       let card=scheduler.newCard({cardId:targetId,now:new Date(history[0].createdAt)});
       for(const a of history)card=scheduler.review({card,
         grade:grades[a.scheduleRating||a.rating],now:new Date(a.createdAt)}).card;
-      if(Date.parse(card.lastReviewAt)!==Date.parse(memory.lastReviewedAt))return null;
+      // Date.parse(Date) stringifies and silently drops milliseconds. Real
+      // browser attempts nearly always have fractional seconds; keep them.
+      const replayedAt=card.lastReviewAt instanceof Date?
+        card.lastReviewAt.getTime():Date.parse(card.lastReviewAt);
+      if(replayedAt!==Date.parse(memory.lastReviewedAt))return null;
       const elapsed=scheduler.chrono.difference(card.lastReviewAt,now);
       if(!Number.isFinite(elapsed)||elapsed<0)return null;
       const probability=scheduler.model.forgettingCurve(card,elapsed);
