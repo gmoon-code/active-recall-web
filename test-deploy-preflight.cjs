@@ -5,17 +5,17 @@ test('static GitHub Pages entry has relative scripts and CSS',()=>{
   const s=read('index.html');assert.match(s,/src="\.\/core\.js"/);assert.match(s,/src="\.\/qa-import\.js"/);assert.match(s,/src="\.\/human-review\.js"/);assert.match(s,/href="\.\/styles\.css"/);assert.match(s,/href="\.\/moon-theme\.css"/);
   assert.ok(s.indexOf('href="./styles.css"')<s.indexOf('href="./moon-theme.css"'),'Moon theme must override base styles');
 });
-test('app version label matches the published diagnostics',()=>{
-  const app=read('app.js'),health=read('health.html');
-  const appVersion=app.match(/<span class="tag">Blueprint (\d+\.\d+) · Free<\/span>/);
-  const healthVersion=health.match(/<div class="tag">Blueprint (\d+\.\d+) · Free · GitHub Pages<\/div>/);
-  assert.ok(appVersion&&healthVersion,'Both version labels must be present');
-  assert.equal(appVersion[1],healthVersion[1],'App and diagnostics must advertise the same release');
+test('nondecorative app version metadata matches diagnostics',()=>{
+  const html=read('index.html'),health=read('health.html');
+  const appVersion=html.match(/<meta name="app-version" content="(\d+\.\d+)"\/>/);
+  const healthVersion=health.match(/<meta name="app-version" content="(\d+\.\d+)">/);
+  assert.ok(appVersion&&healthVersion,'Version metadata and diagnostics must be present');
+  assert.equal(appVersion[1],healthVersion[1],'App metadata and diagnostics must advertise the same release');
 });
 test('offline worker is versioned and caches review module',()=>{
-  const s=read('sw.js');assert.match(s,/active-recall-web-v4-35/);assert.doesNotMatch(s,/active-recall-web-v4-34/);assert.match(s,/'\.\/moon-theme\.css'/);assert.match(s,/'\.\/qa-import\.js'/);assert.match(s,/'\.\/study-rhythm\.js'/);assert.match(s,/'\.\/human-review\.js'/);assert.match(s,/'\.\/paired-review\.js'/);assert.match(s,/'\.\/paired-review-ui\.js'/);assert.match(s,/'\.\/review-packets\.js'/);assert.match(s,/reviewer-offline\.html/);assert.match(s,/reference-reviewer-offline\.html/);assert.match(s,/'\.\/reviewer-pilot\.js'/);assert.match(s,/'\.\/reviewer-pilot-ui\.js'/);assert.match(s,/'\.\/reviewer-training\.js'/);assert.match(s,/'\.\/reviewer-training-ui\.js'/);assert.match(s,/reviewer-training-offline\.html/);assert.match(s,/'\.\/reviewer-usability\.js'/);assert.match(s,/'\.\/reviewer-usability-ui\.js'/);assert.match(s,/reviewer-usability-offline\.html/);
+  const s=read('sw.js');assert.match(s,/active-recall-web-v4-36/);assert.doesNotMatch(s,/active-recall-web-v4-35/);assert.match(s,/'\.\/moon-theme\.css'/);assert.match(s,/'\.\/qa-import\.js'/);assert.match(s,/'\.\/study-rhythm\.js'/);assert.match(s,/'\.\/human-review\.js'/);assert.match(s,/'\.\/paired-review\.js'/);assert.match(s,/'\.\/paired-review-ui\.js'/);assert.match(s,/'\.\/review-packets\.js'/);assert.match(s,/reviewer-offline\.html/);assert.match(s,/reference-reviewer-offline\.html/);assert.match(s,/'\.\/reviewer-pilot\.js'/);assert.match(s,/'\.\/reviewer-pilot-ui\.js'/);assert.match(s,/'\.\/reviewer-training\.js'/);assert.match(s,/'\.\/reviewer-training-ui\.js'/);assert.match(s,/reviewer-training-offline\.html/);assert.match(s,/'\.\/reviewer-usability\.js'/);assert.match(s,/'\.\/reviewer-usability-ui\.js'/);assert.match(s,/reviewer-usability-offline\.html/);
   const diagnostics=read('health.html');
-  assert.match(diagnostics,/Blueprint 4\.35/);assert.match(diagnostics,/active-recall-web-v4-35/);assert.doesNotMatch(diagnostics,/active-recall-web-v4-34/);assert.match(diagnostics,/moon-theme\.css/);assert.match(diagnostics,/qa-import\.js/);assert.match(diagnostics,/study-rhythm\.js/);assert.match(diagnostics,/fsrs-shadow\.js/);assert.match(diagnostics,/fsrs-7-shadow-vendor\.js/);
+  assert.match(diagnostics,/name="app-version" content="4\.36"/);assert.match(diagnostics,/active-recall-web-v4-36/);assert.doesNotMatch(diagnostics,/active-recall-web-v4-35/);assert.match(diagnostics,/moon-theme\.css/);assert.match(diagnostics,/qa-import\.js/);assert.match(diagnostics,/study-rhythm\.js/);assert.match(diagnostics,/fsrs-shadow\.js/);assert.match(diagnostics,/fsrs-7-shadow-vendor\.js/);
   assert.match(diagnostics,/reviewer-offline\.html/);assert.match(diagnostics,/reference-reviewer-offline\.html/);assert.match(diagnostics,/reviewer-pilot\.js/);assert.match(diagnostics,/reviewer-pilot-ui\.js/);assert.match(diagnostics,/reviewer-training\.js/);assert.match(diagnostics,/reviewer-training-ui\.js/);assert.match(diagnostics,/reviewer-training-offline\.html/);assert.match(diagnostics,/reviewer-usability\.js/);assert.match(diagnostics,/reviewer-usability-ui\.js/);assert.match(diagnostics,/reviewer-usability-offline\.html/);
   assert.doesNotMatch(diagnostics,/active-recall-web-v2-8/);
 });

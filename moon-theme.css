@@ -64,6 +64,11 @@ h2 { font-size: 23px; }
 h3 { font-size: 18px; }
 small, .small { font-size: 14px; }
 .eyebrow { color: var(--moon-muted); font-size: 13px; font-weight: 700; letter-spacing: .08em; }
+/* The title is the heading. Suppress redundant mini-headings and promotional captions. */
+.hero .eyebrow, .hero > div > p, .pagehead .eyebrow,
+.pagehead > div > p, .modalhead .eyebrow, .reqrow .eyebrow { display: none; }
+/* A completed session is a real save confirmation, not a decorative subtitle. */
+.sessionpanel .pagehead > div > p { display: block; }
 .muted, .info { color: var(--moon-muted); }
 .sidebar { background: #fff; border-color: var(--moon-rule); padding: 31px 17px; }
 .brand { font-family: "Times New Roman", Times, serif; font-size: 21px; font-weight: 700; letter-spacing: -.015em; }
@@ -109,7 +114,7 @@ small, .small { font-size: 14px; }
   border-bottom: 1px solid var(--moon-rule);
   border-radius: 0;
   padding: 25px 3px 32px;
-  min-height: 210px;
+  min-height: 0;
 }
 .hero .orb, .hero .orb2 { display: none; }
 .hero p { color: var(--moon-muted); font-size: 16px; max-width: 640px; }
@@ -225,6 +230,8 @@ small, .small { font-size: 14px; }
 .modalwrap { background: #0007; }
 .close { background: #f3f3f3; color: #111; border-radius: 3px; }
 .footer { border-top: 1px solid var(--moon-rule); margin-top: 33px; color: var(--moon-muted); font-size: 13px; }
+.utility-link { margin-top: 36px; font-size: 14px; text-align: right; }
+.utility-link a { color: var(--moon-muted); text-decoration: underline; text-underline-offset: 2px; }
 .main :focus-visible, .sidebar :focus-visible, .modal :focus-visible {
   outline: 2px solid #111;
   outline-offset: 3px;

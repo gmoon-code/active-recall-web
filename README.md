@@ -1,4 +1,8 @@
-# Active Recall Web — Free Edition v4.35
+# Active Recall Web — Free Edition v4.36
+
+## Blueprint 4.36 — Remove repetitive subtitles and website chrome
+
+The Moon editorial layout is now quieter: it hides generic micro-headings above page titles and descriptive page-header slogans, and removes the repeating footer (“Free & static · Notes stay in this browser · Export backups…”), sidebar advertising block, fake profile avatar, top breadcrumb, and on-screen release badge. Relevant study controls, context-specific source/retrieval labels, study-session save feedback, and important privacy, backup, correction, and scheduling warnings remain. **Site diagnostics** stays available as a plain link under Progress rather than in a site-wide footer. Version identity is retained invisibly in HTML metadata and the versioned offline cache. This is presentation-only; no changes to the spaced-review queue, data storage, schema-v5 backups, existing learner records, or free hosting. [Release and rollback checklist](docs/RELEASE_4_36_ROLLOUT.md).
 
 ## Blueprint 4.35 — Moon editorial design
 

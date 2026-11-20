@@ -34,6 +34,8 @@ async function main(){
           background:body.backgroundColor,font:body.fontFamily,heading:heading?getComputedStyle(heading).backgroundImage:'',
           overflow:document.documentElement.scrollWidth-innerWidth,
           cardRadius:document.querySelector('.card')?getComputedStyle(document.querySelector('.card')).borderTopLeftRadius:null,
+          decorativeChrome:document.querySelectorAll('.footer,.topline,.sidefoot').length,
+          visibleCaptions:[...document.querySelectorAll('.hero .eyebrow,.hero > div > p,.pagehead .eyebrow,.pagehead > div > p,.modalhead .eyebrow,.reqrow .eyebrow')].filter(el=>getComputedStyle(el).display!=='none').length,
           orbs:[...document.querySelectorAll('.hero .orb,.hero .orb2')].map(el=>getComputedStyle(el).display)};
       });
       assert.equal(theme.name,expectedPage);
@@ -44,6 +46,8 @@ async function main(){
       assert.ok(theme.overflow<=2,`No horizontal overflow (${theme.overflow}px)`);
       if(theme.cardRadius)assert.equal(theme.cardRadius,'4px');
       assert.ok(theme.orbs.every(value=>value==='none'),'Decorative orbs are removed');
+      assert.equal(theme.decorativeChrome,0,'No repetitive footer, fake profile header or sidebar slogans');
+      assert.equal(theme.visibleCaptions,0,'Generic small subtitles do not distract from page titles');
     }
     await inspect('yellow','#f5f566');
     const colors={questions:['green','#66f566'],courses:['blue','#66f0f0'],forecast:['magenta','#f066f0'],home:['yellow','#f5f566']};
@@ -54,6 +58,9 @@ async function main(){
     }
     const after=await page.evaluate(async()=>{const S=window.ActiveRecallStorage;await S.ready();return JSON.stringify((await S.load())?.db??null);});
     assert.equal(after,before,'Visual navigation does not write study data');
+    await page.locator('.navbtn[data-page=insights]').click();
+    assert.equal(await page.locator('.utility-link a[href="./health.html"]').innerText(),'Site diagnostics','Practical diagnostic link remains accessible in Progress');
+    await page.locator('.navbtn[data-page=home]').click();
     for(const width of [390,360]){
       await page.setViewportSize({width,height:800});
       await inspect('yellow','#f5f566');
@@ -66,7 +73,7 @@ async function main(){
     await page.reload();await page.locator('.navbtn[data-page=home]').waitFor();
     await inspect('yellow','#f5f566');
     assert.deepEqual(errors,[],'No browser errors during theme navigation');
-    process.stdout.write('PASS: Moon typography, color order, desktops, mobile navigation, persistence, and unchanged study data.\n');
+    process.stdout.write('PASS: Moon typography, uncluttered subtitles, meaningful diagnostics, mobile navigation, persistence, and unchanged study data.\n');
   }finally{
     if(browser)await browser.close();
     await new Promise(resolve=>server.close(resolve));
