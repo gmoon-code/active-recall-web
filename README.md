@@ -1,4 +1,8 @@
-# Active Recall Web — Free Edition v4.27
+# Active Recall Web — Free Edition v4.28
+
+## Blueprint 4.28 — Record experimental FSRS predictions before recall
+
+For an already-practised target with a complete, same-version sequence of independent written attempts, **Study Now** now freezes an optional, local **FSRS-7 default-weight recall-probability guess** before revealing the answer. It is attached only if the learner subsequently rates a real attempt. A late calculation after the answer is revealed is discarded; skipped questions cannot create a receipt. **Progress → Memory-model evaluation readiness** counts these receipts separately from earlier unfitted curves and identifies those with delayed written observations. The numbers are **not calibrated**, are **not scored against verified recall**, and do **not** change what to practise next, any due dates, session grades, or the active transparent scheduling policy. Schema-v5 JSON backups remain compatible. The app stays fully free, browser-local, and offline-capable. This step gathers prospective evidence for a future fair comparison, not proof that FSRS or 90% desired retention is optimal. [Release checklist](docs/RELEASE_4_28_ROLLOUT.md).
 
 ## Blueprint 4.27 — More useful review priorities and safer local study
 

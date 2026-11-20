@@ -141,6 +141,8 @@
         for(const a of input.attempts){
           if(a.prospectiveForecast!==undefined&&!validProspectiveForecast(a.prospectiveForecast,a))
             throw Error('Invalid prospective forecast receipt in backup.');
+          if(a.fsrsForecast!==undefined&&!validFsrsForecast(a.fsrsForecast,a))
+            throw Error('Invalid FSRS shadow forecast receipt in backup.');
           if(a.literalCheck!==undefined&&a.literalCheck!==null){
             const k=a.literalCheck;
             if(!k||k.version!==1||k.method!=='literal-match-v1'||!Number.isSafeInteger(k.keyVersion)||k.keyVersion<1||
@@ -1276,6 +1278,34 @@
        Date.parse(a.createdAt)-at>6*3600000))return false;
     return true;
   }
+  // A frozen vendor-model forecast is optional and never drives review dates.
+  // Schema validation checks provenance and numeric bounds; future scoring
+  // must independently replay the preceding history rather than trusting an
+  // imported probability as a calibrated or authenticated prediction.
+  function validFsrsForecast(f,a){
+    if(!f||f.version!==1||f.method!=='fsrs-7-default-probability-v1'||
+       f.model!=='FSRS-7'||f.modelFitted!==false||
+       f.policy!=='default-weights-shadow-v1'||f.desiredRetention!==0.9||
+       !Number.isSafeInteger(f.historyCount)||f.historyCount<1||f.historyCount>1000000||
+       !Number.isFinite(f.probability)||f.probability<0||f.probability>1||
+       Math.round(f.probability*1000000)/1000000!==f.probability||
+       !Number.isSafeInteger(f.requirementVersion)||f.requirementVersion<1||
+       !Number.isSafeInteger(f.targetVersion)||f.targetVersion<1||
+       !Number.isSafeInteger(f.activityVersion)||f.activityVersion<1||
+       !Number.isFinite(f.priorIntervalDays)||f.priorIntervalDays<=0||
+       !Number.isFinite(Date.parse(f.capturedAt||''))||
+       !Number.isFinite(Date.parse(f.priorReviewedAt||''))||
+       !Number.isFinite(Date.parse(f.priorDueAt||''))||
+       Date.parse(f.capturedAt)<Date.parse(f.priorReviewedAt))return false;
+    if(a&&(!validProspectiveForecast(a.prospectiveForecast,a)||
+       f.capturedAt!==a.prospectiveForecast.capturedAt||
+       f.requirementId!==a.requirementId||f.requirementVersion!==a.requirementVersion||
+       f.targetId!==a.retrievalTargetId||f.targetVersion!==a.retrievalTargetVersion||
+       f.activityId!==a.activityId||f.activityVersion!==a.activityVersion||
+       f.priorReviewedAt!==a.prospectiveForecast.priorReviewedAt||
+       f.priorDueAt!==a.priorDueAt||f.priorIntervalDays!==a.priorIntervalDays))return false;
+    return true;
+  }
   function requirementEligible(r){return r.active&&!r.studyHold&&!r.sourceRevisionPending&&(r.origin!=='rule_draft'||r.verificationStatus==='verified')&&!((r.possibleConflictWith||r.possibleDuplicateOf)&&r.origin==='rule_draft'&&!r.verifiedAt);}
   const CORRECTION_REASONS=['unspecified','unclear','suspected_error','possible_duplicate','not_relevant','other'];
   // A read-only source comparison for question repair. Exact character offsets
@@ -1824,8 +1854,9 @@
     const kinds={recall:0,explain:0,apply:0,other:0};
     const eligibleTargets=new Set(),prior=new Map();
     const literal=[],humanSelf=[],humanOther=[];
-    let comparable=0,reportedPositive=0,reportedGap=0,withPriorDueDate=0,forecastEligible=0;
+    let comparable=0,reportedPositive=0,reportedGap=0,withPriorDueDate=0,forecastEligible=0,fsrsEligible=0;
     const forecastsCaptured=source.filter(a=>a?.prospectiveForecast&&validProspectiveForecast(a.prospectiveForecast,a)).length;
+    const fsrsCaptured=source.filter(a=>a?.fsrsForecast&&validFsrsForecast(a.fsrsForecast,a)).length;
     for(let i=0;i<ordered.length;i++){
       const {a,t}=ordered[i],key=identity(a);
       if(!Number.isFinite(t)||!key){excluded.invalidTimestampOrVersion++;continue;}
@@ -1841,6 +1872,7 @@
       comparable++;eligibleTargets.add(a.retrievalTargetId);
       const forecasted=!!a.prospectiveForecast&&validProspectiveForecast(a.prospectiveForecast,a);
       if(forecasted)forecastEligible++;
+      if(a.fsrsForecast&&validFsrsForecast(a.fsrsForecast,a))fsrsEligible++;
       const kind=['recall','explain','apply'].includes(a.activityKind)?a.activityKind:'other';
       kinds[kind]++;
       const effective=a.scheduleRating||a.rating;
@@ -1892,8 +1924,9 @@
       comparableDistinctTargets:eligibleTargets.size,reportedPositive,reportedGap,
       withPriorDueDate,kinds,groups,excluded,
       prospectiveProbabilityForecasts:forecastsCaptured,forecastEligibleDelayedWritten:forecastEligible,
+      fsrsShadowForecastReceipts:fsrsCaptured,fsrsShadowEligibleDelayedWritten:fsrsEligible,
       modelComparisonAvailable:false,
-      warning:'Only observed learner self-ratings, strict literal agreement, and unblinded manual criterion judgments are available. Their meanings differ, so they must not be pooled as verified recall. Due-date and shadow interval snapshots are NOT predictions. Prospective numeric forecasts, when present, are two UNFITTED interval-anchored mathematical hypotheses, not FSRS or calibrated probabilities; their chosen 90% due-day anchor is arbitrary. A future evaluation must reserve later records, assess label quality and selection bias, and avoid retrofitting older outcomes. This audit does not train or compare FSRS, prove a superior policy, or modify scheduling.'};
+      warning:'Only observed learner self-ratings, strict literal agreement, and unblinded manual criterion judgments are available. Their meanings differ, so they must not be pooled as verified recall. Due-date and shadow interval snapshots are NOT predictions. Two prospective interval-anchored mathematical hypotheses are UNFITTED and NOT FSRS. Optional default-weight FSRS-7 receipts are frozen before answering where complete history permits, but their values are not fitted, scored or authenticated by this count. A future evaluation must replay previous history, reserve later records, assess label quality and selection bias, and avoid retrofitting outcomes. This audit does not prove a superior policy or modify scheduling.'};
   }
   // v4.20: evaluate only pre-answer, version-matched *observations*. The two
   // unfitted mathematical shapes are never used to schedule a review. We do
@@ -2033,7 +2066,7 @@
       excluded,displayGate:gate,chronologyGate,modelFitted:false,activePolicyChanged:false,
       warning:'Scores, if displayed, are TARGET-BALANCED Brier errors for separate observed literal-string agreements or human rubric classifications, not verified memory accuracy. The strictly later 20% window is scored only when its timestamp-separated earlier and later portions both clear conservative diversity gates. This is a descriptive time split, NOT an independent randomized study or a fitted-model evaluation: targets can recur, observations are selected by the active scheduler, and labels are not blinded. Both unfitted curves have an arbitrary 90% due-day anchor and are NOT FSRS. No policy winner, optimal interval or causal learning benefit is inferred. No due dates, priorities or past records are changed.'};
   }
-  function recordAttempt(db,{requirementId,targetId=null,activityId=null,response='',rating,assisted=false,sessionId=null,questionUsed=null,inputMode=null,durationSeconds=null,criterionChecks=[],correctionNote='',practiceStage=null,prospectiveForecast=null,now=new Date()}){
+  function recordAttempt(db,{requirementId,targetId=null,activityId=null,response='',rating,assisted=false,sessionId=null,questionUsed=null,inputMode=null,durationSeconds=null,criterionChecks=[],correctionNote='',practiceStage=null,prospectiveForecast=null,fsrsForecast=null,now=new Date()}){
     const r=db.requirements.find(x=>x.id===requirementId);if(!r)throw Error('Requirement does not exist.');
     if(!['again','hard','good','easy'].includes(rating))throw Error('Invalid rating.');
     const activity=activityId?getActivities(db,r.id).find(a=>a.id===activityId):chooseActivity(db,r.id,targetId);
@@ -2080,8 +2113,16 @@
          JSON.stringify(prospectiveForecast)!==JSON.stringify(expected))
         throw Error('The pre-answer forecast is stale or inconsistent; record the attempt without it.');
     }
+    if(fsrsForecast!==null&&(!prospectiveForecast||
+       !validFsrsForecast(fsrsForecast,{requirementId:r.id,requirementVersion:r.version,
+         retrievalTargetId:target.id,retrievalTargetVersion:target.version,
+         activityId:activity.id,activityVersion:activity.version,
+         priorDueAt:prev?.dueAt||null,priorIntervalDays:prev?.intervalDays??null,
+         prospectiveForecast,createdAt:now.toISOString()})||
+       fsrsForecast.historyCount!==prev?.reviewCount))
+      throw Error('FSRS comparison receipt is stale or inconsistent; record the attempt without it.');
     const rubricAtAttempt=(activity.kind==='explain'||activity.kind==='apply')?criteria.map(c=>({criterionId:c.id,version:c.version,textSnapshot:c.text})):undefined;
-    const attempt={id:id('attempt'),rubricAtAttempt,priorDueAt:prev?.dueAt||null,priorIntervalDays:prev?.intervalDays??null,schedulingDecision,literalCheck,...(prospectiveForecast?{prospectiveForecast}:{}),inputMode:inferredMode,activityKind:activity.kind,durationSeconds:validDuration(durationSeconds)?Math.round(durationSeconds):null,evidenceVersion:1,requirementId:r.id,requirementVersion:r.version,retrievalTargetId:target.id,retrievalTargetVersion:target.version,activityId:activity.id,activityVersion:activity.version,questionSnapshot:cleanString(questionUsed||activity.question,500),referenceSnapshot:activity.answer,focusLabelSnapshot:target.label,requirementVerified:r.verificationStatus==='verified',courseId:r.courseId,sessionId,response:recordedResponse,rating,scheduleRating,criterionChecks:checks,criterionCounts:counts,correctionNote:correctionNote.trim(),assisted:!!assisted,gradedBy:'learner',practiceStage:practiceStage||'regular',createdAt:now.toISOString()};
+    const attempt={id:id('attempt'),rubricAtAttempt,priorDueAt:prev?.dueAt||null,priorIntervalDays:prev?.intervalDays??null,schedulingDecision,literalCheck,...(prospectiveForecast?{prospectiveForecast}:{}),...(fsrsForecast?{fsrsForecast}:{}),inputMode:inferredMode,activityKind:activity.kind,durationSeconds:validDuration(durationSeconds)?Math.round(durationSeconds):null,evidenceVersion:1,requirementId:r.id,requirementVersion:r.version,retrievalTargetId:target.id,retrievalTargetVersion:target.version,activityId:activity.id,activityVersion:activity.version,questionSnapshot:cleanString(questionUsed||activity.question,500),referenceSnapshot:activity.answer,focusLabelSnapshot:target.label,requirementVerified:r.verificationStatus==='verified',courseId:r.courseId,sessionId,response:recordedResponse,rating,scheduleRating,criterionChecks:checks,criterionCounts:counts,correctionNote:correctionNote.trim(),assisted:!!assisted,gradedBy:'learner',practiceStage:practiceStage||'regular',createdAt:now.toISOString()};
     db.attempts.push(attempt);observeDuration(db,activity.kind,attempt.durationSeconds);
     db.memory[target.id]={dueAt,intervalDays:adjustedInterval,policyId:ACTIVE_SCHEDULING_POLICY,lastRating:scheduleRating,lastReviewedAt:now.toISOString(),reviewCount:(prev?.reviewCount||0)+1};
     db.events.push({type:'attempt.recorded',entityId:attempt.id,requirementId:r.id,targetId:target.id,at:attempt.createdAt});

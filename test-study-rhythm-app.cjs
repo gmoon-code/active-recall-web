@@ -36,7 +36,7 @@ test('Overview, Calendar and Progress render schedule-fit and study-history cont
   const context={window,document,console,setTimeout,clearTimeout,setInterval:()=>{},navigator:{},Date};
   vm.runInNewContext(fs.readFileSync('app.js','utf8'),context,{filename:'app.js'});
   await new Promise(resolve=>setImmediate(resolve));
-  assert.match(app.innerHTML,/Blueprint 4\.27/);
+  assert.match(app.innerHTML,/Blueprint 4\.28/);
   assert.ok(inserted.some(html=>html.includes('Study Rhythm &amp; Schedule Fit')),
     'Overview displays a schedule-fit panel');
   const navigate=page=>listeners.click({target:{closest(){return {dataset:{action:'navigate',page}};}}});
