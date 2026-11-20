@@ -1396,11 +1396,30 @@
       item.reasons=schedulingReasons(item);item.reasons.push(`Estimated ${Math.max(1,Math.round(item.seconds/60))} min (${timeEstimate.personalized?'your earlier practice':'task-type starting estimate'})`);return item;
     }).filter(Boolean));
   }
+  // An Again response is deliberately assigned a one-hour retry under the
+  // existing policy. A day-granularity calendar can list that retry for today,
+  // but Study Now must not offer it before the actual hour arrives.
+  // This guard does not change any interval, date, grade or review history.
+  function waitingForShortRetry(db,c,now){
+    const m=db.memory[c.target.id],due=Date.parse(m?.dueAt||'');
+    return m?.lastRating==='again'&&Math.abs(m.intervalDays-1/24)<1e-9&&
+      Number.isFinite(due)&&due>now.getTime();
+  }
+  function readySessionCandidates(db,now=new Date()){
+    return eligibleCandidates(db,now).filter(c=>!waitingForShortRetry(db,c,now));
+  }
+  function shortRetryWait(db,now=new Date()){
+    const waiting=eligibleCandidates(db,now).filter(c=>waitingForShortRetry(db,c,now));
+    if(!waiting.length)return null;
+    const first=Math.min(...waiting.map(c=>Date.parse(db.memory[c.target.id].dueAt)));
+    return {count:waiting.length,nextReadyAt:new Date(first).toISOString(),
+      minutesRemaining:Math.max(1,Math.ceil((first-now.getTime())/60000))};
+  }
   function packActivities(db,minutes,completedIds=[],courseCounts={},now=new Date(),dueOnly=false){
     const budgetSeconds=Math.max(0,Math.round(minutes*60));
     const reserve=budgetSeconds<=300?40:Math.min(180,Math.round(budgetSeconds*0.08));
     let remaining=Math.max(0,budgetSeconds-reserve);const plan=[];
-    const eligible=eligibleCandidates(db,now).filter(c=>
+    const eligible=readySessionCandidates(db,now).filter(c=>
       !completedIds.includes(c.target.id)&&!completedIds.includes(c.req.id)&&
       (!dueOnly||(c.due&&!c.isNew)));
     const counts={...courseCounts};let previousCourse=null;const selectedReqCounts={};
@@ -1480,7 +1499,7 @@
   function inspectStudyPriorities(db,{minutes=25,now=new Date(),prefs=null}={}){
     if(!Number.isInteger(minutes)||minutes<5||minutes>720)throw Error('Preview duration must be 5–720 minutes.');
     const plan=planActivities(db,minutes,[],{},now);
-    const candidates=eligibleCandidates(db,now);
+    const candidates=readySessionCandidates(db,now);
     const isDueReview=c=>c.due&&!c.isNew;
     const category=c=>isDueReview(c)?'Due review':c.isNew?'New first attempt':'Not yet due';
     const baseline=plan.items.slice();
@@ -2212,5 +2231,5 @@
   }
   function validateImport(x){return migrateDb(x);}
 
-  return {DAY,id,today,addDays,daysUntil,initialDb,migrateDb,validateImport,getTarget,getTargets,getMemory,getActivities,getCriteria,addCriterion,proposeCriteria,rubricQualityReview,addRubricEvidenceDraft,reviseCriterion,setCriterionAlternatives,rubricSyllabusAlignment,setCriterionSyllabusGoals,verifyCriterion,archiveCriterion,criterionStatus,rubricProgress,chooseActivity,addRetrievalTarget,verifyRetrievalTarget,addActivityVariant,deactivateActivity,reviseSource,addCourse,addSyllabusObjectives,updateSyllabusObjective,archiveSyllabusObjective,setSyllabusLink,setSyllabusMaterialsReady,setSyllabusLearningGuide,guidedLearningInfo,syllabusCoverage,draftRequirements,addSource,addImportedDocument,addRequirement,previewManualQuestionImport,importManualQuestionList,addManualQuestionBatch,archiveRequirements,restoreRequirement,purgeArchivedRequirements,previewRequirementRevision,editRequirement,verifyRequirement,questionQualityAudit,confirmQuestionQuality,integrity:I.integrity,questionCoverage:I.questionCoverage,questionWarnings:I.questionWarnings,learningObjectiveMap,variationStudio,questionStudio,adoptQuestionProposal,coverageReviewQueue,addAssessment,linkedAssessments,estimatedSeconds,durationEstimate,evidenceType,inputModeFor,evidenceSummary,delayedRetrievalAudit,memoryModelReadinessAudit,prospectiveEvidenceAudit,previewProspectiveForecast,schedulingPolicyAudit,eligibleCandidates,planActivities,planDueReviews,skipUnratedTarget,holdSessionQuestionForCorrection,holdQuestionForCorrection,questionRepairSourceContext,updateQuestionCorrectionDetails,releaseQuestionCorrectionHold,catchUpPreview,inspectStudyPriorities,buildReviewAgenda,forecastSchedule,setExactAnswerKey,exactKeyReady,previewLiteralCheck,literalDelayedAudit,recordAttempt,latestCorrectiveFeedback,assessmentCoverage,stats,demoDb};
+  return {DAY,id,today,addDays,daysUntil,initialDb,migrateDb,validateImport,getTarget,getTargets,getMemory,getActivities,getCriteria,addCriterion,proposeCriteria,rubricQualityReview,addRubricEvidenceDraft,reviseCriterion,setCriterionAlternatives,rubricSyllabusAlignment,setCriterionSyllabusGoals,verifyCriterion,archiveCriterion,criterionStatus,rubricProgress,chooseActivity,addRetrievalTarget,verifyRetrievalTarget,addActivityVariant,deactivateActivity,reviseSource,addCourse,addSyllabusObjectives,updateSyllabusObjective,archiveSyllabusObjective,setSyllabusLink,setSyllabusMaterialsReady,setSyllabusLearningGuide,guidedLearningInfo,syllabusCoverage,draftRequirements,addSource,addImportedDocument,addRequirement,previewManualQuestionImport,importManualQuestionList,addManualQuestionBatch,archiveRequirements,restoreRequirement,purgeArchivedRequirements,previewRequirementRevision,editRequirement,verifyRequirement,questionQualityAudit,confirmQuestionQuality,integrity:I.integrity,questionCoverage:I.questionCoverage,questionWarnings:I.questionWarnings,learningObjectiveMap,variationStudio,questionStudio,adoptQuestionProposal,coverageReviewQueue,addAssessment,linkedAssessments,estimatedSeconds,durationEstimate,evidenceType,inputModeFor,evidenceSummary,delayedRetrievalAudit,memoryModelReadinessAudit,prospectiveEvidenceAudit,previewProspectiveForecast,schedulingPolicyAudit,eligibleCandidates,shortRetryWait,planActivities,planDueReviews,skipUnratedTarget,holdSessionQuestionForCorrection,holdQuestionForCorrection,questionRepairSourceContext,updateQuestionCorrectionDetails,releaseQuestionCorrectionHold,catchUpPreview,inspectStudyPriorities,buildReviewAgenda,forecastSchedule,setExactAnswerKey,exactKeyReady,previewLiteralCheck,literalDelayedAudit,recordAttempt,latestCorrectiveFeedback,assessmentCoverage,stats,demoDb};
 });
