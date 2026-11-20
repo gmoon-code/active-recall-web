@@ -143,8 +143,8 @@ async function unversionedWriter(browser,url){
     await page.goto(url);await waitForBoot(page);
     // Force a pre-4.33 row, then load it as the expected baseline.
     await page.evaluate(async()=>{
-      const S=window.ActiveRecallStorage;
-      const saved=await S.load();
+      const S=window.ActiveRecallStorage,C=window.ActiveRecallCore;
+      const saved=await S.load()||{db:C.initialDb(),activeSessionId:null};
       const database=await new Promise((resolve,reject)=>{
         const request=indexedDB.open('active-recall-web-local',1);
         request.onsuccess=()=>resolve(request.result);
@@ -193,6 +193,32 @@ async function unversionedWriter(browser,url){
     assert.deepEqual(persisted,['Older tab committed']);
   }finally{await context.close();}
 }
+async function staleDirectImport(browser,url){
+  const context=await browser.newContext({acceptDownloads:true});
+  const a=await context.newPage(),b=await context.newPage();
+  try{
+    await a.goto(url);await waitForBoot(a);
+    await addCourse(a,'Original course');
+    await a.evaluate(()=>window.ActiveRecallStorage.ready());
+    await a.reload();await waitForBoot(a);
+    await b.goto(url);await waitForBoot(b);
+    await addCourse(a,'Newer tab change');
+    await a.evaluate(()=>window.ActiveRecallStorage.ready());
+    const backup=await b.evaluate(()=>{
+      const C=window.ActiveRecallCore,db=C.initialDb();
+      C.addCourse(db,'Attempted import');
+      return JSON.stringify(db);
+    });
+    await b.locator('.navbtn[data-page=insights]').click();
+    b.once('dialog',dialog=>dialog.accept());
+    await b.locator('#import-file').setInputFiles({
+      name:'fictional-backup.json',mimeType:'application/json',buffer:Buffer.from(backup)});
+    await b.locator('[data-storage-warning]').waitFor();
+    assert.equal(await b.evaluate(()=>window.ActiveRecallStorage.hasStorageConflict()),true);
+    assert.deepEqual((await snapshot(a)).names,['Original course','Newer tab change'],
+      'An imported stale backup cannot replace another tab’s newer notebook');
+  }finally{await context.close();}
+}
 async function main(){
   const root=process.cwd();
   const server=http.createServer((req,res)=>{
@@ -211,7 +237,8 @@ async function main(){
     await staleTabs(browser,url);
     await oldRowAndQueue(browser,url);
     await unversionedWriter(browser,url);
-    process.stdout.write('PASS: real Chromium stale-tab protection, unsaved backup, reload, old-version writes, queued saves, and mobile.\n');
+    await staleDirectImport(browser,url);
+    process.stdout.write('PASS: real Chromium stale-tab protection, unsaved backup, direct import warning, reload, old-version writes, queued saves, and mobile.\n');
   }finally{
     if(browser)await browser.close();
     await new Promise(resolve=>server.close(resolve));

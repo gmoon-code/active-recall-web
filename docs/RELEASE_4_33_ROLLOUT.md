@@ -12,7 +12,7 @@
 ## Verification before publication
 
 1. Check JavaScript syntax for app, storage, workflow browser tests; run the entire local deterministic Node suite.
-2. Real Chromium browser test 'test-storage-concurrency-browser.cjs': initial two-tab same-revision read, first accepted write, second rejected write with persistent warning, unmodified saved record, unsaved JSON export, reload and renewed authorised save, reverse-direction conflict, mobile viewport.
+2. Real Chromium browser test 'test-storage-concurrency-browser.cjs': initial two-tab same-revision read, first accepted write, second rejected write with persistent warning, unmodified saved record, unsaved JSON export, direct stale-backup import rejection, reload and renewed authorised save, reverse-direction conflict, mobile viewport.
 3. Real Chromium also tests v4.32 IndexedDB rows without revision metadata, initial revision migration, an older-format writer changing data without incrementing revision, and rapid same-tab queued writes.
 4. Run the full GitHub Actions desktop/mobile browser, JSON backup/restore and HTTPS offline checks; confirm offline cache 'active-recall-web-v4-33'.
 5. Only after successful checks: merge through the normal PR review workflow, confirm Pages deployment and the live health page report Blueprint 4.33 and matching offline cache.
