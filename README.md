@@ -1,4 +1,8 @@
-# Active Recall Web — Free Edition v4.30
+# Active Recall Web — Free Edition v4.31
+
+## Blueprint 4.31 — Respect the hour for a short retry
+
+When you rate a question **Again**, the existing transparent scheduling policy sets its next due time one hour later. **Study Now** now respects that exact timestamp: the day-level calendar may show the retry *later today*, but the automatic session queue will not offer it early. Other due or new questions remain available. If nothing else fits, Overview and Study Now explain the short wait and the disabled Start button automatically becomes available when the retry is due, even while the page stays open. A review is recorded only after a real answer and rating. This is a narrow readiness safeguard, **not** a change to the one-hour interval itself, a calibrated FSRS scheduler, or proof of optimal spacing. Existing due dates, priorities for other questions, stored attempts, schema-v5 backups and free browser-local offline use remain intact. [Release checklist](docs/RELEASE_4_31_ROLLOUT.md).
 
 ## Blueprint 4.30 — Quality-gated outcomes for replay-verified FSRS predictions
 
