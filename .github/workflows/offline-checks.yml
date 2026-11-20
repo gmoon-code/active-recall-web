@@ -44,9 +44,10 @@ jobs:
           node --check test-storage-concurrency-browser.cjs
           node --check test-safe-clear-browser.cjs
           node --check test-moon-theme.cjs
+          node --check test-clean-captions.cjs
           node --check test-moon-theme-browser.cjs
       - name: Local deterministic tests
-        run: node --test test-human-review.cjs test-paired-review.cjs test-review-packets.cjs test-reference-first.cjs test-reviewer-pilot.cjs test-reviewer-training.cjs test-reviewer-usability.cjs test-question-quality.cjs test-manual-qa.cjs test-qa-import.cjs test-qa-delete.cjs test-qa-purge.cjs test-deploy-preflight.cjs test-study-rhythm.cjs test-study-rhythm-app.cjs test-study-simple.cjs test-backup-restore.cjs test-safe-clear.cjs test-moon-theme.cjs test-priority-inspector.cjs test-memory-readiness.cjs test-prospective-forecast.cjs test-prospective-evidence.cjs test-due-catchup.cjs test-unrated-skip.cjs test-in-session-retries.cjs test-question-correction-hold.cjs test-correction-reasons.cjs test-source-repair-context.cjs test-revision-impact.cjs test-fsrs-shadow.cjs test-fsrs-outcomes.cjs test-short-retry-readiness.cjs test-agenda-known-priority.cjs test-exam-capacity-window.cjs
+        run: node --test test-human-review.cjs test-paired-review.cjs test-review-packets.cjs test-reference-first.cjs test-reviewer-pilot.cjs test-reviewer-training.cjs test-reviewer-usability.cjs test-question-quality.cjs test-manual-qa.cjs test-qa-import.cjs test-qa-delete.cjs test-qa-purge.cjs test-deploy-preflight.cjs test-study-rhythm.cjs test-study-rhythm-app.cjs test-study-simple.cjs test-backup-restore.cjs test-safe-clear.cjs test-moon-theme.cjs test-clean-captions.cjs test-priority-inspector.cjs test-memory-readiness.cjs test-prospective-forecast.cjs test-prospective-evidence.cjs test-due-catchup.cjs test-unrated-skip.cjs test-in-session-retries.cjs test-question-correction-hold.cjs test-correction-reasons.cjs test-source-repair-context.cjs test-revision-impact.cjs test-fsrs-shadow.cjs test-fsrs-outcomes.cjs test-short-retry-readiness.cjs test-agenda-known-priority.cjs test-exam-capacity-window.cjs
       - name: Free Chromium desktop and mobile smoke
         run: |
           npm install --no-save --no-package-lock --ignore-scripts --no-audit --no-fund playwright@1.56.1

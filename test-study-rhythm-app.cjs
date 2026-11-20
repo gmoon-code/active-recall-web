@@ -36,7 +36,8 @@ test('Overview, Calendar and Progress render schedule-fit and study-history cont
   const context={window,document,console,setTimeout,clearTimeout,setInterval:()=>{},navigator:{},Date};
   vm.runInNewContext(fs.readFileSync('app.js','utf8'),context,{filename:'app.js'});
   await new Promise(resolve=>setImmediate(resolve));
-  assert.match(app.innerHTML,/Blueprint 4\.35/);
+  assert.doesNotMatch(app.innerHTML,/class="topline"|class="footer"|class="sidefoot"/,'Study pages have no repeated decorative chrome');
+  assert.match(fs.readFileSync('index.html','utf8'),/name="app-version" content="4\.36"/);
   assert.ok(inserted.some(html=>html.includes('Study Rhythm &amp; Schedule Fit')),
     'Overview displays a schedule-fit panel');
   const navigate=page=>listeners.click({target:{closest(){return {dataset:{action:'navigate',page}};}}});
