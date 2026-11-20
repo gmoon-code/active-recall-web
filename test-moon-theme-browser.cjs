@@ -63,17 +63,19 @@ async function main(){
       assert.equal(theme.visibleCaptions,0,'Generic small subtitles do not distract from page titles');
     }
     await inspect('yellow','#f5f566');
-    const colors={questions:['green','#66f566'],courses:['blue','#66f0f0'],forecast:['magenta','#f066f0'],insights:['magenta','#f066f0'],home:['yellow','#f5f566']};
+    assert.equal((await page.locator('.hero h1').innerText()).trim(),'Active recall');
+    const colors={questions:['green','#66f566','Questions and answers'],courses:['blue','#66f0f0','Courses and materials'],forecast:['magenta','#f066f0','Study calendar'],insights:['magenta','#f066f0','Progress'],home:['yellow','#f5f566','Active recall']};
     const before=await page.evaluate(async()=>{const S=window.ActiveRecallStorage;await S.ready();return JSON.stringify((await S.load())?.db??null);});
-    for(const [route,[color,accent]] of Object.entries(colors)){
+    for(const [route,[color,accent,heading]] of Object.entries(colors)){
       await page.locator(`.navbtn[data-page="${route}"]`).click();
       await inspect(color,accent);
+      assert.equal((await page.locator('.hero h1, .pagehead h1').first().innerText()).trim(),heading,`${route} page uses a clear heading`);
     }
     const after=await page.evaluate(async()=>{const S=window.ActiveRecallStorage;await S.ready();return JSON.stringify((await S.load())?.db??null);});
     assert.equal(after,before,'Visual navigation does not write study data');
     await page.locator('.navbtn[data-page=insights]').click();
     assert.equal(await page.locator('.utility-link a[href="./health.html"]').innerText(),'Site diagnostics','Practical diagnostic link remains accessible in Progress');
-    const rhythmHighlight=page.locator('.card-title h2').filter({hasText:'Your recorded study rhythm'});
+    const rhythmHighlight=page.locator('.card-title h2').filter({hasText:'Study history (last 7 days)'});
     assert.equal(await rhythmHighlight.evaluate(el=>getComputedStyle(el).backgroundColor),'rgb(240, 102, 240)','Recorded study rhythm title has solid magenta highlighting');
     await page.locator('.navbtn[data-page=home]').click();
     for(const width of [390,360]){

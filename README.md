@@ -1,4 +1,8 @@
-# Active Recall Web — Free Edition v4.37
+# Active Recall Web — Free Edition v4.38
+
+## Blueprint 4.38 — Clear, accurate headings
+
+The home page is now titled simply **Active recall**. Descriptive navigation destinations use matching page titles such as **Courses and materials**, **Questions and answers**, **Study now**, **Progress**, and **Study calendar**. Section titles now identify the function or information they contain rather than using promotional slogans or rhetorical questions—for example **Schedule fit**, **Study history (last 7 days)**, **Question priorities**, and **Compare study schedules**. Question suggestions are consistently named **Suggested questions**. Moon's typography, full-height highlights, white background, restrained subtitles, and accessible controls remain. This wording-only release does not change the study queue, scoring, intervals, saved attempts, due times, data storage, schema-v5 backups, or free offline operation. [Release and rollback checklist](docs/RELEASE_4_38_ROLLOUT.md).
 
 ## Blueprint 4.37 — Full-height Moon highlighters
 

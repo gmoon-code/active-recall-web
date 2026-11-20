@@ -37,17 +37,17 @@ test('Overview, Calendar and Progress render schedule-fit and study-history cont
   vm.runInNewContext(fs.readFileSync('app.js','utf8'),context,{filename:'app.js'});
   await new Promise(resolve=>setImmediate(resolve));
   assert.doesNotMatch(app.innerHTML,/class="topline"|class="footer"|class="sidefoot"/,'Study pages have no repeated decorative chrome');
-  assert.match(fs.readFileSync('index.html','utf8'),/name="app-version" content="4\.37"/);
-  assert.ok(inserted.some(html=>html.includes('Study Rhythm &amp; Schedule Fit')),
+  assert.match(fs.readFileSync('index.html','utf8'),/name="app-version" content="4\.38"/);
+  assert.ok(inserted.some(html=>html.includes('Schedule fit')),
     'Overview displays a schedule-fit panel');
   const navigate=page=>listeners.click({target:{closest(){return {dataset:{action:'navigate',page}};}}});
   navigate('forecast');
   assert.match(app.innerHTML,/Known due \+ planned preparation/);
   assert.match(app.innerHTML,/Due work left unassigned/);
   assert.match(app.innerHTML,/Next seven days/);
-  assert.match(app.innerHTML,/What if I changed my study time/);
+  assert.match(app.innerHTML,/Compare study schedules/);
   navigate('insights');
-  assert.ok(inserted.some(html=>html.includes('Your recorded study rhythm · past seven days')),
+  assert.ok(inserted.some(html=>html.includes('Study history (last 7 days)')),
     'Progress shows dated snapshots');
   assert.ok((db.studyPlanHistory||[]).length>=1,'Opening the app with learning material records the first plan');
   assert.equal(C.validateImport(db).schemaVersion,5);

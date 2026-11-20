@@ -1,8 +1,8 @@
 {
   "id": "./",
-  "name": "Active Recall Web",
-  "short_name": "Active Recall",
-  "description": "Your free, private, unified learning and recall companion.",
+  "name": "Active recall",
+  "short_name": "Active recall",
+  "description": "Study questions and review schedules saved in this browser.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
