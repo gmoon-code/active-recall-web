@@ -1,4 +1,8 @@
-# Active Recall Web — Free Edition v4.29
+# Active Recall Web — Free Edition v4.30
+
+## Blueprint 4.30 — Quality-gated outcomes for replay-verified FSRS predictions
+
+In **Progress → FSRS prediction history check**, the optional local audit now links replay-verified FSRS-7 pre-answer probabilities to later unassisted written observations. It keeps five distinct evidence streams: strict literal short facts, self-reviewed explanations, self-reviewed applications, and other-person-reviewed explanations/applications. A **target-balanced descriptive Brier error** appears for a stream only after at least 50 eligible observations across 15 targets, with both positive and negative labels. A separately gated later-time window must also contain sufficient earlier and later label diversity and distinct targets; identical timestamps cannot cross the boundary. Missing, altered, assisted, early, non-written, inconclusive and late-reviewed evidence is excluded. **No scores are automatically displayed for sparse data.** These observational errors are **not** verified retention, FSRS model calibration on an independent learner population, a winner between schedulers, or evidence of an optimal calendar. No scheduling policy, due date, study queue, rating, schema-v5 JSON backup or local-first privacy behavior changes. [Release checklist](docs/RELEASE_4_30_ROLLOUT.md).
 
 ## Blueprint 4.29 — Independently replay saved FSRS predictions
 

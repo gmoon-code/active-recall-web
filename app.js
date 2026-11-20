@@ -71,7 +71,7 @@
   function empty(title,desc,cta='',action=''){return `<div class="empty"><div class="bigemoji">✧</div><h2>${esc(title)}</h2><p>${esc(desc)}</p>${cta?`<button class="btn primary" data-action="${action}">${esc(cta)}</button>`:''}</div>`;}
   const nav=[['home','◫','Overview'],['capture','✎','Capture'],['questions','?','My Q&A'],['study','◉','Study Now'],['courses','▤','Knowledge'],['assessments','▦','Assessments'],['forecast','◴','Calendar'],['insights','◷','Progress']];
   function sidebar(){return `<aside class="sidebar"><div class="brand"><span class="mark">✳</span><span>active<span style="color:#176d5e">recall</span></span></div><nav class="nav" aria-label="Main navigation">${nav.map(([key,icon,label])=>`<button class="navbtn ${page===key?'active':''}" data-action="navigate" data-page="${key}" ${page===key?'aria-current="page"':''}><span class="navicon">${icon}</span>${label}</button>`).join('')}</nav><div class="sidefoot"><strong><span class="statusdot"></span>100% free · Browser-local</strong><p>Hosted as a static site. No payments, API keys, accounts, or cloud sync. Export backups regularly.</p></div></aside>`;}
-  function header(){return `<div class="topline"><div class="path">ACTIVE RECALL WEB <span style="color:#b7c4bd">/</span> ${esc(nav.find(x=>x[0]===page)?.[2]||(page==='guided'?'Guided learning':''))}</div><div class="topright"><span class="tag">Blueprint 4.29 · Free</span><span class="avatar" aria-label="Local learner profile">A</span></div></div>`;}
+  function header(){return `<div class="topline"><div class="path">ACTIVE RECALL WEB <span style="color:#b7c4bd">/</span> ${esc(nav.find(x=>x[0]===page)?.[2]||(page==='guided'?'Guided learning':''))}</div><div class="topright"><span class="tag">Blueprint 4.30 · Free</span><span class="avatar" aria-label="Local learner profile">A</span></div></div>`;}
   function shell(content){return `<div class="app">${sidebar()}<main class="main">${header()}${content}<div class="footer">Free &amp; static · Notes stay in this browser · Export backups · Review generated drafts before relying on them · <a href="./health.html">Site diagnostics</a></div></main></div>${modalReqId?editModal():''}${qualityReqId?questionQualityModal():''}${modalSourceId?editSourceModal():''}${studioSourceId?studioModal():''}${modalReviewId?humanReviewModal():''}${modalPairId?PU.modal({db,esc,courseName,attemptId:modalPairId}):''}`;}
   function dashboard(){const integrity=C.integrity(db);const s=C.stats(db),preview=C.planActivities(db,15).items.slice(0,4),topUpcoming=s.upcoming.slice(0,3),ready=C.planActivities(db,duration).items.length>0,ongoing=activeSession()?.status==='active';
     const startAction=ongoing?'data-action="navigate" data-page="study"':'data-action="start-session"',startLabel=ongoing?'Continue studying':`Study now · ${duration} min`;
@@ -573,11 +573,27 @@ A">${esc((a.exactAnswerKey?.answers||[]).join('\n'))}</textarea><label class="ch
   }
   function fsrsReceiptAuditPanel(){
     const r=fsrsReceiptAuditResult,e=r?.exclusions;
+    const evaluation=r?.evaluation;
+    const labels=[['Short factual recall · literal agreement','literalRecall'],
+      ['Explanation · self-reviewed rubric','selfExplain'],
+      ['Application · self-reviewed rubric','selfApply'],
+      ['Explanation · other-person review','otherExplain'],
+      ['Application · other-person review','otherApply']];
+    const outcomeRows=evaluation?labels.map(([label,key])=>{
+      const s=evaluation.groups[key],later=s.laterWindow;
+      return `<div class="listrow"><div class="rowbody"><strong>${esc(label)}</strong><small>${s.attempts} replay-verified delayed label(s) · ${s.distinctTargets} targets · ${s.positiveLabels} positive / ${s.negativeLabels} negative</small>
+        ${s.brier!==null?`<p class="small muted">Descriptive target-balanced FSRS Brier error: ${s.brier.toFixed(4)}. This is agreement with this label, not proof of memory accuracy.</p>`:''}
+        <small>Strictly later time window: ${later.later.attempts} attempt(s), ${later.later.distinctTargets} targets${later.brier!==null?' · descriptive Brier '+later.brier.toFixed(4):' · separate score withheld'}.</small></div><span class="pill ${s.brier!==null?'blue':''}">${s.brier!==null?'Descriptive error':'Scores withheld'}</span></div>`;
+    }).join(''):'';
     return `<section class="section"><div class="card"><div class="card-title"><h2>FSRS prediction history check</h2><span class="pill blue">Read-only · no scheduling change</span></div>
-      <p class="small muted">A saved prediction is only a numerical claim. This optional local audit independently rebuilds the FSRS-7 memory state from <strong>earlier</strong> written review history and checks whether the saved six-decimal probability matches. It does not use later answers to calculate an earlier prediction.</p>
+      <p class="small muted">This optional local check independently replays <strong>earlier</strong> written review history to verify saved FSRS-7 probabilities. It then checks genuinely delayed, unassisted outcomes <strong>separately by answer type</strong>, without using later answers to invent earlier predictions. It never changes the automatic calendar.</p>
       <div class="btnrow"><button type="button" class="btn secondary" data-action="audit-fsrs-receipts" ${fsrsReceiptAuditBusy?'disabled':''}>${fsrsReceiptAuditBusy?'Replaying earlier reviews locally…':'Check saved FSRS prediction history'}</button></div>
       ${r?`<div class="grid cols3" style="margin:16px 0">${metric('Receipts replayed exactly',r.replayed,'Of '+r.inspected+' inspected · '+r.notInspected+' not inspected')}${metric('Delayed written candidates',r.eligibleDelayedWritten,'At least 24h; unassisted')}${metric('Factual labels to inspect',r.literalOutcomeCandidates,'Literal comparison only; not a score')}</div>
         ${r.recordedReceipts===0?'<p class="info">No FSRS receipts yet. Keep studying normally; no special action is required.</p>':`<p class="small muted">${r.recordedReceipts} stored receipt(s). Excluded from replay: ${e.unlinkedMetadata} inconsistent metadata · ${e.incompleteOrChangedHistory} incomplete or changed histories · ${e.unsupportedPractice} assisted, oral or other ineligible earlier practice · ${e.invalidChronology} time conflicts · ${e.modelMismatch} numerical mismatches · ${e.replayFailure} model replay errors.</p>`}
+        ${evaluation?`<details class="document-outline"><summary><strong>Outcome check by evidence type</strong><span class="small muted">Conservative scores and exclusions</span></summary>
+          <p class="small muted" style="margin-top:12px">A separate label type needs at least ${evaluation.displayGate.minAttempts} eligible observations across ${evaluation.displayGate.minTargets} targets, including ${evaluation.displayGate.minPositive} positive and ${evaluation.displayGate.minNegative} negative classifications, before a descriptive error appears. Later-time scores need ${evaluation.chronologyGate.minEarlierAttempts} earlier and ${evaluation.chronologyGate.minLaterAttempts} later observations, with distinct-target and label-diversity checks on both sides. Matching timestamps are never split.</p>
+          <div class="list">${outcomeRows}</div><p class="small muted">Outcome exclusions after valid replay: ${evaluation.excluded.noUsableLabel} without a usable label · ${evaluation.excluded.invalidLiteralCheck} invalid literal comparison · ${evaluation.excluded.lateOrInvalidHumanReview} late/invalid rubric judgments · ${evaluation.excluded.inconclusiveHumanReview} inconclusive human review.</p>
+          <p class="info">${esc(evaluation.warning)}</p></details>`:''}
         <p class="info">${esc(r.warning)}</p>`:'<p class="small muted">Run this check only if you want to inspect the evidence. It changes no notes, grades, attempts, predictions or review dates. The normal Study Now experience needs no extra steps.</p>'}
     </div></section>`;
   }
@@ -822,7 +838,7 @@ A">${esc((a.exactAnswerKey?.answers||[]).join('\n'))}</textarea><label class="ch
       const generation=++fsrsShadowGeneration;
       fsrsShadowBusy=false;
       fsrsReceiptAuditBusy=true;fsrsReceiptAuditResult=null;render();
-      Promise.resolve().then(()=>FSRSShadow.auditReceipts(db,{Vendor:window.ActiveRecallFSRSVendor}))
+      Promise.resolve().then(()=>FSRSShadow.auditOutcomes(db,{Vendor:window.ActiveRecallFSRSVendor,Human:H}))
         .then(result=>{if(generation!==fsrsShadowGeneration)return;fsrsReceiptAuditResult=result;fsrsReceiptAuditBusy=false;render();})
         .catch(error=>{if(generation!==fsrsShadowGeneration)return;fsrsReceiptAuditBusy=false;notify('FSRS evidence check unavailable: '+(error.message||'Unknown error'),true);render();});
       break;
