@@ -78,9 +78,21 @@ async function main(){
    const B=await reviewer('B'),A=await reviewer('A'); // import order does not prove reviewer order
    const upload=(bytes,name)=>({name,mimeType:'application/json',buffer:bytes});
    await owner.locator('#reviewer-training-import').setInputFiles(upload(B.originalBytes,'synthetic-B.json'));
-   await owner.locator('.toast:not(.error)').waitFor();
+   // A prior success toast can still be visible when the asynchronous file
+   // import begins. Wait for the actual IndexedDB commit, not a generic toast.
+   await owner.waitForFunction(async()=>{
+     const S=window.ActiveRecallStorage;
+     try{await S.ready();const saved=await S.load();
+       return saved?.db?.reviewerTraining?.submissions?.some(x=>x.slot==='B')===true;
+     }catch{return false;}
+   });
    await owner.locator('#reviewer-training-import').setInputFiles(upload(A.originalBytes,'synthetic-A.json'));
-   await owner.locator('.toast:not(.error)').waitFor();
+   await owner.waitForFunction(async()=>{
+     const S=window.ActiveRecallStorage;
+     try{await S.ready();const saved=await S.load(),entries=saved?.db?.reviewerTraining?.submissions||[];
+       return entries.length===2&&entries.some(x=>x.slot==='A')&&entries.some(x=>x.slot==='B');
+     }catch{return false;}
+   });
    assert.match(await owner.locator('#reviewer-training').innerText(),/Different criterion statuses/);
    assert.match(await owner.locator('#reviewer-training').innerText(),/food-web-model/);
    const summaryDl=owner.waitForEvent('download');
