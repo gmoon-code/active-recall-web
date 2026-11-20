@@ -30,16 +30,32 @@ async function main(){
     });
     await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
     browser=await chromium.launch({headless:true,
-      executablePath:process.env.CHROME_BIN||'/usr/bin/google-chrome',args:['--no-sandbox']});
+      // Chromium must also trust this test-only self-signed certificate when
+      // fetching the service worker's script and precache dependencies.
+      executablePath:process.env.CHROME_BIN||'/usr/bin/google-chrome',
+      args:['--no-sandbox','--ignore-certificate-errors']});
     const context=await browser.newContext({ignoreHTTPSErrors:true,acceptDownloads:true}),page=await context.newPage();
     const errors=[];page.on('pageerror',error=>errors.push(error.message));
     const url=`https://127.0.0.1:${server.address().port}${prefix}`;
     await page.goto(url);
     await page.locator('[data-action=demo]').waitFor();
-    await page.evaluate(()=>Promise.race([
-      navigator.serviceWorker.ready,
-      new Promise((_,reject)=>setTimeout(()=>reject(Error('HTTPS service worker did not activate within 15 seconds')),15000))
-    ]));
+    try{
+      await page.evaluate(()=>Promise.race([
+        navigator.serviceWorker.ready,
+        new Promise((_,reject)=>setTimeout(()=>reject(Error('HTTPS service worker did not activate within 15 seconds')),15000))
+      ]));
+    }catch(error){
+      const diagnostic=await page.evaluate(async()=>{
+        let registerError=null;
+        try{await navigator.serviceWorker.register('./sw.js');}
+        catch(cause){registerError=String(cause);}
+        return {secureContext:isSecureContext,registerError,
+          registrations:(await navigator.serviceWorker.getRegistrations()).map(r=>({
+            scope:r.scope,active:r.active?.state||null,installing:r.installing?.state||null,
+            waiting:r.waiting?.state||null}))};
+      });
+      throw Error(error.message+'; '+JSON.stringify(diagnostic));
+    }
     await page.reload();
     await page.waitForFunction(()=>!!navigator.serviceWorker.controller);
     assert.equal(await page.evaluate(()=>navigator.serviceWorker.controller.scriptURL.endsWith('/active-recall-web/sw.js')),true);
