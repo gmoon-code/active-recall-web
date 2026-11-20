@@ -1,4 +1,8 @@
-# Active Recall Web — Free Edition v4.39
+# Active Recall Web — Free Edition v4.40
+
+## Blueprint 4.40 — Simple [ar] logo
+
+The previous star mark is now the literal **[ar]** wordmark in the sidebar and Site diagnostics header. The browser favicon and both installed-app icon sizes use the same black Times New Roman lettering on a plain white background; the sidebar mark has no filled square. The full Moon palette, page headings, navigation, monthly calendar, spaced-review logic, browser-local records, and schema-v5 backups are unchanged. The offline cache is refreshed so installed copies receive the new icons. [Release and rollback checklist](docs/RELEASE_4_40_ROLLOUT.md).
 
 ## Blueprint 4.39 — Monthly study calendar
 

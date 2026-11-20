@@ -63,6 +63,8 @@ async function main(){
       assert.equal(theme.visibleCaptions,0,'Generic small subtitles do not distract from page titles');
     }
     await inspect('yellow','#f5f566');
+    assert.equal((await page.locator('.brand .mark').innerText()).trim(),'[ar]');
+    assert.equal(await page.locator('.brand .mark').evaluate(el=>getComputedStyle(el).backgroundColor),'rgba(0, 0, 0, 0)','The [ar] wordmark has no filled square');
     assert.equal((await page.locator('.hero h1').innerText()).trim(),'Active recall');
     const colors={questions:['green','#66f566','Questions and answers'],courses:['blue','#66f0f0','Courses and materials'],forecast:['magenta','#f066f0','Study calendar'],insights:['magenta','#f066f0','Progress'],home:['yellow','#f5f566','Active recall']};
     const before=await page.evaluate(async()=>{const S=window.ActiveRecallStorage;await S.ready();return JSON.stringify((await S.load())?.db??null);});
