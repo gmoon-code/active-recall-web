@@ -1509,21 +1509,66 @@
     const excluded=new Set(missedDates),states=new Map(),rows=[];
     let deferred=0,firstPassTotal=0,conditionalTotal=0;
     const pool=eligibleCandidates(db,start).filter(c=>c.req.verificationStatus==='verified'||c.req.origin!=='rule_draft');
+    const dailyBudget=date=>{
+      const when=dateStart(date),off=excluded.has(date);
+      const minutes=off?0:(when.getDay()===0||when.getDay()===6?weekend:weekday);
+      const reserve=minutes<=5?Math.min(minutes*60,40):Math.min(180,Math.round(minutes*60*0.08));
+      return {minutes,reserve,usableSeconds:Math.max(0,minutes*60-reserve)};
+    };
+    // Work backwards from each exam to find how early its otherwise-post-exam
+    // reviews need to enter the *optional* pre-exam queue. This only uses
+    // known time estimates and availability. It is not a fitted spacing rule,
+    // and it does not move any saved memory due date.
+    const examDemand=new Map();
+    for(const c of pool){
+      const saved=db.memory[c.target.id],savedDue=Date.parse(saved?.dueAt||'');
+      if(!Number.isFinite(savedDue))continue;
+      const actualDate=today(new Date(savedDue));
+      for(const exam of linkedAssessments(db,c.req,start)){
+        if(exam.date>startDate&&daysUntil(exam.date,start)<=42&&actualDate>=exam.date){
+          if(!examDemand.has(exam.id))examDemand.set(exam.id,[]);
+          examDemand.get(exam.id).push(c.seconds);
+        }
+      }
+    }
+    const examWindows=new Map();
+    for(const exam of db.assessments){
+      // Sum-of-minutes alone overstates what fits when individual activities
+      // cannot be split across days. Pack whole estimated tasks backward.
+      const remaining=(examDemand.get(exam.id)||[]).slice().sort((a,b)=>b-a);
+      if(!remaining.length)continue;
+      let date=addDays(dateStart(exam.date),-1),first=date;
+      while(date>=startDate&&remaining.length){
+        let space=dailyBudget(date).usableSeconds;
+        for(let i=0;i<remaining.length;){
+          if(remaining[i]<=space){space-=remaining[i];remaining.splice(i,1);}
+          else i++;
+        }
+        first=date;date=addDays(dateStart(date),-1);
+      }
+      examWindows.set(exam.id,first);
+    }
     for(const c of pool){
       const m=db.memory[c.target.id];
       let dueDate=startDate;
       if(m?.dueAt&&Number.isFinite(Date.parse(m.dueAt))) {
         const future=today(new Date(m.dueAt));if(future>dueDate)dueDate=future;
       }
-      // A near-term assessment can justify a practice opportunity a little before
-      // a later memory due date; it does not change the underlying memory interval.
-      const exams=linkedAssessments(db,c.req,start).map(a=>a.date).sort();
-      if(exams.length&&dueDate>exams[0]){
-        const advance=addDays(dateStart(exams[0]),-1);
-        if(advance>=startDate)dueDate=advance;
+      const actualDueDate=dueDate;
+      // An assessment can justify *optional* early practice. The calendar
+      // spreads competing opportunities over the available pre-exam days.
+      const relatedExams=linkedAssessments(db,c.req,start).sort((a,b)=>a.date.localeCompare(b.date));
+      const exams=relatedExams.map(a=>a.date);
+      let advancedForAssessment=false,advancedExamDate=null;
+      if(relatedExams.length&&dueDate>=relatedExams[0].date){
+        const advance=examWindows.get(relatedExams[0].id);
+        if(advance&&advance>=startDate&&advance<dueDate){
+          dueDate=advance;advancedForAssessment=true;advancedExamDate=relatedExams[0].date;
+        }
       }
       const prior=Math.max(0,Number(m?.intervalDays)||0);
       states.set(c.target.id,{candidate:c,nextDate:dueDate,initialDate:dueDate,
+        actualDueDate,advancedForAssessment,wasAdvancedForAssessment:advancedForAssessment,advancedExamDate,
         rounds:0,nextIndex:Math.max(0,daysUntil(dueDate,start)),
         examOffsets:exams.map(d=>daysUntil(d,start)).sort((a,b)=>a-b),
         priorGap:prior>1?Math.min(21,Math.max(2,Math.round(prior*1.5))):2,
@@ -1551,10 +1596,16 @@
     const assigned=new Map();
     for(let i=0;i<horizon;i++){
       const when=dateStart(addDays(dateStart(startDate),i));when.setHours(12,0,0,0);
-      const date=today(when),off=excluded.has(date),capacity=off?0:(when.getDay()===0||when.getDay()===6?weekend:weekday);
-      const reserve=capacity<=5?Math.min(capacity*60,40):Math.min(180,Math.round(capacity*60*0.08));
-      let available=Math.max(0,capacity*60-reserve);
+      const date=today(when),{minutes:capacity,reserve,usableSeconds}=dailyBudget(date);
+      let available=usableSeconds;
       const activities=[],preparationActivities=[],perCourse={},perReq={};let previousCourse='';
+      // Do not turn an exam-only early opportunity into an overdue obligation
+      // once its assessment is over. The untouched real due date takes over.
+      for(const v of states.values())if(v.rounds===0&&v.advancedForAssessment&&date>=v.advancedExamDate){
+        v.nextDate=v.actualDueDate;
+        v.nextIndex=Math.max(0,daysUntil(v.actualDueDate,start));
+        v.advancedForAssessment=false;
+      }
       // Preserve short sessions for already due retrieval. When there is no
       // review fit, a four-minute preparation step can use even a five-minute
       // day. With longer budgets, make room for one preparation step per day.
@@ -1582,14 +1633,23 @@
           const late=Math.min(25,Math.max(0,i-v.nextIndex)*3);
           return c.score+urgency+late-(perCourse[c.req.courseId]||0)*9-(perReq[c.req.id]||0)*6-(c.req.courseId===previousCourse?3:0)-(v.rounds?7:0);
         };
-        pending.sort((a,b)=>score(b)-score(a)||a.nextDate.localeCompare(b.nextDate)||a.candidate.seconds-b.candidate.seconds||a.candidate.target.id.localeCompare(b.candidate.target.id));
+        // A known first review is supported by saved learning evidence (or is
+        // the target's first attempt). Revisit slots are only hypothetical:
+        // their timing depends on an answer that has not happened yet. Never
+        // let such a placeholder displace a known first opportunity that fits
+        // today's remaining capacity. Apply the usual priorities *within*
+        // each evidence tier; this is a calendar safeguard, not a measured
+        // claim that a particular interval maximizes retention.
+        pending.sort((a,b)=>(a.rounds>0)-(b.rounds>0)||score(b)-score(a)||a.nextDate.localeCompare(b.nextDate)||a.candidate.seconds-b.candidate.seconds||a.candidate.target.id.localeCompare(b.candidate.target.id));
         const v=pending[0],c=v.candidate,conditional=v.rounds>0;
         const nearestExam=v.examOffsets.find(day=>day>=i),examDays=nearestExam===undefined?null:nearestExam-i;
         const reason=conditional?'Conditional spaced revisit — depends on future study results':
+          v.advancedForAssessment?'Optional pre-exam review — saved memory date unchanged':
           date>v.initialDate?'Deferred review opportunity':c.isNew?'First retrieval opportunity':
           (examDays!==null&&examDays<=2?'Assessment-relevant review':'Existing memory due window');
         const slot={targetId:c.target.id,requirementId:c.req.id,courseId:c.req.courseId,activityId:c.activity.id,
-          seconds:c.seconds,round:v.rounds+1,conditional,reason,earliestDate:v.nextDate,examDays};
+          seconds:c.seconds,round:v.rounds+1,conditional,earlyForExam:!conditional&&v.advancedForAssessment,
+          reason,earliestDate:v.nextDate,examDays};
         activities.push(slot);available-=c.seconds;
         if(!assigned.has(c.target.id))assigned.set(c.target.id,[]);
         assigned.get(c.target.id).push(slot);
@@ -1604,7 +1664,8 @@
       rows.push({date,budgetMinutes:capacity,reserveSeconds:reserve,usedSeconds:activities.reduce((n,a)=>n+a.seconds,0)+preparationActivities.reduce((n,a)=>n+a.seconds,0),activities,preparationActivities,
         overdueUnplaced:[...states.values()].filter(v=>v.rounds===0&&v.nextDate<=date).length});
     }
-    const dueWithin=[...states.values()].filter(v=>v.initialDate<=endDate);
+    const dueWithin=[...states.values()].filter(v=>v.initialDate<=endDate&&
+      (!v.wasAdvancedForAssessment||v.actualDueDate<=endDate));
     deferred=dueWithin.filter(v=>v.rounds===0).length;
     const coverage=db.assessments.filter(a=>daysUntil(a.date,start)>=0).map(a=>{
       const related=db.requirements.filter(r=>r.active&&r.courseId===a.courseId&&(a.scope==='all'||a.requirementIds.includes(r.id)));
@@ -1619,7 +1680,7 @@
       preparationSteps:preparationAssigned.size,unplannedPreparation:preparation.length-preparationAssigned.size,preparationGoals:preparation.length,
       unplannedDue:deferred,dueInHorizon:dueWithin.length,eligibleAtStart:pool.length,
       forecastType:'conditional_review_agenda',
-      warning:'Syllabus preparation steps are planning prompts, not recorded learning or evidence of mastery. Only each target’s next known review window uses current evidence. Later spaced revisit slots are conditional planning placeholders, not simulated successful retrievals, guaranteed retention, or exam results. Actual study results automatically change the next calculation. Intervals and priorities are provisional heuristics, not validated optimal timing.'};
+      warning:'Syllabus preparation steps are planning prompts, not recorded learning or evidence of mastery. An optional pre-exam review can be offered before the saved memory due date using an estimated time-capacity heuristic; it is not already due, and the saved date is unchanged. Later spaced revisit slots are conditional planning placeholders, not simulated successful retrievals, guaranteed retention, or exam results. Actual study results automatically change the next calculation. Intervals, exam windows and priorities are provisional heuristics, not validated optimal timing.'};
   }
   // Read-only workload *opportunity* forecast, not simulated learning outcomes.
   // Future answers, retention changes, and additional repetitions are unknown.
@@ -1884,7 +1945,7 @@
         excluded.noWrittenAnswer++;continue;
       }
       if(a.requirementVerified===false){excluded.unverifiedRequirement++;continue;}
-      const row=(positive)=>({target:a.retrievalTargetId,positive:positive?1:0,
+      const row=(positive)=>({target:a.retrievalTargetId,t,positive:positive?1:0,
         exponential:f.exponential,hyperbolic:f.hyperbolic});
       if(a.activityKind==='recall'&&a.literalCheck?.version===1&&
          a.literalCheck.method==='literal-match-v1'&&typeof a.literalCheck.matched==='boolean'&&
@@ -1919,6 +1980,22 @@
     // Give each target equal weight so repeated reviews of one item cannot
     // entirely determine the descriptive error of a cohort.
     const gate={minAttempts:50,minTargets:15,minPositive:10,minNegative:10};
+    // Reserve a strictly later *time window* for future model comparisons.
+    // The current two shapes are fixed and unfitted; this is only descriptive.
+    // Both sides must have label diversity and multiple targets. Samples on
+    // the same timestamp must never be divided across a boundary.
+    const chronologyGate={minEarlierAttempts:50,minEarlierTargets:15,
+      minLaterAttempts:20,minLaterTargets:8,minLaterPositive:5,minLaterNegative:5};
+    const targetBrier=(rows,shape)=>{
+      const byTarget=new Map();
+      for(const row of rows){
+        if(!byTarget.has(row.target))byTarget.set(row.target,[]);
+        byTarget.get(row.target).push(row);
+      }
+      const perTarget=[...byTarget.values()].map(list=>list.reduce((sum,r)=>
+        sum+(r[shape]-r.positive)**2,0)/list.length);
+      return Math.round(perTarget.reduce((sum,v)=>sum+v,0)/perTarget.length*10000)/10000;
+    };
     const summarise=rows=>{
       const targetRows=new Map();let positives=0;
       for(const r of rows){
@@ -1929,18 +2006,32 @@
       const n=rows.length,negatives=n-positives;
       const scoreable=n>=gate.minAttempts&&targetRows.size>=gate.minTargets&&
         positives>=gate.minPositive&&negatives>=gate.minNegative;
-      const targetBrier=shape=>{
-        const perTarget=[...targetRows.values()].map(list=>list.reduce((sum,r)=>
-          sum+(r[shape]-r.positive)**2,0)/list.length);
-        return Math.round(perTarget.reduce((sum,v)=>sum+v,0)/perTarget.length*10000)/10000;
-      };
+      const byTime=rows.slice().sort((a,b)=>a.t-b.t),desiredCut=Math.floor(n*0.8);
+      let cut=desiredCut;
+      while(cut>0&&cut<n&&byTime[cut-1].t===byTime[cut].t)cut--;
+      // A cohort collected at one timestamp has no meaningful "later" data.
+      const early=byTime.slice(0,cut||n),later=cut?byTime.slice(cut):[];
+      const earlyTargets=new Set(early.map(r=>r.target));
+      const laterTargets=new Set(later.map(r=>r.target));
+      const laterPositive=later.filter(r=>r.positive).length;
+      const canScoreLater=scoreable&&early.length>=chronologyGate.minEarlierAttempts&&
+        earlyTargets.size>=chronologyGate.minEarlierTargets&&
+        later.length>=chronologyGate.minLaterAttempts&&
+        laterTargets.size>=chronologyGate.minLaterTargets&&
+        laterPositive>=chronologyGate.minLaterPositive&&
+        later.length-laterPositive>=chronologyGate.minLaterNegative;
       return {attempts:n,distinctTargets:targetRows.size,positiveLabels:positives,negativeLabels:negatives,
-        scores:scoreable?{exponential:targetBrier('exponential'),hyperbolic:targetBrier('hyperbolic')}:null};
+        scores:scoreable?{exponential:targetBrier(rows,'exponential'),hyperbolic:targetBrier(rows,'hyperbolic')}:null,
+        laterWindow:{earlierAttempts:early.length,laterAttempts:later.length,
+          earlierDistinctTargets:earlyTargets.size,laterDistinctTargets:laterTargets.size,
+          laterPositiveLabels:laterPositive,laterNegativeLabels:later.length-laterPositive,
+          firstLaterAt:later.length?new Date(later[0].t).toISOString():null,
+          scores:canScoreLater?{exponential:targetBrier(later,'exponential'),hyperbolic:targetBrier(later,'hyperbolic')}:null}};
     };
     return {version:1,processed:source.length,olderAttemptsNotAudited:raw.length-source.length,
       linkedReceipts,groups:Object.fromEntries(Object.entries(groups).map(([key,rows])=>[key,summarise(rows)])),
-      excluded,displayGate:gate,modelFitted:false,activePolicyChanged:false,
-      warning:'Scores, if ever displayed, are TARGET-BALANCED Brier errors for separate observed literal-string agreements or human rubric classifications, not verified memory accuracy. Smaller is closer to that narrow binary label, not proof of a better scheduler. Both curves are arbitrarily anchored at 90% when due, untrained and NOT FSRS. Observations are selected by the current scheduler, repeat targets, lack blinded labels, and are not an independent holdout or causal comparison. Withheld groups are not scored. No review dates, priorities or historical records are changed.'};
+      excluded,displayGate:gate,chronologyGate,modelFitted:false,activePolicyChanged:false,
+      warning:'Scores, if displayed, are TARGET-BALANCED Brier errors for separate observed literal-string agreements or human rubric classifications, not verified memory accuracy. The strictly later 20% window is scored only when its timestamp-separated earlier and later portions both clear conservative diversity gates. This is a descriptive time split, NOT an independent randomized study or a fitted-model evaluation: targets can recur, observations are selected by the active scheduler, and labels are not blinded. Both unfitted curves have an arbitrary 90% due-day anchor and are NOT FSRS. No policy winner, optimal interval or causal learning benefit is inferred. No due dates, priorities or past records are changed.'};
   }
   function recordAttempt(db,{requirementId,targetId=null,activityId=null,response='',rating,assisted=false,sessionId=null,questionUsed=null,inputMode=null,durationSeconds=null,criterionChecks=[],correctionNote='',practiceStage=null,prospectiveForecast=null,now=new Date()}){
     const r=db.requirements.find(x=>x.id===requirementId);if(!r)throw Error('Requirement does not exist.');

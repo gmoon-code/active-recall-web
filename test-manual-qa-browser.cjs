@@ -93,6 +93,13 @@ async function main(){
     assert.ok(await page.locator('[data-action=start-session]').count(),'Manually authored questions must enter the review plan.');
     await page.setViewportSize({width:390,height:844});
     await page.locator('.navbtn[data-page=questions]').click();
+    // The first post-navigation measurement can race the mobile grid reflow.
+    // Wait for the actual narrow-layout order; a persistent regression still fails.
+    await page.waitForFunction(()=>{
+      const composer=document.querySelector('.qa-composer')?.getBoundingClientRect();
+      const main=document.querySelector('.qa-main')?.getBoundingClientRect();
+      return window.innerWidth===390&&composer&&main&&composer.top<main.top;
+    },null,{timeout:5000});
     const composer=await page.locator('.qa-composer').boundingBox();
     assert.ok(composer&&composer.width<=390,'Writing form must fit mobile width.');
     assert.ok(composer.y<(await page.locator('.qa-main').boundingBox()).y,'On mobile, add-question form must appear before the list.');

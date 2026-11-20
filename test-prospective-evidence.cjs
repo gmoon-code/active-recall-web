@@ -144,4 +144,55 @@ test('descriptive target-balanced Brier values are withheld until each separate 
   assert.equal(a.modelFitted,false);
   assert.equal(a.activePolicyChanged,false);
   assert.equal(a.groups.selfExplain.scores,null,'different evidence types must never be pooled');
+  assert.equal(g.laterWindow.scores,null,'50 observations are not enough for a separately evaluated later window');
+});
+
+test('strict time-ordered later-window scores are gated and never fit or reschedule a model',()=>{
+  const db=C.initialDb(),course=C.addCourse(db,'Biology'),cohort=[];
+  for(let i=0;i<15;i++){
+    const req=C.addRequirement(db,{courseId:course.id,kind:'recall',question:`Identify organelle ${i}.`,answer:'Mitochondrion.'});
+    const target=C.getTarget(db,req.id),activity=C.getActivities(db,req.id,target.id)[0];
+    C.setExactAnswerKey(db,activity.id,'Mitochondrion.',true);
+    C.recordAttempt(db,{requirementId:req.id,targetId:target.id,activityId:activity.id,
+      now:at(0),response:'Mitochondrion.',rating:'good'});
+    cohort.push({req,target,activity});
+  }
+  for(let round=1;round<=7;round++)for(let i=0;i<cohort.length;i++){
+    const {req,target,activity}=cohort[i],now=at(round*3),
+      receipt=C.previewProspectiveForecast(db,{requirementId:req.id,targetId:target.id,activityId:activity.id,now});
+    C.recordAttempt(db,{requirementId:req.id,targetId:target.id,activityId:activity.id,
+      now,response:(round+i)%2?'Other.':'Mitochondrion.',rating:'good',prospectiveForecast:receipt});
+  }
+  const before=JSON.stringify(db),audit=C.prospectiveEvidenceAudit(db),g=audit.groups.literalRecall;
+  assert.equal(g.attempts,105);
+  assert.equal(g.laterWindow.earlierAttempts,75,'ties at the 80% boundary stay on the later side');
+  assert.equal(g.laterWindow.laterAttempts,30);
+  assert.equal(g.laterWindow.laterDistinctTargets,15);
+  assert.equal(g.laterWindow.firstLaterAt,at(18).toISOString());
+  assert.ok(g.laterWindow.scores.exponential>=0&&g.laterWindow.scores.exponential<=1);
+  assert.ok(g.laterWindow.scores.hyperbolic>=0&&g.laterWindow.scores.hyperbolic<=1);
+  assert.equal(audit.modelFitted,false);
+  assert.equal(audit.activePolicyChanged,false);
+  assert.equal(JSON.stringify(db),before);
+});
+
+test('same-time outcomes cannot masquerade as a future evaluation window',()=>{
+  const db=C.initialDb(),course=C.addCourse(db,'Chemistry');
+  for(let i=0;i<50;i++){
+    const req=C.addRequirement(db,{courseId:course.id,kind:'recall',question:`Formula ${i}?`,answer:'H2O.'});
+    const target=C.getTarget(db,req.id),activity=C.getActivities(db,req.id,target.id)[0];
+    C.setExactAnswerKey(db,activity.id,'H2O.',true);
+    C.recordAttempt(db,{requirementId:req.id,targetId:target.id,activityId:activity.id,
+      response:'H2O.',rating:'good',now:at(0)});
+    const now=at(3),receipt=C.previewProspectiveForecast(db,{requirementId:req.id,targetId:target.id,activityId:activity.id,now});
+    C.recordAttempt(db,{requirementId:req.id,targetId:target.id,activityId:activity.id,
+      response:i%2?'Incorrect.':'H2O.',rating:'good',prospectiveForecast:receipt,now});
+  }
+  const g=C.prospectiveEvidenceAudit(db).groups.literalRecall;
+  assert.equal(g.attempts,50);
+  assert.ok(g.scores,'the existing descriptive whole-cohort gate is unchanged');
+  assert.equal(g.laterWindow.earlierAttempts,50);
+  assert.equal(g.laterWindow.laterAttempts,0);
+  assert.equal(g.laterWindow.firstLaterAt,null);
+  assert.equal(g.laterWindow.scores,null);
 });

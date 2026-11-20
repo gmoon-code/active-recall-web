@@ -39,8 +39,15 @@ async function main(){
       return {count:db.attempts.length,memory:JSON.stringify(db.memory),session:db.sessions.at(-1)};
     });
     await page.reload();await page.locator('.navbtn[data-page=study]').click();
+    await page.locator('#study-more-options > summary').click();
     await page.locator('.catchup-preview [data-action=start-due-session]').click();
     await page.locator('h2.question').waitFor();
+    assert.equal(await page.locator('[data-action=skip-question]').isVisible(),true,
+      'Skip remains immediately available without inventing a rating');
+    assert.equal(await page.locator('[data-action=extend-session]').first().isVisible(),false,
+      'Timer extensions start behind the session-tools disclosure');
+    assert.equal(await page.locator('.study-question-why').evaluate(el=>el.open),false,
+      'Technical priority reasons do not compete with the recall prompt');
     const first=await page.locator('h2.question').innerText();
     await page.locator('[data-action=skip-question]').click();
     const next=await page.locator('h2.question').innerText();
@@ -75,6 +82,7 @@ async function main(){
     await page.getByRole('dialog').waitFor();
     await page.locator('[data-action=close-modal]').first().click();
     await page.locator('[data-action=new-session]').click();
+    await page.locator('#study-more-options > summary').click();
     await page.locator('.catchup-preview [data-action=start-due-session]').click();
     await page.locator('h2.question').waitFor();
     assert.equal(await page.locator('h2.question').innerText(),first,'Skipped due question returns next session');
