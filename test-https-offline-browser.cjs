@@ -60,7 +60,7 @@ async function main(){
     await page.waitForFunction(()=>!!navigator.serviceWorker.controller);
     assert.equal(await page.evaluate(()=>navigator.serviceWorker.controller.scriptURL.endsWith('/active-recall-web/sw.js')),true);
     const cacheNames=await page.evaluate(()=>caches.keys());
-    assert.ok(cacheNames.includes('active-recall-web-v4-36'),'The candidate needs a fresh v4.36 offline cache');
+    assert.ok(cacheNames.includes('active-recall-web-v4-37'),'The candidate needs a fresh v4.37 offline cache');
     assert.ok(!cacheNames.includes('active-recall-web-v4-27'),'A retired release cache must not survive activation');
 
     await page.evaluate(async()=>{

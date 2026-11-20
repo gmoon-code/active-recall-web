@@ -29,9 +29,16 @@ async function main(){
     async function inspect(expectedPage,expectedAccent){
       const theme=await page.evaluate(()=>{
         const root=document.querySelector('.app'),heading=document.querySelector('.hero h1, .pagehead h1');
+        const subheading=document.querySelector('.card-title h2, .section-title h2, .qa-list-head h2');
         const css=getComputedStyle(root),body=getComputedStyle(document.body);
         return {accent:css.getPropertyValue('--moon-accent').trim(),name:root.getAttribute('data-moon-accent'),
-          background:body.backgroundColor,font:body.fontFamily,heading:heading?getComputedStyle(heading).backgroundImage:'',
+          background:body.backgroundColor,font:body.fontFamily,
+          headingColor:heading?getComputedStyle(heading).backgroundColor:'',
+          headingImage:heading?getComputedStyle(heading).backgroundImage:'',
+          headingDisplay:heading?getComputedStyle(heading).display:'',
+          headingRects:heading?[...heading.getClientRects()].map(rect=>rect.height):[],
+          headingFontSize:heading?parseFloat(getComputedStyle(heading).fontSize):0,
+          subheadingColor:subheading?getComputedStyle(subheading).backgroundColor:null,
           overflow:document.documentElement.scrollWidth-innerWidth,
           cardRadius:document.querySelector('.card')?getComputedStyle(document.querySelector('.card')).borderTopLeftRadius:null,
           decorativeChrome:document.querySelectorAll('.footer,.topline,.sidefoot').length,
@@ -42,7 +49,13 @@ async function main(){
       assert.equal(theme.accent,expectedAccent);
       assert.equal(theme.background,'rgb(255, 255, 255)');
       assert.match(theme.font,/Times New Roman/);
-      assert.ok(theme.heading.includes('linear-gradient'),'Headings retain highlighter lines');
+      const hex=expectedAccent.slice(1);
+      const expectedRgb=`rgb(${[0,2,4].map(i=>parseInt(hex.slice(i,i+2),16)).join(', ')})`;
+      assert.equal(theme.headingColor,expectedRgb,'Page title has a full-height highlight background');
+      assert.equal(theme.headingImage,'none','Page title has no partial-height stripe');
+      assert.equal(theme.headingDisplay,'inline','Wrapped page titles highlight only their text');
+      assert.ok(theme.headingRects.length>0&&theme.headingRects.every(h=>h>=theme.headingFontSize*.85),'Highlighted line fragments cover the letters');
+      if(theme.subheadingColor)assert.equal(theme.subheadingColor,expectedRgb,'Section titles match the page highlight');
       assert.ok(theme.overflow<=2,`No horizontal overflow (${theme.overflow}px)`);
       if(theme.cardRadius)assert.equal(theme.cardRadius,'4px');
       assert.ok(theme.orbs.every(value=>value==='none'),'Decorative orbs are removed');
@@ -50,7 +63,7 @@ async function main(){
       assert.equal(theme.visibleCaptions,0,'Generic small subtitles do not distract from page titles');
     }
     await inspect('yellow','#f5f566');
-    const colors={questions:['green','#66f566'],courses:['blue','#66f0f0'],forecast:['magenta','#f066f0'],home:['yellow','#f5f566']};
+    const colors={questions:['green','#66f566'],courses:['blue','#66f0f0'],forecast:['magenta','#f066f0'],insights:['magenta','#f066f0'],home:['yellow','#f5f566']};
     const before=await page.evaluate(async()=>{const S=window.ActiveRecallStorage;await S.ready();return JSON.stringify((await S.load())?.db??null);});
     for(const [route,[color,accent]] of Object.entries(colors)){
       await page.locator(`.navbtn[data-page="${route}"]`).click();
@@ -60,6 +73,8 @@ async function main(){
     assert.equal(after,before,'Visual navigation does not write study data');
     await page.locator('.navbtn[data-page=insights]').click();
     assert.equal(await page.locator('.utility-link a[href="./health.html"]').innerText(),'Site diagnostics','Practical diagnostic link remains accessible in Progress');
+    const rhythmHighlight=page.locator('.card-title h2').filter({hasText:'Your recorded study rhythm'});
+    assert.equal(await rhythmHighlight.evaluate(el=>getComputedStyle(el).backgroundColor),'rgb(240, 102, 240)','Recorded study rhythm title has solid magenta highlighting');
     await page.locator('.navbtn[data-page=home]').click();
     for(const width of [390,360]){
       await page.setViewportSize({width,height:800});
@@ -73,7 +88,7 @@ async function main(){
     await page.reload();await page.locator('.navbtn[data-page=home]').waitFor();
     await inspect('yellow','#f5f566');
     assert.deepEqual(errors,[],'No browser errors during theme navigation');
-    process.stdout.write('PASS: Moon typography, uncluttered subtitles, meaningful diagnostics, mobile navigation, persistence, and unchanged study data.\n');
+    process.stdout.write('PASS: full-height Moon highlighters, wrapped headings, uncluttered subtitles, mobile navigation, persistence, and unchanged study data.\n');
   }finally{
     if(browser)await browser.close();
     await new Promise(resolve=>server.close(resolve));

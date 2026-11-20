@@ -36,3 +36,14 @@ test('Each existing app page receives its intentional Moon accent without changi
   assert.match(read('manifest.webmanifest'),/"theme_color"\s*:\s*"#ffffff"/);
   assert.match(read('health.html'),/moon-theme\.css/);
 });
+
+test('highlighted heading backgrounds cover full text height, not a narrow stripe',()=>{
+  const css=read('moon-theme.css'),health=read('health.html');
+  assert.match(css,/\.pagehead h1, \.hero h1,[\s\S]*?background-color: var\(--moon-accent\);/);
+  assert.match(css,/background-image: none;/);
+  assert.match(css,/\.hero h1, \.pagehead h1 \{ display: inline;/);
+  assert.match(css,/box-decoration-break: clone;/);
+  assert.doesNotMatch(css,/transparent 63%|var\(--moon-accent\) 84%/);
+  assert.match(health,/background-color:var\(--moon-magenta\)/);
+  assert.doesNotMatch(health,/linear-gradient\(transparent 63%/);
+});
