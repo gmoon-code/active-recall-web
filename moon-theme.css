@@ -234,6 +234,53 @@ small, .small { font-size: 14px; }
 .footer { border-top: 1px solid var(--moon-rule); margin-top: 33px; color: var(--moon-muted); font-size: 13px; }
 .utility-link { margin-top: 36px; font-size: 14px; text-align: right; }
 .utility-link a { color: var(--moon-muted); text-decoration: underline; text-underline-offset: 2px; }
+/* Blueprint 4.39: a read-only month grid beneath the existing daily agenda. */
+.month-calendar-controls { display: grid; gap: 13px; margin-bottom: 18px; }
+.month-calendar-nav, .month-calendar-jump { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.month-calendar-nav { justify-content: space-between; }
+.month-calendar-nav > strong { font-size: 22px; font-weight: 700; text-align: center; }
+.month-calendar-jump label { font-size: 15px; font-weight: 700; }
+.month-calendar-jump input { width: 185px; min-height: 39px; padding: 7px 9px; }
+.month-calendar-weekdays, .month-calendar-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px; }
+.month-calendar-weekdays { text-align: center; margin-bottom: 7px; color: var(--moon-muted); font-size: 14px; font-weight: 700; }
+.month-calendar-grid { grid-auto-rows: minmax(106px, auto); }
+.month-calendar-day, .month-calendar-outside { min-width: 0; padding: 8px; border: 1px solid var(--moon-rule); border-radius: 3px; }
+.month-calendar-day { display: flex; flex-direction: column; align-items: flex-start; gap: 7px; background: #fff; color: #111; text-align: left; font: inherit; }
+.month-calendar-day:hover { background: #f8f8f8; border-color: var(--moon-rule-dark); }
+.month-calendar-day.is-selected { border: 2px solid #111; padding: 7px; }
+.month-calendar-day.is-today > strong { background: var(--section-magenta); padding: 0 5px; }
+.month-calendar-day > strong { font-size: 17px; line-height: 1.2; }
+.month-calendar-outside { background: #fafafa; color: #aaa; font-size: 14px; }
+.month-calendar-counts { display: grid; gap: 3px; width: 100%; }
+.month-count { display: inline-block; max-width: 100%; padding: 2px 5px; border-left: 3px solid var(--moon-rule-dark); background: #f8f8f8; color: #222; font-size: 12px; line-height: 1.35; overflow-wrap: anywhere; }
+.month-count.known { border-color: var(--section-green); background: var(--section-green-soft); }
+.month-count.conditional { border-color: var(--section-blue); background: var(--section-blue-soft); }
+.month-count.preparation { border-color: var(--section-yellow); background: var(--section-yellow-soft); }
+.month-count.assessment { border-color: var(--section-magenta); background: var(--section-magenta-soft); }
+.month-count.due { border-color: #111; background: #f3f3f3; }
+.month-count.unavailable, .month-count.history { border-color: var(--moon-rule-dark); }
+.month-calendar-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 16px; }
+.month-calendar-detail { border-top: 1px solid var(--moon-rule); margin-top: 18px; padding-top: 18px; }
+.month-calendar-detail h3 { margin-bottom: 8px; font-size: 20px; }
+.month-calendar-detail p { margin-top: 9px; font-size: 14px; }
+.month-detail-list { list-style: none; padding: 0; margin: 12px 0 0; }
+.month-detail-item { display: grid; gap: 3px; padding: 10px 0; border-top: 1px solid var(--moon-rule); overflow-wrap: anywhere; }
+.month-detail-item strong, .month-detail-item span { font-size: 15px; }
+.month-detail-item small { font-size: 13px; color: var(--moon-muted); }
+.month-calendar-note { margin-top: 16px; font-size: 14px; }
+@media (max-width: 700px) {
+  .month-calendar-nav { justify-content: center; }
+  .month-calendar-nav > strong { order: -1; flex-basis: 100%; }
+  .month-calendar-jump input { width: min(160px, 42vw); }
+  .month-calendar-weekdays, .month-calendar-grid { gap: 3px; }
+  .month-calendar-grid { grid-auto-rows: minmax(78px, auto); }
+  .month-calendar-day, .month-calendar-outside { padding: 4px 2px; }
+  .month-calendar-day.is-selected { padding: 3px 1px; }
+  .month-calendar-day > strong { font-size: 15px; padding-left: 3px; }
+  .month-calendar-counts { gap: 2px; }
+  .month-count { padding: 1px 2px; border-left-width: 2px; font-size: 10px; }
+  .month-calendar-weekdays { font-size: 12px; }
+}
 .main :focus-visible, .sidebar :focus-visible, .modal :focus-visible {
   outline: 2px solid #111;
   outline-offset: 3px;

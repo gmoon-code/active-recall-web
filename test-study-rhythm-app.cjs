@@ -5,6 +5,7 @@ const fs=require('node:fs');
 const vm=require('node:vm');
 const C=require('./core.js');
 const Rhythm=require('./study-rhythm.js');
+const Month=require('./month-calendar.js');
 
 test('Overview, Calendar and Progress render schedule-fit and study-history content without a browser',async()=>{
   const db=C.initialDb(),course=C.addCourse(db,'Chemistry');
@@ -26,7 +27,7 @@ test('Overview, Calendar and Progress render schedule-fit and study-history cont
   };
   const quiet={panel:()=>''};
   const store={load:async()=>({db}),save:async()=>{},storageMode:()=> 'indexeddb'};
-  const window={ActiveRecallCore:C,ActiveRecallStudyRhythm:Rhythm,ActiveRecallStorage:store,
+  const window={ActiveRecallCore:C,ActiveRecallStudyRhythm:Rhythm,ActiveRecallMonthCalendar:Month,ActiveRecallStorage:store,
     ActiveRecallDocumentImport:{},ActiveRecallHumanReview:require('./human-review.js'),ActiveRecallPairedReview:require('./paired-review.js'),
     ActiveRecallPairedUI:{...quiet,modal:()=>''},ActiveRecallReviewPackets:{},ActiveRecallReviewPacketUI:quiet,
     ActiveRecallReferenceFirst:{},ActiveRecallReferenceFirstUI:quiet,
@@ -37,7 +38,7 @@ test('Overview, Calendar and Progress render schedule-fit and study-history cont
   vm.runInNewContext(fs.readFileSync('app.js','utf8'),context,{filename:'app.js'});
   await new Promise(resolve=>setImmediate(resolve));
   assert.doesNotMatch(app.innerHTML,/class="topline"|class="footer"|class="sidefoot"/,'Study pages have no repeated decorative chrome');
-  assert.match(fs.readFileSync('index.html','utf8'),/name="app-version" content="4\.38"/);
+  assert.match(fs.readFileSync('index.html','utf8'),/name="app-version" content="4\.39"/);
   assert.ok(inserted.some(html=>html.includes('Schedule fit')),
     'Overview displays a schedule-fit panel');
   const navigate=page=>listeners.click({target:{closest(){return {dataset:{action:'navigate',page}};}}});
