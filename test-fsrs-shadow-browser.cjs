@@ -91,6 +91,7 @@ async function main(){
       window.__shadowTestResolved=false;
       window.ActiveRecallFSRSShadow.forecastProbability=async(...args)=>{
         const result=await original(...args);
+        window.__shadowTestResult=result;
         window.__shadowTestResolved=true;
         return result;
       };
@@ -103,11 +104,14 @@ async function main(){
       const C=window.ActiveRecallCore,S=window.ActiveRecallStorage;
       await S.ready();const {db}=await S.load(),last=db.attempts.at(-1);
       return {receipt:last.fsrsForecast||null,forecast:last.prospectiveForecast||null,
+        attempts:db.attempts.length,lastRating:last.rating,
+        candidate:window.__shadowTestResult||null,
+        toast:document.querySelector('.toast')?.textContent||null,
         due:db.memory[last.retrievalTargetId].dueAt,decision:last.schedulingDecision,
         valid:C.validateImport(JSON.parse(JSON.stringify(db))).schemaVersion};
     });
     assert.equal(persisted.valid,5);
-    assert.ok(persisted.receipt,'Expected a frozen pre-answer FSRS receipt');
+    assert.ok(persisted.receipt,'Expected a frozen pre-answer FSRS receipt: '+JSON.stringify(persisted));
     assert.equal(persisted.receipt.targetId,fixture.targetId);
     assert.equal(persisted.receipt.capturedAt,persisted.forecast.capturedAt);
     assert.equal(persisted.receipt.modelFitted,false);
