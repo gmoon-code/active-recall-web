@@ -118,15 +118,17 @@ small, .small { font-size: 14px; }
 }
 .hero .orb, .hero .orb2 { display: none; }
 .hero p { color: var(--moon-muted); font-size: 16px; max-width: 640px; }
-.hero h1 { width: fit-content; max-width: 720px; }
-.pagehead h1, .card > h3 { width: fit-content; max-width: 100%; }
+.hero h1, .pagehead h1 { display: inline; width: auto; max-width: none; }
+.card > h3 { width: fit-content; max-width: 100%; }
 .pagehead h1, .hero h1,
 .section-title h2, .card-title h2, .card > h3, .qa-list-head h2 {
-  background-image: linear-gradient(to bottom,
-    transparent 63%, var(--moon-accent) 63%, var(--moon-accent) 84%, transparent 84%);
+  background-color: var(--moon-accent);
+  background-image: none;
   box-decoration-break: clone;
   -webkit-box-decoration-break: clone;
 }
+.section-title h2, .card-title h2, .qa-list-head h2 { line-height: 1.25; }
+.card > h3 { line-height: 1.3; }
 .pagehead p { color: var(--moon-muted); }
 .section { margin-top: 33px; }
 .grid { gap: 18px; }

@@ -1,4 +1,8 @@
-# Active Recall Web — Free Edition v4.36
+# Active Recall Web — Free Edition v4.37
+
+## Blueprint 4.37 — Full-height Moon highlighters
+
+The headings now use actual full-height highlight backgrounds instead of narrow midline stripes. Major page titles highlight just the text, with line-by-line background fragments when they wrap on a phone; card and section headings use the same solid fill in their existing section colour (yellow, green, turquoise or magenta). The Site diagnostics heading now follows this rule too. The typography, white page, muted borders, navigation and earlier subtitle cleanup remain unchanged. No studies, questions, attempts, schedule dates, schema-v5 backups, or browser storage need migration. [Release and rollback checklist](docs/RELEASE_4_37_ROLLOUT.md).
 
 ## Blueprint 4.36 — Remove repetitive subtitles and website chrome
 
