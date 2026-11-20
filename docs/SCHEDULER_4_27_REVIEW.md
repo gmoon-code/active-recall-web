@@ -37,6 +37,8 @@ The research supports active retrieval and distributed practice in general, but 
 
 ## Verification and release gate
 
+The release candidate includes a distinct `active-recall-web-v4-27` service-worker cache and matching diagnostics. The full reversible rollout and real-origin validation steps are recorded in [RELEASE_4_27_ROLLOUT.md](RELEASE_4_27_ROLLOUT.md); this is preparation, not publication.
+
 - New deterministic cases cover constrained-known-review precedence, exam workload distributed across dates, unavailable dates, scope isolation, due-on-exam-day handling, unchanged saved memory, and the absence of post-exam fictitious obligations.
 - Full non-browser suite passed: **425 tests** on 20 November 2026, including FSRS-7 shadow replay, partial-hybrid calendar comparisons, capacity and chronology gates, exclusion of future evidence from past-date previews, a schema-v5 JSON backup round-trip, one-click start/resume without inventing recall evidence, and a simulated storage rejection that leaves the original notebook active during a failed Import. Eight deployment preflights also passed, including offline asset completeness.
 - The managed Chrome preview passed a desktop workflow with a real sample written attempt, read-only FSRS comparison, saved dates intact after browser reload, and separate diagnostic storage-reload checks. A 390px/320px frame viewport check found and repaired mobile navigation and horizontal overflow; the preview then had no horizontal document overflow at either width.
