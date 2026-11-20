@@ -47,12 +47,12 @@ async function main(){
     }
     await inspect('yellow','#f5f566');
     const colors={questions:['green','#66f566'],courses:['blue','#66f0f0'],forecast:['magenta','#f066f0'],home:['yellow','#f5f566']};
-    const before=await page.evaluate(async()=>{const S=window.ActiveRecallStorage;await S.ready();return JSON.stringify((await S.load()).db);});
+    const before=await page.evaluate(async()=>{const S=window.ActiveRecallStorage;await S.ready();return JSON.stringify((await S.load())?.db??null);});
     for(const [route,[color,accent]] of Object.entries(colors)){
       await page.locator(`.navbtn[data-page="${route}"]`).click();
       await inspect(color,accent);
     }
-    const after=await page.evaluate(async()=>{const S=window.ActiveRecallStorage;await S.ready();return JSON.stringify((await S.load()).db);});
+    const after=await page.evaluate(async()=>{const S=window.ActiveRecallStorage;await S.ready();return JSON.stringify((await S.load())?.db??null);});
     assert.equal(after,before,'Visual navigation does not write study data');
     for(const width of [390,360]){
       await page.setViewportSize({width,height:800});
