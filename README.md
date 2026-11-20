@@ -1,4 +1,10 @@
-# Active Recall Web — Free Edition v4.34
+# Active Recall Web — Free Edition v4.35
+
+## Blueprint 4.35 — Moon editorial design
+
+The study app now follows Grace Moon’s existing personal website design: white paper, near-black Times New Roman text, generous white space, slim grey borders, four-pixel corners, and short highlighter bands. Navigation and page headings use the familiar section order **yellow → green → turquoise → magenta** with exactly the same softened fluorescent swatches as the personal site. The familiar app navigation and studying controls remain in place, with clearer mobile navigation, visible keyboard focus, and no decorative orbs or external font downloads. The separate `moon-theme.css` file overrides base styling, so reverting the appearance does not require editing study logic. Both PNG home-screen icons and the SVG favicon match the new theme, and the new CSS is included in the versioned offline cache.
+
+**This is appearance-only.** Existing courses, questions, attempts, study history, real due times, scheduler policies, schema-v5 JSON backups, and local-first free use are unchanged. Existing notes are not reorganized or recolored in storage. [Release and rollback checklist](docs/RELEASE_4_35_ROLLOUT.md).
 
 ## Blueprint 4.34 — Clear local data only after the browser actually saves
 
