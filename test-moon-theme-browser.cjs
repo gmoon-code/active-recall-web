@@ -65,6 +65,26 @@ async function main(){
     await inspect('yellow','#f5f566');
     assert.equal((await page.locator('.brand .mark').innerText()).trim(),'[ar]');
     assert.equal(await page.locator('.brand .mark').evaluate(el=>getComputedStyle(el).backgroundColor),'rgba(0, 0, 0, 0)','The [ar] wordmark has no filled square');
+    async function faviconPixels(colorScheme){
+      await page.emulateMedia({colorScheme});
+      return page.evaluate(async scheme=>{
+        const icon=new Image();
+        icon.src=`./favicon.svg?v=4-41&browser-test=${scheme}`;
+        await icon.decode();
+        const canvas=document.createElement('canvas');canvas.width=64;canvas.height=64;
+        const ctx=canvas.getContext('2d');ctx.drawImage(icon,0,0,64,64);
+        return Array.from(ctx.getImageData(0,0,64,64).data);
+      },colorScheme);
+    }
+    const lightIcon=await faviconPixels('light'),darkIcon=await faviconPixels('dark');
+    assert.equal(lightIcon[3],0,'Light-theme favicon has transparent corners');
+    assert.equal(darkIcon[3],0,'Dark-theme favicon has transparent corners');
+    let switchedPixels=0;
+    for(let i=0;i<lightIcon.length;i+=4){
+      if(lightIcon[i+3]>240&&darkIcon[i+3]>240&&lightIcon[i]<75&&darkIcon[i]>180)switchedPixels++;
+    }
+    assert.ok(switchedPixels>30,'Browser actually switches favicon ink from dark to light with the system theme');
+    await page.emulateMedia({colorScheme:'light'});
     assert.equal((await page.locator('.hero h1').innerText()).trim(),'Active recall');
     const colors={questions:['green','#66f566','Questions and answers'],courses:['blue','#66f0f0','Courses and materials'],forecast:['magenta','#f066f0','Study calendar'],insights:['magenta','#f066f0','Progress'],home:['yellow','#f5f566','Active recall']};
     const before=await page.evaluate(async()=>{const S=window.ActiveRecallStorage;await S.ready();return JSON.stringify((await S.load())?.db??null);});

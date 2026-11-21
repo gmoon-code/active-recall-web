@@ -24,6 +24,6 @@ test('study guidance, privacy and loss-prevention warnings remain explicit',()=>
     'Rate what you could recall independently.','RECALL FOCUS ·','Question held for correction']){
     assert.ok(app.includes(phrase),`Required functional text disappeared: ${phrase}`);
   }
-  assert.match(read('index.html'),/name="app-version" content="4\.40"/);
-  assert.match(read('sw.js'),/active-recall-web-v4-40/);
+  assert.match(read('index.html'),/name="app-version" content="4\.41"/);
+  assert.match(read('sw.js'),/active-recall-web-v4-41/);
 });

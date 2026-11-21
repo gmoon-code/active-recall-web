@@ -1,5 +1,11 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Active recall">
   <title>Active recall</title>
-  <rect width="64" height="64" fill="#ffffff"/>
-  <text x="32" y="41" text-anchor="middle" font-family="Times New Roman, Times, serif" font-size="27" font-weight="700" letter-spacing="-1" fill="#111111">[ar]</text>
+  <style>
+    /* No tile: the tab or desktop supplies its own background. */
+    text { fill: #111111; stroke: #ffffff; stroke-width: 2.5; stroke-linejoin: round; paint-order: stroke fill; }
+    @media (prefers-color-scheme: dark) {
+      text { fill: #ffffff; stroke: #111111; }
+    }
+  </style>
+  <text x="32" y="41" text-anchor="middle" font-family="Times New Roman, Times, serif" font-size="27" font-weight="700" letter-spacing="-1">[ar]</text>
 </svg>
