@@ -63,6 +63,10 @@ async function main(){
       assert.equal(theme.visibleCaptions,0,'Generic small subtitles do not distract from page titles');
     }
     await inspect('yellow','#f5f566');
+    assert.equal(await page.locator('.empty > p').count(),0,'First-course empty state has no redundant explanatory subtitle');
+    await page.locator('.navbtn[data-page=study]').click();
+    assert.equal(await page.locator('.sessionpanel > .card > p.small.muted').count(),0,'Study setup has no marketing-style explainer after the Start button');
+    await page.locator('.navbtn[data-page=home]').click();
     assert.equal((await page.locator('.brand .mark').innerText()).trim(),'[ar]');
     assert.equal(await page.locator('.brand .mark').evaluate(el=>getComputedStyle(el).backgroundColor),'rgba(0, 0, 0, 0)','The [ar] wordmark has no filled square');
     async function faviconPixels(colorScheme){

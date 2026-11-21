@@ -48,7 +48,8 @@ async function main(){
     const copy=await panel.innerText();
     assert.match(copy,/Due reviews/);
     assert.equal(await panel.locator('.metric').first().innerText(),'2');
-    assert.match(copy,/without new questions or early maintenance/);
+    assert.match(copy,/Optional · review-only session/,'Due-only mode stays clearly labelled without a redundant introduction');
+    assert.doesNotMatch(copy,/Use this when you want to work through/,'The repeated explanatory subtitle is removed');
     assert.match(copy,/never-attempted question/);
     await page.setViewportSize({width:390,height:844});
     const box=await panel.boundingBox();
