@@ -185,6 +185,7 @@ small, .small { font-size: 14px; }
 }
 .note strong { color: #111; }
 .empty { border-style: dashed; }
+.empty h2 + .btn { margin-top: 16px; }
 .hintbox { background: var(--section-yellow-soft); border-left-color: var(--section-yellow-line); }
 .answerbox { background: var(--moon-accent-soft); border-left-color: var(--moon-accent-line); }
 .input, .textarea, .select {

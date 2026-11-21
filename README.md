@@ -1,4 +1,8 @@
-# Active Recall Web — Free Edition v4.41
+# Active Recall Web — Free Edition v4.42
+
+## Blueprint 4.42 — Fewer introductory subtitles
+
+Overview, first-course empty states, Study Now setup, and several planning cards no longer repeat generic explanations under their headings. The user-visible welcome and study-session sentences were removed, as were redundant descriptions beside the session timer, optional due-review tools, priority comparison, schedule simulation and the daily plan. Empty states with a clear action can now show the heading and button without a filler paragraph. Important functional details remain: Q&A paste formatting rules, source-verification cautions, actual pending retries, evidence limitations, calendar distinctions, dangerous deletion warnings and local JSON backup guidance. The Moon design stays plain and readable, and all study data, scheduling logic, storage, and free offline operation are unchanged. [Release and rollback checklist](docs/RELEASE_4_42_ROLLOUT.md).
 
 ## Blueprint 4.41 — Transparent, adaptive [ar] tab icon
 
