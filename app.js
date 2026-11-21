@@ -16,6 +16,7 @@
   let guidedGoalId=null, guidedStep='source', guidedAnswer='', guidedRevealed=false, guidedStartedAt=0;
   let outlookSettings={days:21,weekdayMinutes:25,weekendMinutes:60,missedDates:[]};
   let calendarMonth=null,calendarSelectedDate=null;
+  let progressResearchOpen=false;
   const STALE_STORAGE_MESSAGE='Another tab saved a newer notebook. Changes made in this tab have not been saved. Export this tab’s JSON backup from Progress if you need to preserve them, then reload to view the newer notebook. Do not import that backup over newer work without reconciling the differences.';
   const $=s=>document.querySelector(s);
   const esc=v=>String(v??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
@@ -141,16 +142,14 @@
     const rows=h.rows.map(r=>{
       const label=r.status==='no_plan_record'?'No dated plan record':r.status==='planned_rest'?'Planned unavailable / rest day':r.status==='practice_recorded'?'Practice recorded':'No practice recorded in this app';
       const attempts=`${r.attempts} attempt${r.attempts===1?'':'s'}`;
-      const detail=r.plan?`${r.plan.availabilityMinutes} min declared · ${r.plannedTargets} question(s) assigned when ${r.revised?'the plan was revised':'the app first opened'}${r.attempts?' · '+r.matchedPlanTargets+' assigned question(s) attempted':''}`:
-        'No saved plan snapshot; earlier activity cannot be judged against a reconstructed plan.';
-      return `<div class="rhythm-history-day"><div><strong>${esc(fmtDate(r.date))}</strong><span class="pill ${r.status==='practice_recorded'?'good':r.status==='planned_rest'?'blue':''}">${esc(label)}</span></div><p class="small muted">${esc(detail)}</p><span class="small">${attempts} · ${r.timedAttempts?approxMinutes(r.timedSeconds)+' min of timed question attempts':'No usable question-level timing'}</span><span class="small">${r.outsideMinutes} min self-reported outside study${!r.plan&&r.outsideLogs.length?' · activity known; planned availability unknown':''}</span>${r.outsideLogs.map(l=>`<div class="outside-log"><span>${esc(({reading:'Reading / notes',questions:'Questions elsewhere',class:'Class / tutoring',other:'Other'})[l.kind])} · ${l.minutes} min${l.note?' · '+esc(l.note):''}</span><button type="button" class="btn danger small" data-action="delete-outside-study" data-id="${esc(l.id)}" aria-label="Delete outside-study record">Delete</button></div>`).join('')}</div>`;
+      return `<div class="rhythm-history-day"><div><strong>${esc(fmtDate(r.date))}</strong><span class="pill ${r.status==='practice_recorded'?'good':r.status==='planned_rest'?'blue':''}">${esc(label)}</span></div>${r.plan?`<span class="small muted">${r.plan.availabilityMinutes} min available · ${r.plannedTargets} planned question(s)${r.revised?' · revised':''}</span>`:''}<span class="small">${attempts}${r.timedAttempts?' · '+approxMinutes(r.timedSeconds)+' min recorded question time':''}</span><span class="small">${r.outsideMinutes} min outside study logged${!r.plan&&r.outsideLogs.length?' · plan unavailable':''}</span>${r.outsideLogs.map(l=>`<div class="outside-log"><span>${esc(({reading:'Reading / notes',questions:'Questions elsewhere',class:'Class / tutoring',other:'Other'})[l.kind])} · ${l.minutes} min${l.note?' · '+esc(l.note):''}</span><button type="button" class="btn danger small" data-action="delete-outside-study" data-id="${esc(l.id)}" aria-label="Delete outside-study record">Delete</button></div>`).join('')}</div>`;
     }).join('');
-    return `<section class="section"><div class="card"><div class="card-title"><h2>Study history (last 7 days)</h2><span class="pill blue">Local plan snapshots</span></div>
-      <p class="small muted">${hasPlans?`${h.daysWithAnyRecord} of ${h.observedStudyDays} observed available study days have an app attempt or outside-study record. This is not a perfect-streak score; it excludes unobserved days and planned rest.`:'Historical adherence cannot yet be estimated. New dated snapshots begin when you open the app with active learning material.'}</p>
-      <div class="note rhythm-advice"><strong>Schedule-fit reflection:</strong> ${esc(counsel)}<p class="small muted">Outside-study minutes and timed question attempts are shown separately because they can overlap. Neither proves attention, recall or mastery; no review dates are changed.</p></div>
-      <form data-form="outside-study" class="formgrid outside-study-form"><div class="field"><label for="outside-date">Study date</label><input class="input" id="outside-date" type="date" name="date" min="${Rh.localDate(new Date(Date.now()-30*86400000))}" max="${Rh.localDate(new Date())}" value="${Rh.localDate(new Date())}" required/></div><div class="field"><label for="outside-minutes">Minutes actually studied</label><input class="input" id="outside-minutes" type="number" name="minutes" min="1" max="720" step="1" required placeholder="e.g. 30"/></div><div class="field"><label for="outside-kind">Activity outside this app</label><select class="select" id="outside-kind" name="kind"><option value="reading">Reading / lecture notes</option><option value="questions">Practice questions elsewhere</option><option value="class">Class / tutoring</option><option value="other">Other studying</option></select></div><div class="field"><label for="outside-note">Short note (optional)</label><input class="input" id="outside-note" name="note" maxlength="240" placeholder="e.g. Enzyme lecture"/></div><div class="wide"><button type="submit" class="btn primary">Log outside study</button><p class="small muted">Self-reported, editable by deletion and re-entry. Logging does not complete scheduled reviews, record correct answers, or postpone a due question.</p></div></form>
-      <div class="rhythm-history">${rows}</div><p class="info" style="margin-top:14px">${esc(h.warning)} A blank day does not establish that you failed to study. Attempts can also be from elsewhere in the app, not necessarily the snapshot's planned tasks.</p>
-      <div class="btnrow" style="margin-top:12px"><button class="btn secondary small" data-action="navigate" data-page="forecast">Inspect next week's workload ↗</button></div>
+    return `<section class="section progress-history"><div class="card"><div class="card-title"><div class="title-with-help"><h2>Study history (last 7 days)</h2>${helpTip('About study history','Days without app records are not automatically missed study. Saved plan snapshots reflect what the app recorded that day, not a promise from an earlier day. Timed attempts and outside-study logs can overlap; neither proves mastery.')}</div></div>
+      <p class="progress-history-status">${hasPlans?`Study recorded on ${h.daysWithAnyRecord} of ${h.observedStudyDays} observed available days.`:'No dated study history yet.'}</p>
+      <div class="note rhythm-advice"><strong>Schedule check:</strong> ${esc(counsel)}</div>
+      <div class="progress-log-heading title-with-help"><h3>Log study outside the app</h3>${helpTip('About outside-study logs','These are self-reported minutes. You can delete and re-enter a log, but logging never completes a due review, records a correct answer, or moves its due date.')}</div>
+      <form data-form="outside-study" class="formgrid outside-study-form"><div class="field"><label for="outside-date">Study date</label><input class="input" id="outside-date" type="date" name="date" min="${Rh.localDate(new Date(Date.now()-30*86400000))}" max="${Rh.localDate(new Date())}" value="${Rh.localDate(new Date())}" required/></div><div class="field"><label for="outside-minutes">Minutes actually studied</label><input class="input" id="outside-minutes" type="number" name="minutes" min="1" max="720" step="1" required placeholder="e.g. 30"/></div><div class="field"><label for="outside-kind">Activity outside this app</label><select class="select" id="outside-kind" name="kind"><option value="reading">Reading / lecture notes</option><option value="questions">Practice questions elsewhere</option><option value="class">Class / tutoring</option><option value="other">Other studying</option></select></div><div class="field"><label for="outside-note">Short note (optional)</label><input class="input" id="outside-note" name="note" maxlength="240" placeholder="e.g. Enzyme lecture"/></div><div class="wide"><button type="submit" class="btn primary">Log outside study</button></div></form>
+      <div class="rhythm-history">${rows}</div>
     </div></section>`;
   }
   function durationPicker(){return `<div class="chips" role="group" aria-label="Study session duration">${[5,15,25,45,60,120].map(n=>`<button class="chip ${duration===n?'selected':''}" data-action="duration" data-minutes="${n}">${n<60?n+'m':n/60+'h'}</button>`).join('')}<label class="sr-only" for="custom-duration">Custom minutes</label><input id="custom-duration" class="input" style="width:110px;padding:7px 10px;min-height:35px" type="number" min="5" max="720" value="${duration}" aria-label="Custom session duration in minutes"/></div>`;}
@@ -714,6 +713,54 @@ A">${esc((a.exactAnswerKey?.answers||[]).join('\n'))}</textarea><label class="ch
   function insights(){const s=C.stats(db),attempts=db.attempts.slice().reverse().slice(0,12),evidence=C.evidenceSummary(db),rubric=C.rubricProgress(db);
     return `<div class="pagehead"><div><div class="eyebrow">Learning evidence</div><h1>Progress</h1><p>Review attempts and upcoming work. This prototype shows self-rated attempts and assessment coverage, not calibrated mastery or exam-score predictions.</p></div></div><div class="grid cols3">${metric('Recall targets',s.targets,'Across all requirements')}${metric('Attempted',s.practiced,'Targets with review history')}${metric('Due / new',s.due,'Eligible for practice')}</div><section class="section"><div class="card"><div class="card-title"><h2>Practice records</h2><span class="pill blue">Learner self-report</span></div><div class="grid cols3">${metric('Self-rated Good / Easy',evidence.independentSelfReport,'Unassisted by hint; not verified grading')}${metric('With hints',evidence.assisted,'Supported practice, not independent recall')}${metric('Immediate post-study',evidence.immediatePostStudy,'Retrieval after source study, not delayed retention')}${metric('Needs practice',evidence.needsPractice,'Includes reported criterion gaps')}</div><p class="info" style="margin-top:15px">Recorded responses: ${evidence.written} written · ${evidence.oral} spoken (self-report) · ${evidence.mental} mentally recalled or unrecorded. These counts are attempts, not unique topics. Only explicitly configured short factual questions have strict literal checks; complex answers remain self-assessed.</p><p class="muted small">Timing samples: ${evidence.withTiming} attempts with plausible active-task durations. Estimated times are personal planning aids, not claims about learning performance.</p></div></section>${TrainingUI.panel({db,esc})}${UsabilityUI.panel({db,esc})}${PilotUI.panel({db,esc,courseName})}${FU.panel({db,esc,courseName})}${RU.panel({db,esc,courseName})}${PU.panel({db,esc,courseName})}${humanReviewPanel()}${delayedEvidencePanel()}${literalEvidencePanel()}${policyEvidencePanel()}<section class="section"><div class="card"><div class="card-title"><h2>Explanation checklist evidence</h2><span class="pill blue">Self-check · not grading</span></div><div class="grid cols4">${metric('Rubric points',rubric.total,'Active, verified criteria')}${metric('Included',rubric.met,'Latest applicable self-check')}${metric('Missed / unsure',rubric.missed+rubric.unsure,'Self-reported explanation gaps')}${metric('Not yet checked',rubric.unassessed,'Missing criterion-level evidence')}</div>${rubric.pendingReview?`<p class="info warningtext" style="margin-top:12px">${rubric.pendingReview} criterion(s) await review after an edit.</p>`:''}<p class="info" style="margin-top:12px">Each point reflects your latest applicable self-check, not an AI score, evidence of delayed retention, or exam readiness. Revisions preserve older attempts without treating them as current proof.</p></div></section><section class="section grid cols2"><div class="card"><div class="card-title"><h2>Course coverage</h2></div>${db.courses.length?db.courses.map(c=>{const reqs=db.requirements.filter(r=>r.courseId===c.id&&r.active);const targets=reqs.flatMap(r=>C.getTargets(db,r.id,{includePending:true}));const n=targets.filter(t=>!!db.memory[t.id]).length;return `<div style="margin-bottom:17px"><div style="display:flex;justify-content:space-between;margin-bottom:7px"><strong>${esc(c.name)}</strong><span class="small muted">${n}/${targets.length} recall targets attempted</span></div><div class="progress"><span style="width:${targets.length?Math.round(100*n/targets.length):0}%"></span></div></div>`;}).join(''):'<p class="muted">Create courses to see coverage.</p>'}<p class="info">Attempt coverage is not a mastery score.</p></div><div class="card"><div class="card-title"><h2>Recent recall attempts</h2></div>${attempts.length?attempts.map(a=>`<div class="listrow"><span class="roundicon">${courseName(a.courseId)[0]}</span><div class="rowbody"><strong>${esc(a.questionSnapshot||reqById(a.requirementId)?.question||'Historical question')}</strong><small>${esc(courseName(a.courseId))} · ${new Date(a.createdAt).toLocaleDateString()}${a.assisted?' · With hint':''}${a.practiceStage==='immediate_post_study'?' · Immediate after learning':''}${(a.criterionChecks||[]).some(c=>c.status!=='met')?' · Explanation gap':''}</small>${a.correctionNote?`<p class="small muted"><strong>Your corrective note:</strong> ${esc(a.correctionNote)}</p>`:''}${(a.criterionChecks||[]).filter(c=>c.status==='missed'||c.status==='unsure').map(c=>`<p class="small warningtext">${c.status==='missed'?'Missed':'Unsure'}: ${esc(c.textSnapshot)}</p>`).join('')}</div><span class="pill ${rClass(a.scheduleRating||a.rating)}">${rateLabel(a.rating)}${a.scheduleRating&&a.scheduleRating!==a.rating?' · gap':''}</span></div>`).join(''):'<p class="muted">No recall attempts yet.</p>'}</div></section><section class="section"><div class="card"><div class="card-title"><h2>Data and privacy controls</h2></div><div class="note" style="margin-bottom:18px"><strong>Local-only storage — no accounts, billing, or server</strong><br>This free app stores your notes on your device using IndexedDB when supported (with a localStorage fallback). GitHub Pages hosts only the public application code; your private notes are not uploaded. Browser cleanup, device changes, and private browsing may remove local data. Export regular JSON backups, and do not enter sensitive personal or student information into this unencrypted prototype. <strong>No automatic cross-device sync.</strong><br><br><strong>Storage status:</strong> <span id="storage-status">${esc(Store.storageMode())}</span></div><div class="btnrow"><button class="btn secondary" data-action="export">↓ Export JSON backup</button><label class="btn secondary" for="import-file" style="cursor:pointer">↑ Import backup</label><input class="sr-only" type="file" id="import-file" accept=".json,application/json"/><button class="btn secondary" data-action="persist-storage">Request more durable storage</button><button class="btn danger" data-action="reset">Clear local data</button></div></div></section>`;
   }
+  function arrangeProgressPage(){
+    const main=$('#app .main');if(!main)return;
+    const pagehead=main.querySelector('.pagehead');pagehead?.querySelector('p')?.remove();
+    const sections=[...main.querySelectorAll(':scope > section.section')];
+    const byHeading=title=>sections.find(section=>[...section.querySelectorAll('.card-title h2')].some(h=>h.textContent===title));
+    const practice=byHeading('Practice records'),checklist=byHeading('Explanation checklist evidence');
+    const course=byHeading('Course coverage'),backup=byHeading('Data and privacy controls');
+    if(!practice||!checklist||!course||!backup)return;
+    const addHelp=(card,title,message)=>{
+      const heading=[...card.querySelectorAll('.card-title h2')].find(h=>h.textContent===title);
+      if(!heading)return;
+      heading.closest('.card-title')?.querySelector('.pill')?.remove();
+      const wrapper=document.createElement('div');wrapper.className='title-with-help';
+      heading.replaceWith(wrapper);wrapper.appendChild(heading);
+      wrapper.insertAdjacentHTML('beforeend',helpTip('About '+title.toLowerCase(),message));
+    };
+    addHelp(practice.querySelector('.card'),'Practice records','These numbers reflect your own ratings, not verified correctness, mastery or exam performance. Question timings are estimates for planning, not evidence of learning.');
+    const practiceCard=practice.querySelector('.card'),evidence=C.evidenceSummary(db);
+    const modes=document.createElement('div');modes.className='progress-response-types';
+    modes.innerHTML=`<span>${evidence.written} written</span><span>${evidence.oral} spoken</span><span>${evidence.mental} unrecorded recall</span>`;
+    practiceCard.querySelector('.grid')?.insertAdjacentElement('afterend',modes);
+    practiceCard.querySelectorAll(':scope > p.info, :scope > p.muted.small').forEach(el=>el.remove());
+    addHelp(checklist.querySelector('.card'),'Explanation checklist evidence','These are your latest applicable self-checks, not grades. Edited criteria can require fresh review; earlier attempts remain in history.');
+    checklist.querySelectorAll('.card > p.info:not(.warningtext)').forEach(el=>el.remove());
+    const courseCard=[...course.querySelectorAll('.card')].find(card=>card.querySelector('.card-title h2')?.textContent==='Course coverage');
+    if(courseCard){
+      courseCard.querySelectorAll(':scope > p.info').forEach(el=>el.remove());
+    }
+    const researchNodes=[];
+    for(let node=practice.nextElementSibling;node&&node!==checklist;){
+      const next=node.nextElementSibling;researchNodes.push(node);node=next;
+    }
+    const research=document.createElement('section');research.className='section progress-advanced';
+    research.innerHTML=`<details id="progress-research" ${progressResearchOpen?'open':''}><summary data-action="toggle-progress-research"><strong>Research and reviewer tools</strong></summary><div class="progress-advanced-body"></div></details>`;
+    const body=research.querySelector('.progress-advanced-body');
+    researchNodes.forEach((node,index)=>{
+      if(index===0||node.querySelector('.card-title h2')?.textContent==='Delayed retrieval evidence audit'){
+        const label=document.createElement('h3');label.className='progress-group-heading';
+        label.textContent=index===0?'Reviewer workflows':'Memory evidence checks';body.appendChild(label);
+      }
+      body.appendChild(node);
+    });
+    main.insertBefore(checklist,course);
+    main.insertBefore(course,backup);
+    const history=main.querySelector(':scope > section.progress-history');
+    if(history)main.insertBefore(history,backup);
+    main.insertBefore(research,main.querySelector('.utility-link'));
+  }
   function monthCalendar(report,prefs){
     const month=calendarMonth||Month.monthOf(new Date());
     const model=Month.build(db,C,report,{month,prefs});
@@ -877,9 +924,10 @@ A">${esc((a.exactAnswerKey?.answers||[]).join('\n'))}</textarea><label class="ch
       if(se?.queueMode==='due_only'&&se.status==='active')$('#app .pagehead')?.insertAdjacentHTML('afterend',
         '<div class="note" style="margin:10px 0 18px"><strong>Due Reviews Only is active.</strong> New and not-yet-due questions are excluded from this session. Your ordinary interval rules, course balancing and feedback workflow are unchanged.</div>');
     }
-    // Keep the existing Progress and Overview structure while surfacing the
-    // new panel immediately after each page's introduction.
-    if(page==='insights')$('#app .pagehead')?.insertAdjacentHTML('afterend',rhythmHistoryPanel());
+    if(page==='insights'){
+      $('#app .pagehead')?.insertAdjacentHTML('afterend',rhythmHistoryPanel());
+      arrangeProgressPage();
+    }
     if(page==='home'&&db.courses.length)$('#app .hero')?.insertAdjacentHTML('afterend',scheduleFitPanel({compact:true}));
   }
   function captureFsrsBeforeAnswer(se){
@@ -979,6 +1027,7 @@ A">${esc((a.exactAnswerKey?.answers||[]).join('\n'))}</textarea><label class="ch
     }
     case 'delete-outside-study':if(confirm('Delete this self-reported outside-study entry?'))transact(()=>{Rh.deleteOutsideStudy(db,btn.dataset.id);notify('Outside-study entry removed.');});break;
     case 'navigate':page=btn.dataset.page;modalReqId=null;modalReviewId=null;modalPairId=null;studioSourceId=null;editingQuestionId=null;if(page!=='questions'){pendingQuestionImport=null;selectingQuestions=false;selectedQuestionIds.clear();}render();break;
+    case 'toggle-progress-research':progressResearchOpen=!progressResearchOpen;render();$('#progress-research > summary')?.focus();break;
     case 'navigate-courses':page='courses';render();break;
     case 'navigate-capture':page='capture';render();break;
     case 'discard-document':pendingDocument=null;render();break;
@@ -1254,7 +1303,7 @@ A">${esc((a.exactAnswerKey?.answers||[]).join('\n'))}</textarea><label class="ch
   // is in flight; no later draft save may overtake the queued empty snapshot.
   document.addEventListener('input',e=>{if(clearBusy)e.stopImmediatePropagation();},true);
   document.addEventListener('change',e=>{if(clearBusy){e.preventDefault();e.stopImmediatePropagation();notify('Finishing the local data clear. Please wait.',true);}},true);
-  document.addEventListener('click',e=>{const b=e.target.closest('[data-action]');if(!b)return;handleAction(b);});
+  document.addEventListener('click',e=>{const b=e.target.closest('[data-action]');if(!b)return;if(b.dataset.action==='toggle-progress-research')e.preventDefault();handleAction(b);});
   document.addEventListener('submit',e=>{if(!e.target.matches('form[data-form]'))return;e.preventDefault();handleForm(e.target);});
   document.addEventListener('change',e=>{if(e.target.matches('input[data-question-select]')){if(e.target.checked)selectedQuestionIds.add(e.target.dataset.questionSelect);else selectedQuestionIds.delete(e.target.dataset.questionSelect);render();return;}if(e.target.id==='qa-course'){selectedQuestionIds.clear();selectingQuestions=false;focusedCourse=e.target.value;focusedLecture='';editingQuestionId=null;lastWrittenLecture='';lastWrittenSourceId='';pendingQuestionImport=null;render();return;}if(e.target.id==='qa-filter'){selectedQuestionIds.clear();selectingQuestions=false;focusedLecture=e.target.value;editingQuestionId=null;pendingQuestionImport=null;render();return;}if(e.target.id==='qa-source'){const title=$('#qa-lecture-title');if(title)title.disabled=!!e.target.value;if(pendingQuestionImport){pendingQuestionImport=null;$('.qa-import-preview')?.remove();}return;}if(e.target.matches('input[data-criterion-id]')){const se=activeSession();if(se&&se.status==='active'){se.criterionDraft=se.criterionDraft||{};se.criterionDraft[e.target.dataset.criterionId]=e.target.value;save();}}if(e.target.matches('#assessment-scope,#assessment-course'))assessmentSelection();if(e.target.matches('#import-file')){
     const file=e.target.files?.[0];if(!file)return;const reader=new FileReader();reader.onload=async()=>{let committed=false;try{

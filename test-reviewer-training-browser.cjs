@@ -4,6 +4,7 @@
 'use strict';
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),http=require('node:http');
 const {chromium}=require('playwright');
+const {showResearchPanels}=require('./browser-progress-helper.cjs');
 const mime={'.html':'text/html','.js':'text/javascript','.css':'text/css','.svg':'image/svg+xml','.webmanifest':'application/manifest+json','.png':'image/png'};
 async function main(){
  const root=process.cwd(),server=http.createServer((req,res)=>{
@@ -22,7 +23,7 @@ async function main(){
    owner.on('pageerror',e=>errors.push('owner: '+e.message));
    await owner.goto('http://127.0.0.1:'+server.address().port+'/');
    await owner.locator('[data-action=demo]').waitFor();
-   await owner.locator('[data-page=insights]').click();
+   await owner.locator('[data-page=insights]').click();await showResearchPanels(owner);
    await owner.locator('form[data-form=start-reviewer-training] input[name=confirmed]').check();
    await owner.locator('form[data-form=start-reviewer-training] button[type=submit]').click();
    await owner.locator('[data-action=export-reviewer-training-request]').waitFor();
@@ -134,7 +135,7 @@ async function main(){
    });
    assert.equal(timing.pilot,true);assert.equal(timing.startedAfterPilot,false);
    assert.equal(timing.importedAfterPilot,false);assert.equal(timing.memoryEntries,0);
-   await owner.reload();await owner.locator('[data-page=insights]').click();
+   await owner.reload();await owner.locator('[data-page=insights]').click();await showResearchPanels(owner);
    assert.equal(await owner.locator('#reviewer-training-import').count(),1);
    assert.match(await owner.locator('#reviewer-training').innerText(),/Human first-pass differences/);
    await owner.setViewportSize({width:390,height:844});

@@ -5,6 +5,7 @@
 'use strict';
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),http=require('node:http');
 const {chromium}=require('playwright');
+const {showResearchPanels}=require('./browser-progress-helper.cjs');
 const mime={'.html':'text/html','.js':'text/javascript','.css':'text/css','.svg':'image/svg+xml','.webmanifest':'application/manifest+json','.png':'image/png'};
 async function main(){
  const root=process.cwd();
@@ -24,7 +25,7 @@ async function main(){
    owner.on('pageerror',e=>errors.push('owner '+e.message));
    await owner.goto('http://127.0.0.1:'+server.address().port+'/');
    await owner.locator('[data-action=demo]').waitFor();
-   await owner.locator('[data-page=insights]').click();
+   await owner.locator('[data-page=insights]').click();await showResearchPanels(owner);
    await owner.locator('#usability-invitations').selectOption('3');
    await owner.locator('form[data-form=start-reviewer-usability] input[name=confirmed]').check();
    await owner.locator('form[data-form=start-reviewer-usability] button[type=submit]').click();
@@ -137,7 +138,7 @@ async function main(){
    const duplicate=await owner.locator('#reviewer-usability-import').count();
    assert.equal(duplicate,1);
    // Backups and reload must keep the owner-only source files yet never modify schedule.
-   await owner.reload();await owner.locator('[data-page=insights]').click();
+   await owner.reload();await owner.locator('[data-page=insights]').click();await showResearchPanels(owner);
    assert.match(await owner.locator('#reviewer-usability').innerText(),/Nonreturns/);
    await owner.locator('#reviewer-usability summary').filter({hasText:'Optional free-text usability comments'}).click();
    assert.match(await owner.locator('#reviewer-usability').innerText(),/PRIVATE_FEEDBACK_DO_NOT_EXPORT/);

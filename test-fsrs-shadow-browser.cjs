@@ -3,6 +3,7 @@
 const assert=require('node:assert/strict');
 const fs=require('node:fs'),http=require('node:http'),path=require('node:path');
 const {chromium}=require('playwright');
+const {showResearchPanels}=require('./browser-progress-helper.cjs');
 
 async function main(){
   const root=process.cwd();
@@ -36,7 +37,7 @@ async function main(){
       return JSON.stringify({memory:db.memory,attempts:db.attempts});
     });
     await page.reload();
-    await page.locator('.navbtn[data-page=insights]').click();
+    await page.locator('.navbtn[data-page=insights]').click();await showResearchPanels(page);
     const panel=page.locator('section').filter({has:page.getByRole('heading',{name:'FSRS-7 interval comparison'})});
     await panel.getByRole('button',{name:'Compare intervals and calendar with FSRS-7'}).click();
     await panel.getByText('Comparable targets').waitFor();
@@ -118,7 +119,7 @@ async function main(){
     assert.equal(persisted.decision.activePolicy,'transparent-interval-v1');
     assert.equal(persisted.due,persisted.decision.activeDueAt);
     assert.notEqual(persisted.due,fixture.previousDue);
-    await page.locator('.navbtn[data-page=insights]').click();
+    await page.locator('.navbtn[data-page=insights]').click();await showResearchPanels(page);
     const auditPanel=page.locator('section').filter({has:page.getByRole('heading',{name:'FSRS prediction history check'})});
     await auditPanel.getByRole('button',{name:'Check saved FSRS prediction history'}).click();
     await auditPanel.getByText('Receipts replayed exactly').waitFor();
