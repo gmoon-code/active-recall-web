@@ -146,13 +146,15 @@ small, .small { font-size: 14px; }
 }
 .card-title { gap: 13px; }
 .card-title h2 { font-size: 19px; }
-.title-with-help { display: inline-flex; position: relative; align-items: center; gap: 7px; min-width: 0; max-width: 100%; }
+.title-with-help { display: inline-flex; position: relative; align-items: center; gap: 2px; min-width: 0; max-width: 100%; }
 .title-with-help h2, .title-with-help h3 { min-width: 0; }
 .rhythm-subtitle.title-with-help h3 { background: var(--moon-accent); line-height: 1.3; }
 .help-tip { display: inline-flex; flex: none; }
-.help-tip summary { display: grid; place-items: center; width: 20px; height: 20px; border: 1px solid #a8a8a8; border-radius: 50%; background: #fff; color: #333; font: 600 12px/1 Arial, sans-serif; cursor: help; list-style: none; user-select: none; }
+.help-tip summary { display: grid; place-items: center; width: 28px; height: 28px; border: 0; background: transparent; color: #666; font: 400 10px/1 Arial, sans-serif; cursor: help; list-style: none; user-select: none; }
+.help-tip-glyph { display: grid; place-items: center; width: 14px; height: 14px; border: 1px solid #bbb; border-radius: 50%; pointer-events: none; }
 .help-tip summary::-webkit-details-marker { display: none; }
-.help-tip summary:hover, .help-tip[open] summary { border-color: #111; background: var(--moon-accent-soft); }
+.help-tip summary:hover, .help-tip[open] summary { color: #222; }
+.help-tip summary:hover .help-tip-glyph, .help-tip[open] .help-tip-glyph { border-color: #777; background: rgb(0 0 0 / 3%); }
 .help-tip summary:focus-visible { outline: 2px solid #111; outline-offset: 3px; }
 .help-tip-bubble { display: none; position: absolute; z-index: 20; top: calc(100% + 8px); left: 0; width: min(290px, calc(100vw - 90px)); padding: 11px 13px; border: 1px solid var(--moon-rule-dark); border-radius: 4px; background: #fff; box-shadow: 0 5px 18px rgb(0 0 0 / 12%); color: #222; font: 14px/1.45 "Times New Roman", Times, serif; letter-spacing: normal; text-align: left; overflow-wrap: anywhere; }
 .help-tip:hover .help-tip-bubble, .help-tip summary:focus-visible .help-tip-bubble, .help-tip[open] .help-tip-bubble { display: block; }

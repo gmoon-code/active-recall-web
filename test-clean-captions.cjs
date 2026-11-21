@@ -49,8 +49,8 @@ test('study guidance, privacy and loss-prevention warnings remain explicit',()=>
     'Rate what you could recall independently.','RECALL FOCUS ·','Question held for correction']){
     assert.ok(app.includes(phrase),`Required functional text disappeared: ${phrase}`);
   }
-  assert.match(read('index.html'),/name="app-version" content="4\.43"/);
-  assert.match(read('sw.js'),/active-recall-web-v4-43/);
+  assert.match(read('index.html'),/name="app-version" content="4\.44"/);
+  assert.match(read('sw.js'),/active-recall-web-v4-44/);
 });
 
 test('contextual help replaces only useful explanations and leaves safety warnings visible',()=>{
@@ -71,6 +71,7 @@ test('contextual help replaces only useful explanations and leaves safety warnin
   assert.match(theme,/\.help-tip:hover \.help-tip-bubble/);
   assert.match(theme,/\.help-tip summary:focus-visible \.help-tip-bubble/);
   assert.match(theme,/\.help-tip\[open\] \.help-tip-bubble/);
+  assert.match(theme,/\.help-tip-glyph \{[^}]*width: 14px; height: 14px;/,'The visible help ring is smaller than the touch target');
   for(const warning of ['Research limitation','A scheduled opportunity is not a forecast of grades',
     'Permanent deletion cannot be undone:','Unsaved changes in this tab.']){
     assert.ok(app.includes(warning),`Safety or evidence limitation must stay visible: ${warning}`);

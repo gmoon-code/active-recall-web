@@ -1,4 +1,8 @@
-# Active Recall Web — Free Edition v4.43
+# Active Recall Web — Free Edition v4.44
+
+## Blueprint 4.44 — More discreet help icons
+
+The three contextual-help `?` marks are now small, thin, quiet outlines rather than prominent 20px circles. Their visible rings measure just 14px, with a subtle gray question mark and tight heading spacing. The invisible 28px interaction areas still support hover, keyboard focus and touch without tiny click targets. Tooltip content, location, warning visibility, scheduling, learner data and local backups are unchanged. A fresh offline cache brings the styling to installed copies. [Release and rollback checklist](docs/RELEASE_4_44_ROLLOUT.md).
 
 ## Blueprint 4.43 — Small, optional help tips
 
