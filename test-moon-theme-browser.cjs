@@ -100,7 +100,7 @@ async function main(){
     await page.locator('.navbtn[data-page=forecast]').click();
     assert.equal(await page.locator('.help-tip').count(),3,'Only three meaningful calendar concepts need question-mark help');
     assert.equal(await page.getByText('Read-only workload check',{exact:false}).count(),0,'Routine read-only caption was removed');
-    const fitHelp=page.locator('.rhythm-card .help-tip');
+    const fitHelp=page.locator('.rhythm-card .help-tip').first();
     const fitBubble=fitHelp.locator('.help-tip-bubble');
     assert.equal(await fitBubble.isVisible(),false,'Help stays hidden until requested');
     await fitHelp.locator('summary').hover();
@@ -129,8 +129,8 @@ async function main(){
       const buttons=await page.locator('.navbtn').count();
       assert.equal(buttons,8,'Mobile navigation keeps all destinations');
       await page.locator('.navbtn[data-page=forecast]').click();
-      await page.locator('.rhythm-card .help-tip summary').click();
-      const bubbleBounds=await page.locator('.rhythm-card .help-tip-bubble').evaluate(el=>{
+      await page.locator('.rhythm-card .help-tip summary').first().click();
+      const bubbleBounds=await page.locator('.rhythm-card .help-tip-bubble').first().evaluate(el=>{
         const r=el.getBoundingClientRect();return {left:r.left,right:r.right,overflow:document.documentElement.scrollWidth-innerWidth};
       });
       assert.ok(bubbleBounds.left>=0&&bubbleBounds.right<=width,`Help bubble fits ${width}px screen`);
