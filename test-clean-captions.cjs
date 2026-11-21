@@ -49,6 +49,30 @@ test('study guidance, privacy and loss-prevention warnings remain explicit',()=>
     'Rate what you could recall independently.','RECALL FOCUS ·','Question held for correction']){
     assert.ok(app.includes(phrase),`Required functional text disappeared: ${phrase}`);
   }
-  assert.match(read('index.html'),/name="app-version" content="4\.42"/);
-  assert.match(read('sw.js'),/active-recall-web-v4-42/);
+  assert.match(read('index.html'),/name="app-version" content="4\.43"/);
+  assert.match(read('sw.js'),/active-recall-web-v4-43/);
+});
+
+test('contextual help replaces only useful explanations and leaves safety warnings visible',()=>{
+  const app=read('app.js'),theme=read('moon-theme.css');
+  for(const phrase of [
+    'Read-only workload check · no automatic changes to due dates, grades or memory intervals',
+    'Read-only priority inspector',
+    'Private simulation · no automatic changes',
+    'Saved locally with your learning data',
+    'Assigned bars show only work the scheduler could fit.',
+    '<strong>Known review:</strong>'
+  ])assert.ok(!app.includes(phrase),`Unnecessary always-visible subtitle remains: ${phrase}`);
+  assert.match(app,/function helpTip\(label,message\)/);
+  assert.equal((app.match(/helpTip\('/g)||[]).length,3,'Help icons appear only at three genuinely ambiguous concepts');
+  assert.match(app,/helpTip\('About schedule fit'/);
+  assert.match(app,/helpTip\('About the study-time bars'/);
+  assert.match(app,/helpTip\('Known reviews versus conditional revisits'/);
+  assert.match(theme,/\.help-tip:hover \.help-tip-bubble/);
+  assert.match(theme,/\.help-tip summary:focus-visible \.help-tip-bubble/);
+  assert.match(theme,/\.help-tip\[open\] \.help-tip-bubble/);
+  for(const warning of ['Research limitation','A scheduled opportunity is not a forecast of grades',
+    'Permanent deletion cannot be undone:','Unsaved changes in this tab.']){
+    assert.ok(app.includes(warning),`Safety or evidence limitation must stay visible: ${warning}`);
+  }
 });

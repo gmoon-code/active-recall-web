@@ -97,6 +97,25 @@ async function main(){
       await inspect(color,accent);
       assert.equal((await page.locator('.hero h1, .pagehead h1').first().innerText()).trim(),heading,`${route} page uses a clear heading`);
     }
+    await page.locator('.navbtn[data-page=forecast]').click();
+    assert.equal(await page.locator('.help-tip').count(),3,'Only three meaningful calendar concepts need question-mark help');
+    assert.equal(await page.getByText('Read-only workload check',{exact:false}).count(),0,'Routine read-only caption was removed');
+    const fitHelp=page.locator('.rhythm-card .help-tip').first();
+    const fitBubble=fitHelp.locator('.help-tip-bubble');
+    assert.equal(await fitBubble.isVisible(),false,'Help stays hidden until requested');
+    await fitHelp.locator('summary').hover();
+    assert.equal(await fitBubble.isVisible(),true,'Mouse hover opens a brief help bubble');
+    await page.mouse.move(0,0);
+    assert.equal(await fitBubble.isVisible(),false,'The bubble closes on mouse leave');
+    await fitHelp.locator('summary').focus();
+    await page.keyboard.press('Enter');
+    assert.equal(await fitHelp.getAttribute('open'),'','Keyboard activation opens a native details disclosure');
+    assert.equal(await fitBubble.isVisible(),true);
+    await page.keyboard.press('Enter');
+    assert.equal(await fitHelp.getAttribute('open'),null,'Keyboard activation can close the disclosure');
+    const knownHelp=page.locator('.help-tip').filter({has:page.locator('summary[aria-label="Known reviews versus conditional revisits"]')});
+    assert.equal(await knownHelp.count(),1,'Conditional-review explanation is accessible when needed');
+    assert.equal(await page.locator('.card .note').filter({hasText:'Research limitation'}).count(),1,'Research caveat remains visible, not hidden in a tooltip');
     const after=await page.evaluate(async()=>{const S=window.ActiveRecallStorage;await S.ready();return JSON.stringify((await S.load())?.db??null);});
     assert.equal(after,before,'Visual navigation does not write study data');
     await page.locator('.navbtn[data-page=insights]').click();
@@ -109,6 +128,13 @@ async function main(){
       await inspect('yellow','#f5f566');
       const buttons=await page.locator('.navbtn').count();
       assert.equal(buttons,8,'Mobile navigation keeps all destinations');
+      await page.locator('.navbtn[data-page=forecast]').click();
+      await page.locator('.rhythm-card .help-tip summary').first().click();
+      const bubbleBounds=await page.locator('.rhythm-card .help-tip-bubble').first().evaluate(el=>{
+        const r=el.getBoundingClientRect();return {left:r.left,right:r.right,overflow:document.documentElement.scrollWidth-innerWidth};
+      });
+      assert.ok(bubbleBounds.left>=0&&bubbleBounds.right<=width,`Help bubble fits ${width}px screen`);
+      assert.ok(bubbleBounds.overflow<=2,'Visible mobile help bubble does not cause horizontal scrolling');
       await page.locator('.navbtn[data-page=study]').click();
       await inspect('green','#66f566');
       await page.locator('.navbtn[data-page=home]').click();
