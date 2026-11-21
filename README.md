@@ -1,4 +1,8 @@
-# Active Recall Web — Free Edition v4.40
+# Active Recall Web — Free Edition v4.41
+
+## Blueprint 4.41 — Transparent, adaptive [ar] tab icon
+
+The `[ar]` browser-tab favicon no longer has a white square. Its SVG is transparent, uses dark serif lettering in light mode and light lettering in dark mode, and adds a subtle opposite-colour outline to remain legible against coloured tab backgrounds. The 192px and 512px installed-app icons now have transparent corners with the same unboxed wordmark. Versioned icon URLs help browsers load the new artwork, and both normal and versioned assets are cached for offline use. The app itself retains Moon's white-paper design. **No study records, review scheduling, JSON backups, payments or data storage are changed.** [Release and rollback checklist](docs/RELEASE_4_41_ROLLOUT.md).
 
 ## Blueprint 4.40 — Simple [ar] logo
 

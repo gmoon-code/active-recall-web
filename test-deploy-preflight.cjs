@@ -21,9 +21,9 @@ test('monthly calendar is offline-cached and checked by diagnostics',()=>{
   assert.match(health,/'\.\/month-calendar\.js'/);
 });
 test('offline worker is versioned and caches review module',()=>{
-  const s=read('sw.js');assert.match(s,/active-recall-web-v4-40/);assert.doesNotMatch(s,/active-recall-web-v4-39/);assert.match(s,/'\.\/moon-theme\.css'/);assert.match(s,/'\.\/qa-import\.js'/);assert.match(s,/'\.\/study-rhythm\.js'/);assert.match(s,/'\.\/human-review\.js'/);assert.match(s,/'\.\/paired-review\.js'/);assert.match(s,/'\.\/paired-review-ui\.js'/);assert.match(s,/'\.\/review-packets\.js'/);assert.match(s,/reviewer-offline\.html/);assert.match(s,/reference-reviewer-offline\.html/);assert.match(s,/'\.\/reviewer-pilot\.js'/);assert.match(s,/'\.\/reviewer-pilot-ui\.js'/);assert.match(s,/'\.\/reviewer-training\.js'/);assert.match(s,/'\.\/reviewer-training-ui\.js'/);assert.match(s,/reviewer-training-offline\.html/);assert.match(s,/'\.\/reviewer-usability\.js'/);assert.match(s,/'\.\/reviewer-usability-ui\.js'/);assert.match(s,/reviewer-usability-offline\.html/);
+  const s=read('sw.js');assert.match(s,/active-recall-web-v4-41/);assert.doesNotMatch(s,/active-recall-web-v4-40/);assert.match(s,/'\.\/moon-theme\.css'/);assert.match(s,/'\.\/qa-import\.js'/);assert.match(s,/'\.\/study-rhythm\.js'/);assert.match(s,/'\.\/human-review\.js'/);assert.match(s,/'\.\/paired-review\.js'/);assert.match(s,/'\.\/paired-review-ui\.js'/);assert.match(s,/'\.\/review-packets\.js'/);assert.match(s,/reviewer-offline\.html/);assert.match(s,/reference-reviewer-offline\.html/);assert.match(s,/'\.\/reviewer-pilot\.js'/);assert.match(s,/'\.\/reviewer-pilot-ui\.js'/);assert.match(s,/'\.\/reviewer-training\.js'/);assert.match(s,/'\.\/reviewer-training-ui\.js'/);assert.match(s,/reviewer-training-offline\.html/);assert.match(s,/'\.\/reviewer-usability\.js'/);assert.match(s,/'\.\/reviewer-usability-ui\.js'/);assert.match(s,/reviewer-usability-offline\.html/);
   const diagnostics=read('health.html');
-  assert.match(diagnostics,/name="app-version" content="4\.40"/);assert.match(diagnostics,/active-recall-web-v4-40/);assert.doesNotMatch(diagnostics,/active-recall-web-v4-39/);assert.match(diagnostics,/moon-theme\.css/);assert.match(diagnostics,/qa-import\.js/);assert.match(diagnostics,/study-rhythm\.js/);assert.match(diagnostics,/fsrs-shadow\.js/);assert.match(diagnostics,/fsrs-7-shadow-vendor\.js/);
+  assert.match(diagnostics,/name="app-version" content="4\.41"/);assert.match(diagnostics,/active-recall-web-v4-41/);assert.doesNotMatch(diagnostics,/active-recall-web-v4-40/);assert.match(diagnostics,/moon-theme\.css/);assert.match(diagnostics,/qa-import\.js/);assert.match(diagnostics,/study-rhythm\.js/);assert.match(diagnostics,/fsrs-shadow\.js/);assert.match(diagnostics,/fsrs-7-shadow-vendor\.js/);
   assert.match(diagnostics,/reviewer-offline\.html/);assert.match(diagnostics,/reference-reviewer-offline\.html/);assert.match(diagnostics,/reviewer-pilot\.js/);assert.match(diagnostics,/reviewer-pilot-ui\.js/);assert.match(diagnostics,/reviewer-training\.js/);assert.match(diagnostics,/reviewer-training-ui\.js/);assert.match(diagnostics,/reviewer-training-offline\.html/);assert.match(diagnostics,/reviewer-usability\.js/);assert.match(diagnostics,/reviewer-usability-ui\.js/);assert.match(diagnostics,/reviewer-usability-offline\.html/);
   assert.doesNotMatch(diagnostics,/active-recall-web-v2-8/);
 });
@@ -35,8 +35,8 @@ test('offline cache manifest contains every boot asset and only real local files
   assert.equal(new Set(files).size,files.length,'Duplicate cache paths are ambiguous');
   for(const file of files){
     if(file==='./')continue;
-    assert.ok(/^\.\/[\w./-]+$/.test(file)&&!file.includes('..'),'Cache paths must remain within the app');
-    assert.ok(fs.statSync(file).isFile(),`Missing offline cache asset: ${file}`);
+    assert.ok(/^\.\/[\w./-]+(?:\?v=4-41)?$/.test(file)&&!file.includes('..'),'Cache paths must remain within the app, with only the release icon query permitted');
+    assert.ok(fs.statSync(file.replace(/\?v=4-41$/,'')).isFile(),`Missing offline cache asset: ${file}`);
   }
   for(const [,asset] of read('index.html').matchAll(/(?:src|href)="(\.\/[^" ]+)"/g)){
     assert.ok(files.includes(asset),`Site cannot boot offline without ${asset}`);
