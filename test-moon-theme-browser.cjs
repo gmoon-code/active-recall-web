@@ -130,7 +130,7 @@ async function main(){
     assert.equal(await page.locator('.utility-link a[href="./health.html"]').innerText(),'Site diagnostics','Practical diagnostic link remains accessible in Progress');
     const rhythmHighlight=page.locator('.card-title h2').filter({hasText:'Study history (last 7 days)'});
     assert.equal(await rhythmHighlight.evaluate(el=>getComputedStyle(el).backgroundColor),'rgb(240, 102, 240)','Recorded study rhythm title has solid magenta highlighting');
-    const progressSections=await page.locator('.main > section, .main > .progress-advanced').evaluateAll(items=>items.map(el=>el.querySelector('.card-title h2')?.textContent||el.className));
+    const progressSections=await page.locator('.main > section, .main > .progress-advanced').evaluateAll(items=>items.map(el=>el.classList.contains('progress-advanced')?'progress-advanced':el.querySelector('.card-title h2')?.textContent||el.className));
     const position=label=>progressSections.findIndex(s=>s.includes(label));
     assert.ok(position('Practice records')<position('Course coverage'),'Learning summary appears before course details');
     assert.ok(position('Course coverage')<position('Study history'),'Study history follows immediate practice and coverage');
