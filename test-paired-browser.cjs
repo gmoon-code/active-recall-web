@@ -2,6 +2,7 @@
 'use strict';
 const assert=require('node:assert/strict'),http=require('node:http'),fs=require('node:fs'),path=require('node:path');
 const {chromium}=require('playwright');
+const {showResearchPanels}=require('./browser-progress-helper.cjs');
 const mime={'.html':'text/html','.js':'text/javascript','.css':'text/css','.svg':'image/svg+xml','.webmanifest':'application/manifest+json','.png':'image/png'};
 async function main(){
   const root=process.cwd();
@@ -33,7 +34,7 @@ async function main(){
       return {dueAt:db.memory[target.id].dueAt,attemptId:a.id,originalResponse:a.response,originalRating:a.rating};
     });
     await page.reload();
-    await page.locator('[data-page=insights]').click();
+    await page.locator('[data-page=insights]').click();await showResearchPanels(page);
     await page.locator('summary').filter({hasText:'Review saved answers with two people'}).click();
     await page.locator('[data-action=open-pair-review]').first().click();
     const modalA=page.locator('[aria-label="Independent reviewer A"]');
@@ -87,7 +88,7 @@ async function main(){
     await page.setViewportSize({width:390,height:844});
     const bounds=await compare.boundingBox();
     assert.ok(bounds&&bounds.width<=391,'Mobile comparison dialog must fit the viewport');
-    await page.reload();await page.locator('[data-page=insights]').click();
+    await page.reload();await page.locator('[data-page=insights]').click();await showResearchPanels(page);
     await page.locator('summary').filter({hasText:'Review saved answers with two people'}).click();
     await page.locator('[data-action=open-pair-review]').first().click();
     await page.locator('[aria-label="Compare independent reviewer judgments"]').waitFor();

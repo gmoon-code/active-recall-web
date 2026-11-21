@@ -130,6 +130,24 @@ async function main(){
     assert.equal(await page.locator('.utility-link a[href="./health.html"]').innerText(),'Site diagnostics','Practical diagnostic link remains accessible in Progress');
     const rhythmHighlight=page.locator('.card-title h2').filter({hasText:'Study history (last 7 days)'});
     assert.equal(await rhythmHighlight.evaluate(el=>getComputedStyle(el).backgroundColor),'rgb(240, 102, 240)','Recorded study rhythm title has solid magenta highlighting');
+    const progressSections=await page.locator('.main > section, .main > .progress-advanced').evaluateAll(items=>items.map(el=>el.classList.contains('progress-advanced')?'progress-advanced':el.querySelector('.card-title h2')?.textContent||el.className));
+    const position=label=>progressSections.findIndex(s=>s.includes(label));
+    assert.ok(position('Practice records')<position('Course coverage'),'Learning summary appears before course details');
+    assert.ok(position('Course coverage')<position('Study history'),'Study history follows immediate practice and coverage');
+    assert.ok(position('Study history')<position('Data and privacy controls'),'Backups remain accessible after ordinary progress');
+    assert.ok(position('Data and privacy controls')<position('progress-advanced'),'Research panels are grouped last');
+    const advanced=page.locator('#progress-research');
+    assert.equal(await advanced.getAttribute('open'),null,'Experimental reviewer tools start collapsed');
+    assert.equal(await page.locator('.progress-history .outside-study-form p.small.muted').count(),0,'The log form has no always-visible disclaimer caption');
+    const outsideHelp=page.locator('summary[aria-label="About outside-study logs"]');
+    await outsideHelp.hover();
+    assert.equal(await page.getByRole('tooltip').filter({hasText:'logging never completes a due review'}).isVisible(),true,'Outside-study limitations appear on demand');
+    await page.mouse.move(0,0);
+    await advanced.locator(':scope > summary').click();
+    assert.equal(await advanced.getAttribute('open'),'','Research remains available on demand');
+    assert.equal(await page.getByRole('heading',{name:'Memory-model evaluation readiness'}).isVisible(),true,'Advanced panels are still reachable');
+    await advanced.locator(':scope > summary').click();
+    assert.equal(await advanced.getAttribute('open'),null,'Research section collapses again');
     await page.locator('.navbtn[data-page=home]').click();
     for(const width of [390,360]){
       await page.setViewportSize({width,height:800});
@@ -143,6 +161,14 @@ async function main(){
       });
       assert.ok(bubbleBounds.left>=0&&bubbleBounds.right<=width,`Help bubble fits ${width}px screen`);
       assert.ok(bubbleBounds.overflow<=2,'Visible mobile help bubble does not cause horizontal scrolling');
+      await page.locator('.navbtn[data-page=insights]').click();
+      await inspect('magenta','#f066f0');
+      await page.locator('summary[aria-label="About outside-study logs"]').click();
+      const logBubbleBounds=await page.locator('#help-about-outside-study-logs').evaluate(el=>{
+        const r=el.getBoundingClientRect();return {left:r.left,right:r.right,overflow:document.documentElement.scrollWidth-innerWidth};
+      });
+      assert.ok(logBubbleBounds.left>=0&&logBubbleBounds.right<=width,`Outside-study help fits ${width}px screen`);
+      assert.ok(logBubbleBounds.overflow<=2,'Progress help has no horizontal overflow');
       await page.locator('.navbtn[data-page=study]').click();
       await inspect('green','#66f566');
       await page.locator('.navbtn[data-page=home]').click();

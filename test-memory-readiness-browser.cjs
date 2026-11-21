@@ -3,6 +3,7 @@
 const assert=require('node:assert/strict');
 const fs=require('node:fs'),http=require('node:http'),path=require('node:path');
 const {chromium}=require('playwright');
+const {showResearchPanels}=require('./browser-progress-helper.cjs');
 
 async function main(){
   const root=process.cwd();
@@ -33,7 +34,7 @@ async function main(){
       await S.save(db,null);await S.ready();return JSON.stringify({attempts:db.attempts,memory:db.memory});
     });
     await page.reload();
-    await page.locator('.navbtn[data-page=insights]').click();
+    await page.locator('.navbtn[data-page=insights]').click();await showResearchPanels(page);
     const panel=page.locator('section').filter({has:page.getByRole('heading',{name:'Memory-model evaluation readiness'})});
     await panel.getByText('Comparable delayed answers').waitFor();
     const words=await panel.innerText();
@@ -54,7 +55,7 @@ async function main(){
     });
     assert.equal(await state(),saved,'Opening the readiness panel does not change outcomes or due dates');
     await page.reload();
-    await page.locator('.navbtn[data-page=insights]').click();
+    await page.locator('.navbtn[data-page=insights]').click();await showResearchPanels(page);
     assert.match(await panel.innerText(),/1 delayed records/);
     assert.equal(await state(),saved,'Reading after reload preserves the same data');
     assert.deepEqual(errors,[]);

@@ -3,6 +3,7 @@
 'use strict';
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),http=require('node:http');
 const {chromium}=require('playwright');
+const {showResearchPanels}=require('./browser-progress-helper.cjs');
 const mime={'.html':'text/html','.js':'text/javascript','.css':'text/css','.svg':'image/svg+xml','.webmanifest':'application/manifest+json','.png':'image/png'};
 async function main(){
  const root=process.cwd();
@@ -22,7 +23,7 @@ async function main(){
    owner.on('pageerror',e=>errors.push(e.message));
    await owner.goto('http://127.0.0.1:'+server.address().port+'/');
    await owner.locator('[data-action=demo]').waitFor();
-   await owner.locator('[data-page=insights]').click();
+   await owner.locator('[data-page=insights]').click();await showResearchPanels(owner);
    await owner.locator('form[data-form=start-reviewer-pilot]').waitFor();
    await owner.locator('#pilot-target-count').selectOption('3');
    await owner.locator('form[data-form=start-reviewer-pilot] input[name=confirmed]').check();
@@ -68,7 +69,7 @@ async function main(){
    });
    assert.deepEqual(original.expectedScreened,['excluded','enrolled','excluded','enrolled','enrolled']);
    await owner.reload();
-   await owner.locator('[data-page=insights]').click();
+   await owner.locator('[data-page=insights]').click();await showResearchPanels(owner);
    await owner.locator('#reviewer-pilot').getByText('Planned quota reached').waitFor();
    assert.match(await owner.locator('#reviewer-pilot').innerText(),/3 \/ 3/);
    assert.match(await owner.locator('#reviewer-pilot').innerText(),/2 excluded attempts|Excluded attempts/i);
@@ -112,7 +113,7 @@ async function main(){
      await S.save(db,null);
    },original.firstId);
    await owner.reload();
-   await owner.locator('[data-page=insights]').click();
+   await owner.locator('[data-page=insights]').click();await showResearchPanels(owner);
    const audit=await owner.evaluate(async()=>{
      const S=window.ActiveRecallStorage,P=window.ActiveRecallReviewerPilot,C=window.ActiveRecallCore,
        db=C.validateImport((await S.load()).db);

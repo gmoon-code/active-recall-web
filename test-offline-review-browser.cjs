@@ -2,6 +2,7 @@
 'use strict';
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),http=require('node:http');
 const {chromium}=require('playwright');
+const {showResearchPanels}=require('./browser-progress-helper.cjs');
 const mime={'.html':'text/html','.js':'text/javascript','.css':'text/css','.svg':'image/svg+xml','.webmanifest':'application/manifest+json','.png':'image/png'};
 async function main(){
   const root=process.cwd();
@@ -37,7 +38,7 @@ async function main(){
       return {attemptId:a.id,response:a.response,due:db.memory[target.id].dueAt,rating:a.rating};
     });
     await owner.reload();
-    await owner.locator('[data-page=insights]').click();
+    await owner.locator('[data-page=insights]').click();await showResearchPanels(owner);
     await owner.locator('summary').filter({hasText:'Create or re-download a request for one saved answer'}).click();
     const download=owner.waitForEvent('download');
     await owner.locator('[data-action=export-offline-review-request]').first().click();
@@ -113,7 +114,7 @@ async function main(){
     await owner.setViewportSize({width:390,height:844});
     const box=await owner.locator('[aria-label="Compare independent reviewer judgments"]').boundingBox();
     assert.ok(box&&box.width<=391,'Imported pair comparison must fit a mobile viewport');
-    await owner.reload();await owner.locator('[data-page=insights]').click();
+    await owner.reload();await owner.locator('[data-page=insights]').click();await showResearchPanels(owner);
     assert.equal(await owner.evaluate(async()=>{
       const C=window.ActiveRecallCore,Store=window.ActiveRecallStorage;
       const db=C.validateImport((await Store.load()).db);

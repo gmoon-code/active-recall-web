@@ -49,8 +49,8 @@ test('study guidance, privacy and loss-prevention warnings remain explicit',()=>
     'Rate what you could recall independently.','RECALL FOCUS ·','Question held for correction']){
     assert.ok(app.includes(phrase),`Required functional text disappeared: ${phrase}`);
   }
-  assert.match(read('index.html'),/name="app-version" content="4\.44"/);
-  assert.match(read('sw.js'),/active-recall-web-v4-44/);
+  assert.match(read('index.html'),/name="app-version" content="4\.45"/);
+  assert.match(read('sw.js'),/active-recall-web-v4-45/);
 });
 
 test('contextual help replaces only useful explanations and leaves safety warnings visible',()=>{
@@ -64,7 +64,7 @@ test('contextual help replaces only useful explanations and leaves safety warnin
     '<strong>Known review:</strong>'
   ])assert.ok(!app.includes(phrase),`Unnecessary always-visible subtitle remains: ${phrase}`);
   assert.match(app,/function helpTip\(label,message\)/);
-  assert.equal((app.match(/helpTip\('/g)||[]).length,3,'Help icons appear only at three genuinely ambiguous concepts');
+  assert.equal((app.match(/helpTip\('/g)||[]).length,6,'Help appears only at a small set of ambiguous calendar and progress concepts');
   assert.match(app,/helpTip\('About schedule fit'/);
   assert.match(app,/helpTip\('About the study-time bars'/);
   assert.match(app,/helpTip\('Known reviews versus conditional revisits'/);
@@ -75,5 +75,21 @@ test('contextual help replaces only useful explanations and leaves safety warnin
   for(const warning of ['Research limitation','A scheduled opportunity is not a forecast of grades',
     'Permanent deletion cannot be undone:','Unsaved changes in this tab.']){
     assert.ok(app.includes(warning),`Safety or evidence limitation must stay visible: ${warning}`);
+  }
+});
+
+test('Progress leads with recorded work, groups optional research, and moves outside-log caveats into help',()=>{
+  const app=read('app.js'),theme=read('moon-theme.css');
+  assert.doesNotMatch(app,/Self-reported, editable by deletion and re-entry\. Logging does not complete/);
+  assert.doesNotMatch(app,/Local plan snapshots<\/span>/);
+  assert.match(app,/Log study outside the app/);
+  assert.match(app,/helpTip\('About outside-study logs'/);
+  assert.match(app,/helpTip\('About study history'/);
+  assert.match(app,/function arrangeProgressPage\(\)/);
+  assert.match(app,/Research and reviewer tools/);
+  assert.match(app,/id="progress-research" \$\{progressResearchOpen\?'open':''\}/);
+  assert.match(theme,/\.progress-advanced > details/);
+  for(const warning of ['No automatic cross-device sync.','Clear local data','Unsaved changes in this tab.']){
+    assert.ok(app.includes(warning),`Data-protection warning must remain visible: ${warning}`);
   }
 });

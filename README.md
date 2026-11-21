@@ -1,4 +1,8 @@
-# Active Recall Web — Free Edition v4.44
+# Active Recall Web — Free Edition v4.45
+
+## Blueprint 4.45 — A cleaner Progress page
+
+Progress now puts everyday learning information first: recall counts, practice records, explanation checks, course coverage, recent attempts and the seven-day study history. The outside-study logging form has its own heading and a small `?` that explains why logged minutes cannot count as graded recall or move due dates; its former always-visible technical caption is gone. Study history uses shorter factual day summaries, and redundant qualification paragraphs under practice and coverage were replaced with restrained contextual help. The specialist reviewer workflows and experimental evidence/model checks are preserved under one expandable **Research and reviewer tools** section, below the visible backup and local-data controls. The research section remains open across in-page updates so ongoing workflows are uninterrupted. Important storage and experimental evidence limitations remain available and accurate. All study intervals, attempts, local schema-v5 data, backup behavior and free offline operation remain unchanged. [Release and rollback checklist](docs/RELEASE_4_45_ROLLOUT.md).
 
 ## Blueprint 4.44 — More discreet help icons
 

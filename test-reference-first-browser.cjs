@@ -2,6 +2,7 @@
 'use strict';
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),http=require('node:http');
 const {chromium}=require('playwright');
+const {showResearchPanels}=require('./browser-progress-helper.cjs');
 const mime={'.html':'text/html','.js':'text/javascript','.css':'text/css','.svg':'image/svg+xml','.webmanifest':'application/manifest+json','.png':'image/png'};
 async function main(){
  const root=process.cwd(),server=http.createServer((req,res)=>{
@@ -35,7 +36,7 @@ async function main(){
       await S.save(db,null);await S.ready();
       return {response:a.response,reference:a.referenceSnapshot,rating:a.rating,due:db.memory[target.id].dueAt};
    });
-   await owner.reload();await owner.locator('[data-page=insights]').click();
+   await owner.reload();await owner.locator('[data-page=insights]').click();await showResearchPanels(owner);
    await owner.locator('summary').filter({hasText:'Export reference-free request and release later references'}).click();
    const packetPromise=owner.waitForEvent('download');
    await owner.locator('[data-action=export-reference-first-request]').first().click();
@@ -132,7 +133,7 @@ async function main(){
    assert.equal(dbSaved.post,'included');
    assert.equal(dbSaved.postChanged,true);
    assert.equal(dbSaved.disagreement,1,'The original two reviewer judgments must never be overwritten');
-   await owner.reload();await owner.locator('[data-page=insights]').click();
+   await owner.reload();await owner.locator('[data-page=insights]').click();await showResearchPanels(owner);
    assert.equal(await owner.evaluate(async()=>{
      const db=window.ActiveRecallCore.validateImport((await window.ActiveRecallStorage.load()).db);
      return db.attempts[0].referencePostReviews[0].submission.firstSubmissionFingerprint;

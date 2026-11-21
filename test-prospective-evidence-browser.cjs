@@ -3,6 +3,7 @@
 const assert=require('node:assert/strict');
 const fs=require('node:fs'),http=require('node:http'),path=require('node:path');
 const {chromium}=require('playwright');
+const {showResearchPanels}=require('./browser-progress-helper.cjs');
 
 async function main(){
   const root=process.cwd();
@@ -39,7 +40,7 @@ async function main(){
       return {attempts:JSON.stringify(db.attempts),memory:JSON.stringify(db.memory)};
     });
     await page.reload();
-    await page.locator('.navbtn[data-page=insights]').click();
+    await page.locator('.navbtn[data-page=insights]').click();await showResearchPanels(page);
     const panel=page.locator('section').filter({has:page.getByRole('heading',{name:'Prospective prediction evidence check'})});
     await panel.getByText('Linked forecasts').waitFor();
     const words=await panel.innerText();
@@ -61,7 +62,7 @@ async function main(){
     });
     assert.deepEqual(await state(),saved,'Read-only inspection must preserve attempts and due dates');
     await page.reload();
-    await page.locator('.navbtn[data-page=insights]').click();
+    await page.locator('.navbtn[data-page=insights]').click();await showResearchPanels(page);
     assert.match(await panel.innerText(),/2 eligible pre-answer forecasts/);
     assert.deepEqual(await state(),saved,'Reading after reload must not revise earlier evidence');
     assert.deepEqual(errors,[]);

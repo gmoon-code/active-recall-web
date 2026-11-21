@@ -3,6 +3,7 @@
 const assert=require('node:assert/strict');
 const fs=require('node:fs'),http=require('node:http'),path=require('node:path');
 const {chromium}=require('playwright');
+const {showResearchPanels}=require('./browser-progress-helper.cjs');
 
 async function main(){
   const root=process.cwd();
@@ -64,7 +65,7 @@ async function main(){
     assert.equal(after.activeInterval,4.3,'The original interval policy remains the only scheduling rule');
     assert.equal(after.policy,'transparent-interval-v1');
     assert.equal(after.valid,5);
-    await page.locator('.navbtn[data-page=insights]').click();
+    await page.locator('.navbtn[data-page=insights]').click();await showResearchPanels(page);
     const panel=page.locator('section').filter({has:page.getByRole('heading',{name:'Memory-model evaluation readiness'})});
     await panel.getByText('Prospective forecast receipts').waitFor();
     assert.match(await panel.innerText(),/1 with pre-answer forecasts/);
