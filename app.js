@@ -745,7 +745,7 @@ A">${esc((a.exactAnswerKey?.answers||[]).join('\n'))}</textarea><label class="ch
     for(let node=practice.nextElementSibling;node&&node!==checklist;){
       const next=node.nextElementSibling;researchNodes.push(node);node=next;
     }
-    const research=document.createElement('section');research.className='section progress-advanced';
+    const research=document.createElement('div');research.className='section progress-advanced';
     research.innerHTML=`<details id="progress-research" ${progressResearchOpen?'open':''}><summary data-action="toggle-progress-research"><strong>Research and reviewer tools</strong></summary><div class="progress-advanced-body"></div></details>`;
     const body=research.querySelector('.progress-advanced-body');
     researchNodes.forEach((node,index)=>{
