@@ -1,4 +1,8 @@
-# Active Recall Web — Free Edition v4.42
+# Active Recall Web — Free Edition v4.43
+
+## Blueprint 4.43 — Small, optional help tips
+
+The calendar no longer displays routine “read-only workload”, “private simulation” and other redundant reassurance labels. Three small `?` icons now offer genuinely useful explanations on hover, keyboard focus or tap: schedule-fit estimates, seven-day assignment bars, and known versus conditional reviews. Essential research cautions, data-loss warnings and explicit study instructions remain visible. The tooltips use the Moon design, fit narrow mobile screens and work without JavaScript event handlers or paid services. Scheduling, self-ratings, local data, JSON backups and offline behavior have not changed. [Release and rollback checklist](docs/RELEASE_4_43_ROLLOUT.md).
 
 ## Blueprint 4.42 — Fewer introductory subtitles
 
