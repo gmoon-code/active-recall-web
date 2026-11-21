@@ -103,12 +103,13 @@ async function main(){
     const fitHelp=page.locator('.rhythm-card .help-tip').first();
     const fitBubble=fitHelp.locator('.help-tip-bubble');
     const helpSizing=await fitHelp.locator('summary').evaluate(el=>{
-      const hit=el.getBoundingClientRect(),ring=getComputedStyle(el,'::before');
-      return {hitWidth:hit.width,hitHeight:hit.height,ringWidth:parseFloat(ring.width),ringHeight:parseFloat(ring.height),ringBorder:ring.borderTopWidth};
+      const hit=el.getBoundingClientRect(),glyph=el.querySelector('.help-tip-glyph'),ring=glyph.getBoundingClientRect();
+      return {hitWidth:hit.width,hitHeight:hit.height,ringWidth:ring.width,ringHeight:ring.height,ringBorder:getComputedStyle(glyph).borderTopWidth,summaryPosition:getComputedStyle(el).position};
     });
     assert.ok(helpSizing.ringWidth<=14&&helpSizing.ringHeight<=14,'The actual question-mark icon is discreet and smaller than the heading text');
     assert.ok(helpSizing.hitWidth>=28&&helpSizing.hitHeight>=28,'The tiny icon retains a usable touch target');
     assert.equal(helpSizing.ringBorder,'1px','The icon has a fine outline rather than a heavy circle');
+    assert.equal(helpSizing.summaryPosition,'static','The bubble remains anchored to its heading, not to the tiny icon');
     assert.equal(await fitBubble.isVisible(),false,'Help stays hidden until requested');
     await fitHelp.locator('summary').hover();
     assert.equal(await fitBubble.isVisible(),true,'Mouse hover opens a brief help bubble');

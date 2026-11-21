@@ -71,7 +71,7 @@ test('contextual help replaces only useful explanations and leaves safety warnin
   assert.match(theme,/\.help-tip:hover \.help-tip-bubble/);
   assert.match(theme,/\.help-tip summary:focus-visible \.help-tip-bubble/);
   assert.match(theme,/\.help-tip\[open\] \.help-tip-bubble/);
-  assert.match(theme,/\.help-tip summary::before \{[^}]*inset: 7px;/,'The visible help ring is smaller than the touch target');
+  assert.match(theme,/\.help-tip-glyph \{[^}]*width: 14px; height: 14px;/,'The visible help ring is smaller than the touch target');
   for(const warning of ['Research limitation','A scheduled opportunity is not a forecast of grades',
     'Permanent deletion cannot be undone:','Unsaved changes in this tab.']){
     assert.ok(app.includes(warning),`Safety or evidence limitation must stay visible: ${warning}`);
