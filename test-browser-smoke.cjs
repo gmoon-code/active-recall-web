@@ -6,6 +6,7 @@ const http=require('node:http');
 const fs=require('node:fs');
 const path=require('node:path');
 const {chromium}=require('playwright');
+const {showResearchPanels}=require('./browser-progress-helper.cjs');
 const root=process.cwd();
 const mime={'.html':'text/html','.js':'text/javascript','.css':'text/css','.svg':'image/svg+xml','.webmanifest':'application/manifest+json','.png':'image/png'};
 async function main(){
@@ -46,7 +47,7 @@ async function main(){
       return {originalDue,targetId:target.id,attemptCount:db.attempts.length};
     });
     assert.equal(seed.attemptCount,2);
-    await page.reload();await page.locator('[data-page=insights]').click();
+    await page.reload();await page.locator('[data-page=insights]').click();await showResearchPanels(page);
     await page.locator('summary').filter({hasText:'Review history & limitations'}).click();
     await page.locator('[data-action=open-human-review]').first().click();
     const form=page.locator('form[data-form=save-human-review]');
